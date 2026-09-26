@@ -51,7 +51,26 @@
 
   /* 入力画面 */
   .input-layout { display: grid; grid-template-columns: minmax(340px, 420px) 1fr; gap: 16px; }
-  @media (max-width: 900px) { .input-layout { grid-template-columns: 1fr; } }
+  /* タブレット縦向き（幅700〜1000px）: 左に入力・右に一覧の2列のまま、少し詰めて表示 */
+  @media (max-width: 1000px) {
+    main { padding: 10px; }
+    .input-layout { grid-template-columns: 300px 1fr; gap: 10px; }
+    .input-layout .panel { padding: 10px; }
+    .input-layout .field .val { font-size: 36px; min-height: 46px; }
+    .input-layout .steps button b { font-size: 22px; }
+    .input-layout .cands button { font-size: 18px; padding: 10px 0; }
+    .input-layout .pad button { font-size: 22px; padding: 10px 0; }
+    .input-layout .pad button.fn { font-size: 13px; }
+    .input-layout .keys:not(.opt) { display: none; }
+    .input-layout .grid { gap: 4px 6px; }
+    .input-layout .grid .cell { font-size: 14px; padding: 9px 6px; }
+    .input-layout .tabs button { padding: 7px 10px; font-size: 13px; }
+  }
+  /* スマホなど幅が狭いときだけ1列（一覧を上に） */
+  @media (max-width: 700px) {
+    .input-layout { grid-template-columns: 1fr; }
+    .input-layout > .panel:last-child { order: -1; }
+  }
   .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
   .field { border: 2px solid var(--line); border-radius: 12px; padding: 8px 14px; margin-bottom: 10px; background: #fbfcff; }
   .field.active { border-color: var(--navy); background: var(--pend); }
@@ -124,7 +143,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v15（日本時間）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v16（タブレット縦向き対応）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -207,10 +226,10 @@
       <div class="keys">
         テンキー操作: <b>Enter</b>次へ・保存　<b>+</b>前回と同じ質量　<b>-</b>欠番　<b>/</b>番号NG　<b>*</b>直前の入力を取消　<b>⌫</b>1字消す（空のとき前の欄へ戻る）
       </div>
-      <label class="keys" style="display:flex;gap:8px;align-items:center;margin-top:6px">
+      <label class="keys opt" style="display:flex;gap:8px;align-items:center;margin-top:6px">
         <input type="checkbox" id="autoMode" style="width:auto" tabindex="-1"> Enterなしで自動確定（桁数がそろったら次へ・保存）
       </label>
-      <label class="keys" style="display:flex;gap:8px;align-items:center">
+      <label class="keys opt" style="display:flex;gap:8px;align-items:center">
         <input type="checkbox" id="shortMode" style="width:auto" tabindex="-1"> 質量は小数第1位の1桁だけで保存（標準±0.5kgの範囲。範囲外は「.」のあと3桁）
       </label>
       <div class="queue" id="queue"></div>
