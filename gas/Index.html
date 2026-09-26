@@ -157,7 +157,7 @@
         <div class="lbl"><span>質量 (kg)</span><span id="massHint">「68」→6.8 と入力してもOK</span></div>
         <div class="val" id="valMass"></div>
       </div>
-      <div class="notice info" id="notice">容器番号を入力して Enter</div>
+      <div class="notice info" id="notice">容器番号を入力</div>
       <div class="pad" id="pad">
         <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button><button class="fn" data-k="Backspace">⌫ 1字消す</button>
         <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button><button class="fn" data-k="+">＋ 前回と同じ質量</button>
@@ -168,6 +168,9 @@
       <div class="keys">
         テンキー操作: <b>Enter</b>次へ・保存　<b>+</b>前回と同じ質量　<b>-</b>欠番　<b>/</b>番号NG　<b>*</b>直前の入力を取消　<b>⌫</b>1字消す（空のとき前の欄へ戻る）
       </div>
+      <label class="keys" style="display:flex;gap:8px;align-items:center;margin-top:6px">
+        <input type="checkbox" id="autoMode" style="width:auto" tabindex="-1"> Enterなしで自動確定（桁数がそろったら次へ・保存）
+      </label>
       <div class="queue" id="queue"></div>
     </div>
 
@@ -216,7 +219,9 @@
     pending: {}, errors: {},  // key: lotId|serial
     saved: [],         // サーバー保存済み { recordId, lotId, serial }
     lastKey: null,
-    workers: [], mail: { to: '', cc: '', auto: true }
+    workers: [], mail: { to: '', cc: '', auto: true },
+    auto: true,        // Enterなしで自動確定
+    numDigits: 3       // 容器番号の入力桁数（入力中ロットの中で重ならない最小の下桁数）
   };
   // 担当者・端末名はこの端末に記憶する（保存できない環境でも画面を開いている間は保持）
   const memo = {};
@@ -282,6 +287,12 @@
   function updateWorkerBadge() {
     $('workerBadge').textContent = worker() ? '担当: ' + worker() + ($('fDevice').value ? '（' + $('fDevice').value + '）' : '') : '';
   }
+  S.auto = store.get('lpg.auto') !== '0';
+  $('autoMode').checked = S.auto;
+  $('autoMode').onchange = function() {
+    S.auto = $('autoMode').checked; store.set('lpg.auto', S.auto ? '1' : '0'); this.blur(); render();
+  };
+
   $('fWorker').onchange = function() { store.set('lpg.worker', worker()); updateWorkerBadge(); renderHome(); };
   $('fDevice').oninput = function() { store.set('lpg.device', $('fDevice').value.trim()); updateWorkerBadge(); };
 
@@ -410,14 +421,15 @@
   function showEntry() {
     $('home').classList.add('hidden'); $('entry').classList.remove('hidden'); $('btnHome').classList.remove('hidden');
     if (!S.viewLotId || !lotById(S.viewLotId)) S.viewLotId = S.lots[0].lotId;
+    S.numDigits = computeNumDigits();
     if (document.activeElement) document.activeElement.blur();
-    resetEntry('容器番号を入力して Enter', 'info');
+    resetEntry('容器番号を入力', 'info');
   }
 
   function resetEntry(msg, kind) {
     S.stage = 'num'; S.ng = false; S.bufNum = ''; S.bufActual = ''; S.bufMass = '';
     S.target = null; S.confirmDup = false; S.confirmMassText = null; S.ngFrom = '';
-    setNotice(msg || '容器番号を入力して Enter', kind || 'info');
+    setNotice(msg || '容器番号を入力', kind || 'info');
     render();
   }
 
@@ -426,12 +438,11 @@
   // 入力された番号から、どのロットのどの容器かを決める。
   // 3桁以下は下3桁として扱い（「23」= 023）、4桁以上は末尾の桁で照合する。
   function resolve(text) {
-    let digits = text.replace(/^0+(?=\d)/, '');
-    if (digits === '1000') digits = '0'; // 1000番目は「000」
-    const n = Number(digits);
-    const len = Math.max(3, digits.length);
+    let len = Math.max(3, text.length);
+    let n = Number(text);
+    if (text === '1000') { n = 0; len = 3; } // 1000番目は「000」
     const mod = Math.pow(10, len);
-    const key = digits.length <= 3 ? n % 1000 : n % mod;
+    const key = n % mod;
     const hits = [];
     S.lots.forEach(function(l) {
       for (let v = Number(l.start); v <= Number(l.end); v++) {
@@ -439,6 +450,32 @@
       }
     });
     return hits;
+  }
+
+  // 入力中の全ロットで番号が重ならない最小の下桁数（3〜6）
+  function computeNumDigits() {
+    let total = 0;
+    S.lots.forEach(function(l) { total += lotSize(l); });
+    for (let len = 3; len <= 6; len++) {
+      const mod = Math.pow(10, len), seen = {};
+      let ok = true;
+      S.lots.forEach(function(l) {
+        for (let v = Number(l.start); ok && v <= Number(l.end); v++) {
+          if (seen[v % mod]) ok = false; else seen[v % mod] = true;
+        }
+      });
+      if (ok) return len;
+    }
+    return 6;
+  }
+
+  // 質量の入力桁数（小数点なし）: そのロットの標準が10kg以上なら3桁（34.8）、未満なら2桁（6.8）。決められなければ0（Enterで確定）
+  function massDigitsFor(lot) {
+    const med = median(lot);
+    if (med !== null) return med >= 10 ? 3 : 2;
+    const kg = parseInt(lot.kind, 10);
+    if (!kg) return 0;
+    return kg >= 10 ? 3 : 2;
   }
 
   function median(lot) {
@@ -459,19 +496,27 @@
   function handleKey(k) {
     if (S.stage === 'undo') return handleUndoKey(k);
     if (k === '*') return askUndo();
-    if (k === 'Escape') return resetEntry('やり直します。容器番号を入力して Enter', 'info');
+    if (k === 'Escape') return resetEntry('やり直します。容器番号を入力', 'info');
 
     if (S.stage === 'num') {
-      if (/^\d$/.test(k)) { if (S.bufNum.length < 8) S.bufNum += k; S.confirmDup = false; }
+      if (/^\d$/.test(k)) {
+        if (S.bufNum.length < 8) S.bufNum += k;
+        S.confirmDup = false;
+        if (S.auto && S.bufNum.length === S.numDigits) return submitNum();
+      }
       else if (k === 'Backspace') { S.bufNum = S.bufNum.slice(0, -1); S.confirmDup = false; }
-      else if (k === 'Enter') return submitNum();
+      else if (k === 'Enter') { if (S.bufNum) return submitNum(); return; }
       else if (k === '/') { S.ng = !S.ng; }
       render(); return;
     }
     if (S.stage === 'actual') {
-      if (/^\d$/.test(k)) { if (S.bufActual.length < 8) S.bufActual += k; S.confirmDup = false; }
+      if (/^\d$/.test(k)) {
+        if (S.bufActual.length < 8) S.bufActual += k;
+        S.confirmDup = false;
+        if (S.auto && S.bufActual.length === S.numDigits) return submitActual();
+      }
       else if (k === 'Backspace') {
-        if (!S.bufActual) { S.stage = 'num'; S.ng = false; S.target = null; setNotice('容器番号を入力して Enter', 'info'); }
+        if (!S.bufActual) { S.stage = 'num'; S.ng = false; S.target = null; setNotice('容器番号を入力', 'info'); }
         else S.bufActual = S.bufActual.slice(0, -1);
       }
       else if (k === '/') { S.ng = false; S.bufActual = ''; S.ngFrom = ''; S.confirmDup = false; return goMass(S.target); }
@@ -484,6 +529,10 @@
         if (k === '.' && S.bufMass.indexOf('.') >= 0) return;
         if (S.bufMass.length < 5) S.bufMass += k;
         S.confirmMassText = null;
+        if (S.auto) {
+          const d = massDigitsFor(S.target.lot);
+          if (/\.\d$/.test(S.bufMass) || (d && S.bufMass.indexOf('.') < 0 && S.bufMass.length === d)) return submitMass();
+        }
       } else if (k === 'Backspace') {
         if (!S.bufMass) { backToNum(); }
         else { S.bufMass = S.bufMass === MISSING ? '' : S.bufMass.slice(0, -1); S.confirmMassText = null; }
@@ -494,16 +543,16 @@
         S.bufMass = MISSING; setNotice('欠番として記録します。Enter で保存', 'warn');
       } else if (k === '/') {
         S.ng = !S.ng;
-        if (S.ng) { S.ngFrom = label(S.target.lot, S.target.serial); S.confirmDup = false; S.stage = 'actual'; S.bufActual = ''; setNotice('NG: 刻印の実容器番号を入力して Enter', 'err'); }
+        if (S.ng) { S.ngFrom = label(S.target.lot, S.target.serial); S.confirmDup = false; S.stage = 'actual'; S.bufActual = ''; setNotice('NG: 刻印の実容器番号を入力', 'err'); }
         else { delete S.target.ngInput; S.ngFrom = ''; }
-      } else if (k === 'Enter') return submitMass();
+      } else if (k === 'Enter') { if (S.bufMass) return submitMass(); return; }
       render(); return;
     }
   }
 
   function backToNum() {
     S.stage = 'num'; S.target = null; S.ng = false; S.bufActual = ''; S.confirmDup = false;
-    setNotice('容器番号を入力して Enter', 'info');
+    setNotice('容器番号を入力', 'info');
   }
 
   function pickTarget(text, onOk) {
@@ -524,7 +573,7 @@
     pickTarget(S.bufNum, function(hit) {
       if (S.ng) {
         S.target = hit; S.ngFrom = label(hit.lot, hit.serial); S.stage = 'actual'; S.bufActual = '';
-        setNotice('NG: 刻印の実容器番号を入力して Enter', 'err'); render(); return;
+        setNotice('NG: 刻印の実容器番号を入力', 'err'); render(); return;
       }
       goMass(hit);
     });
@@ -545,7 +594,7 @@
     }
     S.target = hit;
     S.stage = 'mass'; S.bufMass = ''; S.confirmMassText = null; S.viewLotId = hit.lot.lotId;
-    setNotice('質量を入力して Enter', 'info');
+    setNotice('質量を入力', 'info');
     render();
   }
 
@@ -671,18 +720,23 @@
         const l = lotById(r.lotId);
         if (l) { if (r.mass === null) delete l.entries[r.serial]; else l.entries[r.serial] = r.mass; }
         S.lastKey = null;
-        resetEntry('取り消しました: ' + (l ? label(l, r.serial) : r.serial) + '。容器番号を入力して Enter', 'ok');
+        resetEntry('取り消しました: ' + (l ? label(l, r.serial) : r.serial) + '。容器番号を入力', 'ok');
       }).catch(function(e) {
         S.saved.push(last);
         resetEntry('取り消しに失敗: ' + errText(e), 'err'); beep(false);
       });
     } else if (k === 'Backspace' || k === 'Escape') {
-      resetEntry('取り消しをやめました。容器番号を入力して Enter', 'info');
+      resetEntry('取り消しをやめました。容器番号を入力', 'info');
     }
   }
 
   // ---------- 描画 ----------
   function render() {
+    // 入力の途中で桁数が減ると打ち慣れた桁数で誤って確定するので、入力画面を開いている間は増えるときだけ変える
+    S.numDigits = Math.max(S.numDigits, computeNumDigits());
+    $('numHint').textContent = S.auto ? '下' + S.numDigits + '桁を入力（Enter不要）' : '下3桁でOK・Enterで確定';
+    const md = S.target ? massDigitsFor(S.target.lot) : 0;
+    $('massHint').textContent = S.auto && md ? md + '桁で自動保存（' + (md === 3 ? '348→34.8' : '68→6.8') + '）' : '「68」→6.8 と入力して Enter';
     const cur = '<span class="cursor"></span>';
     $('valNum').innerHTML = esc(S.bufNum) + (S.stage === 'num' ? cur : '');
     $('valActual').innerHTML = esc(S.bufActual) + (S.stage === 'actual' ? cur : '');

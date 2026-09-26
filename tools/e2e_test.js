@@ -56,32 +56,42 @@ function check(name, ok, detail) {
   // ---- 容器番号の判定
   check('下3桁が2ロットに当たると4桁以上を要求', (await keys('23E')).includes('4桁以上'));
   await page.keyboard.press('Escape');
-  check('4桁で記録先が決まる', (await keys('7023E')).includes('質量を入力'));
-  check('質量「348」を34.8として保存', (await keys('348E', 400)).includes('34.8 kg'));
+  check('入力桁数の表示は下4桁', (await page.textContent('#numHint')).includes('下4桁'));
+  check('4桁でEnterなしに記録先が決まる', (await keys('7023')).includes('質量を入力'));
+  check('質量「348」を3桁でEnterなしに34.8として保存', (await keys('348', 400)).includes('34.8 kg'));
   check('成績表に 023 ☑ 3 4 , 8 が入る', slot(22).join('|') === '023|true|3|4|,|8', slot(22).join('|'));
-  for (const n of ['7024', '7025', '7026', '7027']) await keys(n + 'E+');
+  for (const n of ['7024', '7025', '7026', '7027']) await keys(n + '+');
   check('＋で前回と同じ質量', (await page.textContent('#notice')).includes('HEP37027　34.8'));
-  check('標準から外れた質量は再確認', (await keys('7030E340E')).includes('離れています'));
+  check('標準から外れた質量は再確認', (await keys('7030340')).includes('離れています'));
   check('再度Enterで確定', (await keys('E')).includes('34.0 kg'));
-  check('入力済みは上書き確認', (await keys('7023E')).includes('入力済み'));
-  await keys('E349E');
-  check('欠番', (await keys('7031E-E', 400)).includes('欠番'));
+  check('入力済みは上書き確認', (await keys('7023')).includes('入力済み'));
+  await keys('E349');
+  check('欠番', (await keys('7031-E', 400)).includes('欠番'));
   check('成績表に「欠 番」', slot(30).join('|') === '031|false|欠|番||', slot(30).join('|'));
-  check('範囲外の番号はエラー', (await keys('9999E')).includes('どのロットの範囲にもありません'));
+  check('範囲外の番号はエラー', (await keys('9999')).includes('どのロットの範囲にもありません'));
   await page.keyboard.press('Escape');
-  check('NG→実容器番号で保存', (await keys('7040E/7041E347E', 400)).includes('HEP37041'));
-  check('質量の範囲外はエラー', (await keys('7050E1000E')).includes('0.1〜99.9'));
+  check('NG→実容器番号で保存', (await keys('7040/7041347', 400)).includes('HEP37041'));
+  check('質量の範囲外はエラー', (await keys('70500.0')).includes('0.1〜99.9'));
+  await page.keyboard.press('Escape');
+  // Enterで確定するモード
+  await page.uncheck('#autoMode');
+  check('自動確定オフでは4桁でも進まない', (await keys('7060')).includes('容器番号を入力') || !(await page.textContent('#notice')).includes('質量'));
+  check('自動確定オフでもEnterで保存', (await keys('E348E', 400)).includes('HEP37060　34.8'));
+  await page.check('#autoMode');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(500);
   await keys('*');
   check('直前の取消', (await keys('E', 500)).includes('取り消しました'));
-  check('取消でセルが空に戻る', slot(40)[2] === '' && slot(40)[1] === false, slot(40).join('|'));
+  check('入力中は桁数が減らない（ロット完了前）', (await page.textContent('#numHint')).includes('下4桁'));
+  check('取消でセルが空に戻る', slot(59)[2] === '' && slot(59)[1] === false, slot(59).join('|'));
+  check('NGで入れたHEP37041は残る', slot(40)[1] === true, slot(40).join('|'));
 
   const log = ss.getSheetByName('入力記録');
   const rows = log.getRange(2, 1, log.getLastRow() - 1, 15).getValues();
   const ng = rows.find(r => r[3] === 'HEP37041');
   check('入力記録にNGと最初の番号が残る', ng && ng[7] === 'NG' && ng[8] === 'HEP37040');
-  check('取消した行は「取消」で残る', ng && ng[11] === '取消' && ng[14] !== '');
+  const undone = rows.find(r => r[3] === 'HEP37060');
+  check('取消した行は「取消」で残る', undone && undone[11] === '取消' && undone[14] !== '');
   check('入力記録に担当者・端末', rows.every(r => r[12] === '山田' && r[13] === 'iPad-1'));
   const over = rows.filter(r => r[3] === 'HEP37023');
   check('上書き前の値を記録', over.length === 2 && over[1][9] === 34.8);
@@ -97,12 +107,11 @@ function check(name, ok, detail) {
 
   // ---- 全数そろったら自動完了・送信
   await page.click('#btnStart'); await page.waitForTimeout(100);
+  check('ロットが1つなら入力桁数は下3桁', (await page.textContent('#numHint')).includes('下3桁'));
   for (let i = 1; i <= 100; i++) {
-    for (const c of String(36000 + i)) await page.keyboard.press('Numpad' + c);
-    await page.keyboard.press('NumpadEnter');
-    if (i === 50) await page.keyboard.press('NumpadSubtract');
+    for (const c of String(36000 + i).slice(-3)) await page.keyboard.press('Numpad' + c);
+    if (i === 50) { await page.keyboard.press('NumpadSubtract'); await page.keyboard.press('NumpadEnter'); }
     else for (const c of '347') await page.keyboard.press('Numpad' + c);
-    await page.keyboard.press('NumpadEnter');
   }
   await page.waitForTimeout(3000);
   check('全数そろうと画面に送信完了', (await page.textContent('#notice')).includes('全数そろいました'));
