@@ -12,10 +12,10 @@ iPad＋Bluetoothテンキーで「容器番号」と「質量」を入力し、�
 
 ## 重要なID・URL
 
-- **スクリプトID**: `1WRdps6zQgFVtqMeW9OhRvLeZGafuOCXFZkv-89skSv6WJ0atLhBZnSfG`
+- **スクリプトID**: `17mOYxTzPwzIsrILrYL7pH0Rn-jYOjQ8f52n5KZm0-0p-ojhxBG246vu4`
 - **ウェブアプリURL**:
-  `https://script.google.com/a/macros/nodagumi40.com/s/AKfycbwTY85bp6X5FSaC8PsQpaXN4OIs7HGTW-Fba7hMHUUz-QqVohL45A_8yttGMrpZ_AIS/exec`
-- **デプロイID**: `AKfycbwTY85bp6X5FSaC8PsQpaXN4OIs7HGTW-Fba7hMHUUz-QqVohL45A_8yttGMrpZ_AIS`（URLを変えずに新バージョンへ更新するときに使う）
+  `（スプレッドシートにつながったプロジェクトで新しくデプロイ後に記入）`
+- **デプロイID**: `＜デプロイID＞`（URLを変えずに新バージョンへ更新するときに使う）
 - スクリプトIDは `.clasp.json` に記載済み
 
 ## ファイル構成と役割
@@ -51,7 +51,7 @@ clasp pull                      # 作業前に本番との差分を確認（エ�
 npm run check && npm test       # 構文チェックとE2Eテスト（初回は npm install）
 clasp push --force
 clasp version "変更内容"         # → Created version N
-clasp redeploy AKfycbwTY85bp6X5FSaC8PsQpaXN4OIs7HGTW-Fba7hMHUUz-QqVohL45A_8yttGMrpZ_AIS -V N -d "変更内容"
+clasp redeploy ＜デプロイID＞ -V N -d "変更内容"
 ```
 
 - デプロイは必ず上のIDを更新する（新しいデプロイを作るとURLが変わってiPadのホーム画面から開けなくなる）
