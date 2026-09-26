@@ -47,10 +47,12 @@ function onOpen() {
     .addToUi();
 }
 
-// 記録先のスプレッドシート。スクリプトプロパティ SPREADSHEET_ID があればそれを、
-// なければスクリプトが入っているスプレッドシート（拡張機能 > Apps Script から作った場合）を使う
+// 記録先のスプレッドシート「LPG容器_質量入力」。ウェブアプリからは「開いているスプレッドシート」が
+// 取れないため、IDで開く。スクリプトプロパティ SPREADSHEET_ID があればそちらを優先する
+const DEFAULT_SPREADSHEET_ID = '1h0VM9ECv1NnSuwuo2jxTaiPVC6o5oYwWi1lZ9Qx1hms';
+
 function getSpreadsheet_() {
-  const id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+  const id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID') || DEFAULT_SPREADSHEET_ID;
   const ss = id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActiveSpreadsheet();
   if (!ss) {
     throw new Error('記録先のスプレッドシートが見つかりません。Apps Script の「プロジェクトの設定 > スクリプト プロパティ」に ' +
