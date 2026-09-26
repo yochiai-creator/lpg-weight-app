@@ -16,7 +16,8 @@ const LOG_HEADERS = ['記録ID', '入力日時', 'ロットID', '容器番号', 
 const STATUS_ACTIVE = '入力中';
 const STATUS_DONE = '完了';
 const MISSING = '欠番';
-const KIND_FIX = '修正';      // 入力ミスを直した上書き
+const REPAIR = '修正';        // ラインで品質不良のため修正に回した容器（欠番と同じく質量なしで記録）
+const KIND_FIX = '訂正';      // 入力ミスを直した上書き（印や件数は出さない）
 const KIND_DUP = 'ダブり';    // 同じ容器が2回流れてきた上書き
 const NOTE_SEAL = 'シール違い';
 
@@ -113,6 +114,7 @@ function slotPosition_(index) {
 // 質量 → [☑, 10の位, 1の位, ",", 小数1位]
 function massCells_(mass) {
   if (mass === MISSING) return [false, '欠', '番', '', ''];
+  if (mass === REPAIR) return [false, '修', '正', '', ''];
   if (mass === null || mass === '' || mass === undefined) return [false, '', '', ',', ''];
   const tenths = Math.round(Number(mass) * 10);
   const tens = Math.floor(tenths / 100);
@@ -124,6 +126,7 @@ function massCells_(mass) {
 function parseMassCells_(cells) {
   const d = cells[1], e = cells[2], g = cells[4];
   if (d === '欠' || e === '番') return MISSING;
+  if (d === '修' || e === '正') return REPAIR;
   if (e === '' || e === null) return null;
   const tenths = (Number(d) || 0) * 100 + Number(e) * 10 + (Number(g) || 0);
   return Math.round(tenths) / 10;
@@ -220,7 +223,6 @@ function withProgress_(lot, marksMap) {
   lot.entries = readProgress_(lot);
   const m = (marksMap || readMarksAll_())[lot.lotId] || {};
   lot.dups = m.dups || {};
-  lot.fixes = m.fixes || {};
   lot.seals = m.seals || {};
   delete lot.row;
   return lot;
@@ -366,6 +368,8 @@ function recordEntry(payload) {
     let mass;
     if (payload.missing) {
       mass = MISSING;
+    } else if (payload.repair) {
+      mass = REPAIR;
     } else {
       mass = Math.round(Number(payload.mass) * 10) / 10;
       if (!isValidMass_(mass)) throw new Error('質量は' + MASS_MIN + '〜' + MASS_MAX + 'の範囲で入力してください');
@@ -384,9 +388,10 @@ function recordEntry(payload) {
     let kind = '通常';
     if (prev !== null) kind = payload.overwrite === 'fix' ? KIND_FIX : KIND_DUP;
     else if (mass === MISSING) kind = MISSING;
+    else if (mass === REPAIR) kind = REPAIR;
     const note = payload.seal ? NOTE_SEAL : '';
     getSheet_(SHEET_LOG).appendRow([recordId, new Date(), lot.lotId, "'" + lot.prefix + serial,
-      "'" + displayNumber_(serial), mass === MISSING ? '' : mass, kind,
+      "'" + displayNumber_(serial), typeof mass === 'number' ? mass : '', kind,
       payload.ngInput ? 'NG' : 'OK', payload.ngInput ? "'" + payload.ngInput : '',
       prev === null ? '' : prev, userEmail_(), '有効', String(payload.worker || ''), String(payload.device || ''), '', note]);
     const result = { recordId: recordId, clientId: payload.clientId, serial: serial, mass: mass, prev: prev, kind: kind, note: note };
@@ -427,7 +432,7 @@ function undoEntry(recordId) {
       const lot = findLot_(values[i][2]);
       const serial = values[i][3].slice(lot.prefix.length);
       const prevText = values[i][9];
-      const prev = prevText === '' ? null : (prevText === MISSING ? MISSING : Number(prevText));
+      const prev = prevText === '' ? null : (prevText === MISSING || prevText === REPAIR ? prevText : Number(prevText));
       const pos = slotPosition_(Number(serial) - Number(lot.start));
       getSheet_(lot.sheetName).getRange(pos.row, pos.numberCol + 1, 1, 5).setValues([massCells_(prev)]);
       log.getRange(from + i, 12).setValue('取消');
@@ -440,7 +445,7 @@ function undoEntry(recordId) {
   }
 }
 
-// 印（ダブり・修正・シール違い）の数: { ロットID: { dups: {容器番号: 回数}, fixes: {...}, seals: {...} } }
+// 印（ダブり・シール違い）の数: { ロットID: { dups: {容器番号: 回数}, seals: {...} } }
 // 入力記録の直近5000行の有効な行から数える（区分が「通常」のままの上書きは以前の記録なのでダブり扱い）
 function readMarksAll_() {
   const log = getSpreadsheet_().getSheetByName(SHEET_LOG);
@@ -449,13 +454,12 @@ function readMarksAll_() {
   const width = Math.min(log.getLastColumn(), LOG_HEADERS.length);
   const out = {};
   const bump = function(lotId, key, serial) {
-    const m = out[lotId] = out[lotId] || { dups: {}, fixes: {}, seals: {} };
+    const m = out[lotId] = out[lotId] || { dups: {}, seals: {} };
     m[key][serial] = (m[key][serial] || 0) + 1;
   };
   log.getRange(from, 1, last - from + 1, width).getDisplayValues().forEach(function(r) {
     if (r[11] !== '有効') return;
-    if (r[6] === KIND_FIX) bump(r[2], 'fixes', r[3]);
-    else if (r[6] === KIND_DUP || (r[9] !== '' && r[6] === '通常')) bump(r[2], 'dups', r[3]);
+    if (r[6] === KIND_DUP || (r[9] !== '' && r[6] === '通常')) bump(r[2], 'dups', r[3]);
     if (r[15] === NOTE_SEAL) bump(r[2], 'seals', r[3]);
   });
   return out;

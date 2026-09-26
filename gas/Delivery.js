@@ -9,10 +9,10 @@ const SETTING_ROWS = [
   ['CC', '', '控えを送る宛先（任意）'],
   ['自動送信', 'する', '「する」: 全数（欠番を含む）そろった時点で自動送信 ／「しない」: 完了ボタンで送信'],
   ['差出人名', '野田組', 'メールの差出人として表示する名前'],
-  ['件名', '【高圧ガス容器検査成績表】{組容器番号}（{容器区分}）', '{組容器番号} {容器区分} {本数} {欠番} が使えます'],
+  ['件名', '【高圧ガス容器検査成績表】{組容器番号}（{容器区分}）', '{組容器番号} {容器区分} {本数} {欠番} {修正} が使えます'],
   ['本文',
     'ご担当者様\n\nいつもお世話になっております。\n高圧ガス容器検査成績表をお送りします。\n\n' +
-    '組容器番号：{組容器番号}\n容器区分：{容器区分}\n本数：{本数}（欠番 {欠番}）\n\n' +
+    '組容器番号：{組容器番号}\n容器区分：{容器区分}\n本数：{本数}（欠番 {欠番}・修正 {修正}）\n\n' +
     '添付：検査成績表（PDF）、質量データ（CSV）\n\nよろしくお願いいたします。',
     '改行はそのまま使えます'],
   ['標準質量', '5kg=6.8, 8kg=9.6, 20kg=16.7, 30kg=24.0, 50kg=34.8, 50kg S付=36.3',
@@ -64,13 +64,14 @@ function sendLotMail_(lot, pdfBlob) {
   const st = readSettings_();
   if (!st.to) throw new Error('設定シートの「送付先」が空です');
   const progress = readProgress_(lot);
-  let missing = 0;
-  Object.keys(progress).forEach(function(k) { if (progress[k] === MISSING) missing++; });
+  let missing = 0, repair = 0;
+  Object.keys(progress).forEach(function(k) { if (progress[k] === MISSING) missing++; if (progress[k] === REPAIR) repair++; });
   const vars = {
     '組容器番号': lot.prefix + lot.start + '～' + lot.prefix + lot.end,
     '容器区分': lot.kind || '',
-    '本数': String(Object.keys(progress).length - missing) + '本',
+    '本数': String(Object.keys(progress).length - missing - repair) + '本',
     '欠番': String(missing),
+    '修正': String(repair),
     '耐圧試験日': lot.pressure && lot.pressure.testDate ? lot.pressure.testDate.replace(/-/g, '/') : ''
   };
   // 値が空になる差し込み（例: 耐圧試験日）を含む行は、行ごと省く

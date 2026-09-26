@@ -120,10 +120,16 @@ function check(name, ok, detail) {
   check('表の見出しにダブり件数', (await page.textContent('#gridSub')).includes('ダブり 1件'));
   check('開き直してもダブりが残る（サーバー記録）', ctx.getBootstrap().lots.find(l => l.lotId === 'HEP37001').dups['HEP37023'] === 1);
   // 修正（入力ミスを直す）
-  check('修正: Enterで修正として上書き', (await keys('7024E', 150)).includes('修正'));
+  check('訂正: Enterで訂正として上書き', (await keys('7024E', 150)).includes('訂正'));
   await keys('0', 400);
-  check('修正は「修」の印', (await page.textContent('#grid .cell[data-serial="37024"]')).includes('修') && !(await page.getAttribute('#grid .cell[data-serial="37024"]', 'class')).includes('dup'));
-  check('表の見出しに修正件数', (await page.textContent('#gridSub')).includes('修正 1件'));
+  check('訂正は印を付けない', !(await page.textContent('#grid .cell[data-serial="37024"]')).includes('修') && !(await page.getAttribute('#grid .cell[data-serial="37024"]', 'class')).includes('dup'));
+  // 修正（品質不良）
+  await keys('7069');
+  await page.click('#btnRepair'); await page.waitForTimeout(400);
+  check('修正ボタンで保存', (await page.textContent('#notice')).includes('HEP37069　修正'));
+  check('表のマスに「修正」', (await page.textContent('#grid .cell[data-serial="37069"]')).includes('修正') && (await page.getAttribute('#grid .cell[data-serial="37069"]', 'class')).includes('repair'));
+  check('表の見出しに修正本数', (await page.textContent('#gridSub')).includes('修正 1本'));
+  check('成績表のマスに「修 正」', slot(68).join('|') === '069|false|修|正||', slot(68).join('|'));
   // シール違い
   await keys('7068');
   await page.click('#btnSeal');
@@ -132,8 +138,10 @@ function check(name, ok, detail) {
   check('保存メッセージにシール違い', (await page.textContent('#notice')).includes('【シール違い】'));
   check('シール違いは「シ」の印', (await page.textContent('#grid .cell[data-serial="37068"]')).includes('シ'));
   const logRows = () => { const lg = ss.getSheetByName('入力記録'); return lg.getRange(2, 1, lg.getLastRow() - 1, 16).getValues(); };
+  const r69 = logRows().filter(r => r[3] === 'HEP37069').pop();
+  check('入力記録: 修正の区分（質量なし）', r69[6] === '修正' && r69[5] === '');
   const r24 = logRows().filter(r => r[3] === 'HEP37024').pop(), r23 = logRows().filter(r => r[3] === 'HEP37023').pop(), r68 = logRows().filter(r => r[3] === 'HEP37068').pop();
-  check('入力記録: 修正の区分と上書き前', r24[6] === '修正' && r24[9] === 34.8 && r24[5] === 35);
+  check('入力記録: 訂正の区分と上書き前', r24[6] === '訂正' && r24[9] === 34.8 && r24[5] === 35);
   check('入力記録: ダブりの区分', r23[6] === 'ダブり');
   check('入力記録: 備考にシール違い', r68[15] === 'シール違い' && r68[6] === '通常');
   check('欠番', (await keys('7031-E', 400)).includes('欠番'));
@@ -172,7 +180,8 @@ function check(name, ok, detail) {
   const gridBox = await page.locator('#grid').boundingBox(), padBox = await page.locator('#pad').boundingBox(), numBox = await page.locator('#fldNum').boundingBox();
   check('縦向きは表が上・入力が下', gridBox.y + gridBox.height <= numBox.y + 1);
   check('入力欄は横に並ぶ（番号欄の右にテンキー）', padBox.x > numBox.x + numBox.width && Math.abs(padBox.y - numBox.y) < 80);
-  check('縦向きでも1画面に収まる', (await page.evaluate(() => document.documentElement.scrollHeight)) <= 1180 + 40);
+  const sh1 = await page.evaluate(() => document.documentElement.scrollHeight); console.log('   scrollHeight', sh1);
+  check('縦向きでも1画面に収まる', sh1 <= 1180 + 40);
   await page.screenshot({ path: path.join(__dirname, 'out', 'portrait.png') });
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 1180, height: 820 }); await page.waitForTimeout(200);
@@ -199,7 +208,7 @@ function check(name, ok, detail) {
   const mail = global.MAILS[0] || {};
   check('メールを1通送信', global.MAILS.length === 1);
   check('宛先・件名', mail.to === 'nouhin@example.com' && (mail.sub || '').includes('HEP36001～HEP36100'));
-  check('本文に本数と欠番', (mail.body || '').includes('本数：99本（欠番 1）'));
+  check('本文に本数と欠番', (mail.body || '').includes('本数：99本（欠番 1・修正 0）'));
   check('本文に空の差し込み行が残らない', !(mail.body || '').includes('耐圧試験日'));
   check('PDFとCSVを添付', JSON.stringify(mail.att) === JSON.stringify(['成績表_HEP36001-36100.pdf', '成績表_HEP36001-36100.csv']));
   check('ロットに送信日時・送信先', lots()[1][6] === '完了' && lots()[1][15] !== '' && lots()[1][16] === 'nouhin@example.com');

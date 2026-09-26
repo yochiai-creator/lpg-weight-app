@@ -62,7 +62,7 @@
     .input-layout .pad button { font-size: 22px; padding: 10px 0; }
     .input-layout .pad button.fn { font-size: 13px; }
     .input-layout .keys:not(.opt) { display: none; }
-    .input-layout .grid { gap: 4px 6px; }
+    .input-layout .grid { gap: 3px 6px; }
     .input-layout .grid .cell { font-size: 14px; padding: 9px 6px; }
     .input-layout .tabs button { padding: 7px 10px; font-size: 13px; }
   }
@@ -76,8 +76,8 @@
     .input-layout { grid-template-columns: 1fr; gap: 8px; }
     .input-layout > .panel:last-child { order: -1; }
     .input-layout #inPanel { display: grid; grid-template-columns: 1fr 1.15fr 1fr; column-gap: 10px; align-items: start;
-      grid-template-areas: "num steps pad" "match cands pad" "actual cands pad" "mass cands pad" "notice extra pad" "queue opts pad"; }
-    #dupChoice, #btnSeal { grid-area: extra; } #candsNote { display: none; }
+      grid-template-areas: "num steps pad" "match cands pad" "actual cands pad" "mass cands pad" "notice extra pad" "queue queue pad"; }
+    #dupChoice, #extraRow { grid-area: extra; } #candsNote { display: none; }
     #fldNum { grid-area: num; } #matchRow { grid-area: match; } #fldActual { grid-area: actual; } #steps { grid-area: steps; }
     #fldMass { grid-area: mass; } #notice { grid-area: notice; } #cands { grid-area: cands; } #candsNote { grid-area: note; }
     #pad { grid-area: pad; } #opts { grid-area: opts; } #queue { grid-area: queue; }
@@ -90,8 +90,26 @@
     .input-layout .cands button { font-size: 16px; padding: 12px 0; }
     .input-layout .pad button { padding: 9px 0; }
     .input-layout #opts .keys.opt { font-size: 11px; }
-    .input-layout .grid .cell { padding: 3px 6px; font-size: 13px; }
+    /* 上の表は大きめに */
+    .input-layout .grid .cell { padding: 4px 8px; font-size: 16px; }
+    .input-layout .grid .cell .m { font-size: 17px; }
     .input-layout .grid { gap: 3px 6px; }
+    .input-layout .gridhead { margin-bottom: 6px; }
+    .input-layout .tabs { margin-bottom: 6px; }
+    .input-layout .tabs button { padding: 5px 10px; }
+    /* そのぶん下の入力を詰める（設定のチェックは横向きのときに表示） */
+    .input-layout #opts { display: none; }
+    .input-layout .steps { margin-bottom: 6px; }
+    .input-layout .steps button { padding: 4px 0; }
+    .input-layout .steps button b { font-size: 20px; }
+    .input-layout .field .val { font-size: 26px; min-height: 32px; }
+    .input-layout .field .val .cursor { height: 26px; }
+    .input-layout .pad { gap: 6px; }
+    .input-layout .pad button { padding: 7px 0; }
+    .input-layout .notice { min-height: 34px; padding: 6px 10px; }
+    .input-layout .cands button { padding: 9px 0; }
+    .input-layout .panel { padding: 8px; }
+    header { padding: 6px 16px; }
     .input-layout .notice.dup { font-size: 17px; }
   }
   /* ダブり（入力済みの番号をもう一度入れた）の表示 */
@@ -104,7 +122,10 @@
   .dupchoice button { border: 0; border-radius: 10px; padding: 12px 6px; font-size: 16px; font-weight: 700; color: #fff; line-height: 1.2; }
   .dupchoice button span { display: block; font-size: 11px; font-weight: 400; opacity: .85; }
   .dupchoice .fix { background: #c77700; } .dupchoice .dup { background: var(--ng); }
-  .sealbtn { width: 100%; border: 2px dashed #7a5bc4; background: #fff; color: #7a5bc4; border-radius: 10px; padding: 8px; font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+  .cell.repair { background: #fff1dc; color: #9a5a00; }
+  .extra-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .repairbtn { border: 2px solid #c77700; background: #fff; color: #9a5a00; border-radius: 10px; padding: 8px; font-size: 15px; font-weight: 700; }
+  .sealbtn { width: 100%; border: 2px dashed #7a5bc4; background: #fff; color: #7a5bc4; border-radius: 10px; padding: 8px; font-size: 15px; font-weight: 700; }
   .sealbtn.on { background: #7a5bc4; color: #fff; border-style: solid; }
   .cell .badge { display: inline-block; margin-left: 3px; padding: 0 3px; border-radius: 3px; background: var(--ng); color: #fff; font-size: 10px; font-weight: 700; vertical-align: 1px; }
   .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
@@ -180,7 +201,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v19（W表示）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v20（修正=品質不良・表を大きく）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -252,10 +273,13 @@
       </div>
       <div class="notice info" id="notice">容器番号を入力</div>
       <div class="dupchoice hidden" id="dupChoice">
-        <button class="fix" id="btnFix" tabindex="-1">修正して上書き<span>入力ミスを直す（Enter・もう一度タップ）</span></button>
+        <button class="fix" id="btnFix" tabindex="-1">訂正して上書き<span>入力ミスを直す（Enter・もう一度タップ）</span></button>
         <button class="dup" id="btnDup" tabindex="-1">ダブりとして記録<span>2回流れてきた（＋キー）</span></button>
       </div>
-      <button class="sealbtn hidden" id="btnSeal" tabindex="-1">シール違い（重量シールが刻印と違う）</button>
+      <div class="extra-row hidden" id="extraRow">
+        <button class="sealbtn" id="btnSeal" tabindex="-1">シール違い</button>
+        <button class="repairbtn" id="btnRepair" tabindex="-1">修正（品質不良）</button>
+      </div>
       <div class="cands hidden" id="cands"></div>
       <div class="cands-note hidden" id="candsNote">タップで保存（濃い色ほどこのロットでよく出る値）</div>
       <div class="pad" id="pad">
@@ -305,7 +329,8 @@
 
 <script>
 (function() {
-  const MASS_MIN = 0.1, MASS_MAX = 99.9, DEVIATION_KG = 0.5, MISSING = '欠番';
+  const MASS_MIN = 0.1, MASS_MAX = 99.9, DEVIATION_KG = 0.5, MISSING = '欠番', REPAIR = '修正';
+  function isMass(m) { return typeof m === 'number'; }
   const $ = function(id) { return document.getElementById(id); };
 
   const S = {
@@ -357,7 +382,7 @@
   function label(l, serial) { return l.prefix + serial; }
   function lotById(id) { return S.lots.filter(function(l) { return l.lotId === id; })[0]; }
   // 刻印の表記に合わせて「W34.8」で表示する
-  function fmtMass(m) { return m === MISSING ? MISSING : 'W' + Number(m).toFixed(1); }
+  function fmtMass(m) { return m === MISSING || m === REPAIR ? m : 'W' + Number(m).toFixed(1); }
 
   let audio = null;
   function beep(ok) {
@@ -415,7 +440,9 @@
 
   function countOf(l) {
     let filled = 0, missing = 0;
-    Object.keys(l.entries).forEach(function(k) { if (l.entries[k] === MISSING) missing++; else filled++; });
+    let repair = 0;
+    Object.keys(l.entries).forEach(function(k) { if (l.entries[k] === MISSING) missing++; else if (l.entries[k] === REPAIR) repair++; else filled++; });
+    missing += repair;
     return { filled: filled, missing: missing, size: lotSize(l) };
   }
 
@@ -429,7 +456,7 @@
     div.querySelector('.bar > div').style.width = Math.round((c.filled + c.missing) / c.size * 100) + '%';
     div.querySelector('.cnt').textContent = '入力 ' + c.filled + ' 本' + (c.missing ? '・欠番 ' + c.missing : '') + ' ／ ' + c.size + ' 本' +
       (l.dups && Object.keys(l.dups).length ? '　ダブり ' + Object.keys(l.dups).length + '件' : '') +
-      (l.fixes && Object.keys(l.fixes).length ? '　修正 ' + Object.keys(l.fixes).length + '件' : '') +
+      (Object.keys(l.entries).some(function(k) { return l.entries[k] === REPAIR; }) ? '　修正 ' + Object.keys(l.entries).filter(function(k) { return l.entries[k] === REPAIR; }).length + '本' : '') +
       (l.seals && Object.keys(l.seals).length ? '　シール違い ' + Object.keys(l.seals).length + '件' : '') +
       (done ? (l.sentAt ? '　送信済 ' + l.sentAt : (l.sentTo ? '　' + l.sentTo : '　未送信')) : '') +
       '';
@@ -681,7 +708,7 @@
     const med = median(lot);
     if (med !== null) return med;
     if (lot.lotId in S.lastByLot) return S.lastByLot[lot.lotId];
-    const vals = Object.keys(lot.entries).map(function(k) { return lot.entries[k]; }).filter(function(m) { return m !== MISSING; });
+    const vals = Object.keys(lot.entries).map(function(k) { return lot.entries[k]; }).filter(isMass);
     if (vals.length) return vals[vals.length - 1];
     return S.typical[lot.kind] || null;
   }
@@ -709,7 +736,7 @@
 
   function median(lot) {
     const arr = Object.keys(lot.entries).map(function(k) { return lot.entries[k]; })
-      .filter(function(m) { return m !== MISSING; }).sort(function(a, b) { return a - b; });
+      .filter(isMass).sort(function(a, b) { return a - b; });
     if (arr.length < 5) return null;
     const h = Math.floor(arr.length / 2);
     return arr.length % 2 ? arr[h] : (arr[h - 1] + arr[h]) / 2;
@@ -756,7 +783,7 @@
     }
     if (S.stage === 'mass') {
       if (/^\d$/.test(k) || k === '.') {
-        if (S.bufMass === MISSING) S.bufMass = '';
+        if (S.bufMass === MISSING || S.bufMass === REPAIR) S.bufMass = '';
         const win = shortWindow(S.target.lot);
         if (win && S.bufMass === '') {
           if (k === '.') { S.fullMass = true; setNotice('範囲外の質量: 3桁で入力（例 353→35.3）', 'warn'); render(); return; }
@@ -772,7 +799,7 @@
         }
       } else if (k === 'Backspace') {
         if (!S.bufMass) { backToNum(); }
-        else { S.bufMass = S.bufMass === MISSING ? '' : S.bufMass.slice(0, -1); S.confirmMassText = null; }
+        else { S.bufMass = S.bufMass === MISSING || S.bufMass === REPAIR ? '' : S.bufMass.slice(0, -1); S.confirmMassText = null; }
       } else if (k === '+') {
         if (S.lastMass === null) { setNotice('前回の質量がまだありません', 'warn'); beep(false); }
         else { S.bufMass = String(S.lastMass.toFixed(1)); S.confirmMassText = null; return submitMass(); }
@@ -833,7 +860,7 @@
     S.stage = 'mass'; S.bufMass = ''; S.confirmMassText = null; S.viewLotId = hit.lot.lotId; S.fullMass = false;
     if (prev === undefined) S.overwrite = '';
     else if (!S.overwrite) S.overwrite = 'fix';
-    setNotice(S.overwrite === 'dup' ? 'ダブりとして記録: 質量を入力' : S.overwrite === 'fix' ? '修正: 正しい質量を入力' : '質量を入力',
+    setNotice(S.overwrite === 'dup' ? 'ダブりとして記録: 質量を入力' : S.overwrite === 'fix' ? '訂正: 正しい質量を入力' : '質量を入力',
       S.overwrite ? 'warn' : 'info');
     render();
   }
@@ -841,8 +868,8 @@
   function submitMass() {
     const t = S.target;
     let mass;
-    if (S.bufMass === MISSING) {
-      mass = MISSING;
+    if (S.bufMass === MISSING || S.bufMass === REPAIR) {
+      mass = S.bufMass;
     } else {
       mass = parseMass(S.bufMass);
       if (!(mass >= MASS_MIN && mass <= MASS_MAX)) {
@@ -855,14 +882,14 @@
         beep(false); render(); return;
       }
     }
-    enqueue({ lotId: t.lot.lotId, serial: t.serial, mass: mass === MISSING ? null : mass,
-      missing: mass === MISSING, ngInput: t.ngInput || '', worker: worker(), device: $('fDevice').value.trim(),
+    enqueue({ lotId: t.lot.lotId, serial: t.serial, mass: isMass(mass) ? mass : null,
+      missing: mass === MISSING, repair: mass === REPAIR, ngInput: t.ngInput || '', worker: worker(), device: $('fDevice').value.trim(),
       overwrite: S.overwrite, seal: S.seal });
     t.lot.entries[t.serial] = mass;
-    if (mass !== MISSING) { S.lastMass = mass; S.lastByLot[t.lot.lotId] = mass; }
+    if (isMass(mass)) { S.lastMass = mass; S.lastByLot[t.lot.lotId] = mass; }
     S.lastKey = t.lot.lotId + '|' + t.serial;
     beep(true);
-    const tag = (S.overwrite === 'dup' ? '【ダブり】' : S.overwrite === 'fix' ? '【修正】' : '') + (S.seal ? '【シール違い】' : '');
+    const tag = (S.overwrite === 'dup' ? '【ダブり】' : S.overwrite === 'fix' ? '【訂正】' : '') + (S.seal ? '【シール違い】' : '');
     resetEntry('保存: ' + tag + label(t.lot, t.serial) + '　' + fmtMass(mass) + '　→ 次の容器番号', 'ok');
   }
 
@@ -894,7 +921,6 @@
         const mk = ml.prefix + e.serial;
         const bump = function(name) { ml[name] = ml[name] || {}; ml[name][mk] = (ml[name][mk] || 0) + 1; };
         if (res.kind === 'ダブり') bump('dups');
-        if (res.kind === '修正') bump('fixes');
         if (res.note === 'シール違い') bump('seals');
       }
       if (res.full) onLotFull(e.lotId, res);
@@ -969,7 +995,7 @@
       call('undoEntry', last.recordId).then(function(r) {
         const l = lotById(r.lotId);
         if (l) { if (r.mass === null) delete l.entries[r.serial]; else l.entries[r.serial] = r.mass; }
-        call('getLot', r.lotId).then(function(fresh) { const cur = lotById(fresh.lotId); if (cur) { cur.entries = fresh.entries; cur.dups = fresh.dups; cur.fixes = fresh.fixes; cur.seals = fresh.seals; render(); } });
+        call('getLot', r.lotId).then(function(fresh) { const cur = lotById(fresh.lotId); if (cur) { cur.entries = fresh.entries; cur.dups = fresh.dups; cur.seals = fresh.seals; render(); } });
         S.lastKey = null;
         resetEntry('取り消しました: ' + (l ? label(l, r.serial) : r.serial) + '。容器番号を入力', 'ok');
       }).catch(function(e) {
@@ -1003,7 +1029,7 @@
     const t = S.target;
     $('resolved').textContent = t ? '→ ' + label(t.lot, t.serial) + '（' + t.lot.sheetName + '）' : '';
     $('dupChoice').classList.toggle('hidden', !S.confirmDup || (S.stage !== 'num' && S.stage !== 'actual'));
-    $('btnSeal').classList.toggle('hidden', S.stage !== 'mass');
+    $('extraRow').classList.toggle('hidden', S.stage !== 'mass');
     $('btnSeal').classList.toggle('on', S.seal);
     renderSteps(); renderCands(); renderTabs(); renderGrid();
   }
@@ -1029,6 +1055,13 @@
   $('btnFix').onclick = function() { this.blur(); if (S.confirmDup) handleKey('Enter'); };
   $('btnDup').onclick = function() { this.blur(); if (S.confirmDup) handleKey('+'); };
   $('btnSeal').onclick = function() { this.blur(); if (S.stage === 'mass') { S.seal = !S.seal; render(); } };
+  // 修正（品質不良で修正に回す容器）: 質量なしでその場で保存
+  $('btnRepair').onclick = function() {
+    this.blur();
+    if (S.stage !== 'mass') return;
+    S.bufMass = REPAIR; S.confirmMassText = null;
+    submitMass();
+  };
 
   $('steps').addEventListener('click', function(ev) {
     const b = ev.target.closest('button'); if (!b) return;
@@ -1048,7 +1081,7 @@
     const freq = {};
     Object.keys(S.target.lot.entries).forEach(function(k) {
       const m = S.target.lot.entries[k];
-      if (m !== MISSING) freq[m.toFixed(1)] = (freq[m.toFixed(1)] || 0) + 1;
+      if (isMass(m)) freq[m.toFixed(1)] = (freq[m.toFixed(1)] || 0) + 1;
     });
     const ranked = Object.keys(freq).sort(function(a, b) { return freq[b] - freq[a]; });
     box.innerHTML = '';
@@ -1122,7 +1155,9 @@
       if (!n) return;
       const ds = document.createElement('b'); ds.style.color = color; ds.textContent = '　' + name + ' ' + n + '件'; $('gridSub').appendChild(ds);
     };
-    markText(l.dups, 'ダブり', 'var(--ng)'); markText(l.fixes, '修正', '#c77700'); markText(l.seals, 'シール違い', '#7a5bc4');
+    markText(l.dups, 'ダブり', 'var(--ng)'); markText(l.seals, 'シール違い', '#7a5bc4');
+    const rep = Object.keys(l.entries).filter(function(k) { return l.entries[k] === REPAIR; }).length;
+    if (rep) { const rs = document.createElement('b'); rs.style.color = '#c77700'; rs.textContent = '　修正 ' + rep + '本'; $('gridSub').appendChild(rs); }
     $('gridCount').textContent = (c.filled + c.missing) + ' / ' + c.size;
     const frag = document.createDocumentFragment();
     for (let i = 0; i < 100; i++) {
@@ -1132,7 +1167,7 @@
       const key = l.lotId + '|' + serial;
       const m = l.entries[serial];
       let cls = 'cell';
-      if (m === MISSING) cls += ' missing'; else if (m !== undefined) cls += ' filled';
+      if (m === MISSING) cls += ' missing'; else if (m === REPAIR) cls += ' repair'; else if (m !== undefined) cls += ' filled';
       if (S.pending[key]) cls += ' pending';
       if (S.errors[key]) cls += ' error';
       if (S.target && S.target.lot.lotId === l.lotId && S.target.serial === serial) cls += ' target';
@@ -1144,7 +1179,6 @@
       div.firstChild.textContent = disp3(serial);
       const addBadge = function(cls, text) { const bd = document.createElement('span'); bd.className = 'badge ' + cls; bd.textContent = text; div.firstChild.appendChild(bd); };
       if (dupN) addBadge('', '重' + (dupN > 1 ? dupN : ''));
-      if (l.fixes && l.fixes[label(l, serial)]) addBadge('fix', '修');
       if (l.seals && l.seals[label(l, serial)]) addBadge('seal', 'シ');
       div.lastChild.textContent = m === undefined ? '' : fmtMass(m);
       div.setAttribute('data-serial', serial);
