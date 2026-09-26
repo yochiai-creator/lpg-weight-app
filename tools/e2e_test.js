@@ -45,6 +45,13 @@ function check(name, ok, detail) {
   // ---- ロット登録
   check('ロット登録', (await create('HEP', '37001')).includes('登録しました'));
   await create('HEP', '36001');
+  await page.fill('#fPrefix', ''); await page.fill('#fStart', '73301'); await page.selectOption('#fKind', '20kg');
+  await page.click('#btnCreate'); await page.waitForTimeout(300);
+  check('機種の切り替えボタン（すべて・20kg・50kg）', (await page.textContent('#kindFilter')).includes('すべて（3）') && (await page.textContent('#kindFilter')).includes('20kg（1）') && (await page.textContent('#kindFilter')).includes('50kg（2）'));
+  check('すべてのときは機種ごとの見出し', (await page.locator('#activeLots .kind-head').count()) === 2);
+  await page.click('#kindFilter button:has-text("20kg")');
+  check('20kgを選ぶと20kgのロットだけ', (await page.locator('#activeLots .card').count()) === 1);
+  await page.click('#kindFilter button:has-text("すべて")');
   check('同じ組容器番号は登録できない', (await create('HEP', '37001')).includes('登録済み'));
   check('担当者を選ぶまで入力開始できない', await page.isDisabled('#btnStart'));
   await page.selectOption('#fWorker', '山田'); await page.fill('#fDevice', 'iPad-1');
@@ -132,7 +139,7 @@ function check(name, ok, detail) {
 
   // ---- 手動完了（送信なし）
   await page.click('#btnHome'); await page.waitForTimeout(300);
-  await page.locator('#activeLots .card').first().locator('button').click();
+  await page.locator('#activeLots .card', { hasText: 'HEP37001' }).locator('button').click();
   check('完了ダイアログに未入力本数', (await page.textContent('#dlgMissing')).includes('未入力'));
   await page.uncheck('#dSend'); await page.click('#dSave'); await page.waitForTimeout(400);
   const lots = () => ss.getSheetByName('ロット').getRange(2, 1, 2, 17).getDisplayValues();
@@ -141,7 +148,7 @@ function check(name, ok, detail) {
 
   // ---- 全数そろったら自動完了・送信
   await page.click('#btnStart'); await page.waitForTimeout(100);
-  check('ロットが1つなら入力桁数は下3桁', (await page.textContent('#numHint')).includes('下3桁'));
+  check('番号が重ならなければ入力桁数は下3桁', (await page.textContent('#numHint')).includes('下3桁'));
   for (let i = 1; i <= 100; i++) {
     for (const c of String(36000 + i).slice(-3)) await page.keyboard.press('Numpad' + c);
     if (i === 50) { await page.keyboard.press('NumpadSubtract'); await page.keyboard.press('NumpadEnter'); }

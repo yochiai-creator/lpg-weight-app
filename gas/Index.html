@@ -23,6 +23,13 @@
   /* ホーム */
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
   /* 入力中のロット一覧は枠の中でスクロール */
+  .kinds { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; margin: 0 0 10px; padding-bottom: 4px; }
+  .kinds button { flex: 0 0 auto; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 8px 16px;
+    font-size: 15px; color: var(--navy); white-space: nowrap; }
+  .kinds button.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .kind-head { grid-column: 1 / -1; font-size: 14px; font-weight: 700; color: var(--navy); margin: 6px 0 -4px;
+    border-left: 4px solid var(--navy); padding-left: 8px; }
+  .tabs .kind-label { flex: 0 0 auto; align-self: center; font-size: 12px; font-weight: 700; color: var(--muted); padding: 0 2px 0 6px; }
   .cards.scroll { max-height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 2px 4px 2px 0; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
   .card h3 { margin: 0 0 4px; font-size: 18px; }
@@ -116,7 +123,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v10（1本目から候補ボタン）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v11（ロットを機種ごとに表示）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -134,6 +141,7 @@
 
   <h2>入力中のロット</h2>
   <div class="sub" id="activeCount" style="margin:-4px 0 8px;font-size:13px;color:var(--muted)"></div>
+  <div class="kinds" id="kindFilter"></div>
   <div class="cards scroll" id="activeLots"></div>
   <div class="row" style="margin-top:14px">
     <button class="btn big" id="btnStart" disabled>入力を始める</button>
@@ -387,11 +395,44 @@
     return div;
   }
 
+  // 容器区分（機種）の並び順
+  const KIND_ORDER = ['5kg', '8kg', '10kg', '20kg', '30kg', '50kg', '50kg S付', 'その他'];
+  function kindRank(k) { const i = KIND_ORDER.indexOf(k); return i < 0 ? KIND_ORDER.length : i; }
+  function groupByKind(lots) {
+    const map = {};
+    lots.forEach(function(l) { const k = l.kind || 'その他'; (map[k] = map[k] || []).push(l); });
+    return Object.keys(map).sort(function(a, b) { return kindRank(a) - kindRank(b) || a.localeCompare(b); })
+      .map(function(k) { return { kind: k, lots: map[k] }; });
+  }
+
+  let kindFilter = store.get('lpg.kind') || '';
   function renderHome() {
     const act = $('activeLots'); act.innerHTML = '';
-    $('activeCount').textContent = S.lots.length ? S.lots.length + 'ロット（枠の中をスクロールできます）' : '';
+    const groups = groupByKind(S.lots);
+    if (kindFilter && !groups.some(function(g) { return g.kind === kindFilter; })) kindFilter = '';
+    // 機種の切り替えボタン
+    const kf = $('kindFilter'); kf.innerHTML = '';
+    if (groups.length > 1) {
+      [{ kind: '', lots: S.lots }].concat(groups).forEach(function(g) {
+        const b = document.createElement('button');
+        b.textContent = (g.kind || 'すべて') + '（' + g.lots.length + '）';
+        if (g.kind === kindFilter) b.className = 'on';
+        b.onclick = function() { kindFilter = g.kind; store.set('lpg.kind', kindFilter); renderHome(); };
+        kf.appendChild(b);
+      });
+    }
+    const shown = groups.filter(function(g) { return !kindFilter || g.kind === kindFilter; });
+    const n = shown.reduce(function(a, g) { return a + g.lots.length; }, 0);
+    $('activeCount').textContent = S.lots.length ? n + 'ロット' + (kindFilter ? '（' + kindFilter + '）' : '') + '・枠の中をスクロールできます' : '';
     if (!S.lots.length) act.innerHTML = '<div class="sub">入力中のロットはありません。下で組容器番号を登録してください。</div>';
-    S.lots.forEach(function(l) { act.appendChild(lotCard(l, false)); });
+    shown.forEach(function(g) {
+      if (groups.length > 1 && !kindFilter) {
+        const h = document.createElement('div'); h.className = 'kind-head';
+        h.textContent = g.kind + '（' + g.lots.length + 'ロット）';
+        act.appendChild(h);
+      }
+      g.lots.forEach(function(l) { act.appendChild(lotCard(l, false)); });
+    });
     const dn = $('doneLots'); dn.innerHTML = '';
     if (!S.done.length) dn.innerHTML = '<div class="sub">まだありません</div>';
     S.done.forEach(function(l) { dn.appendChild(lotCard(l, true)); });
@@ -924,7 +965,13 @@
     tabs.innerHTML = '';
     if (S.lots.length < 2) return;
     let active = null;
-    S.lots.forEach(function(l) {
+    const groups = groupByKind(S.lots);
+    groups.forEach(function(g) {
+     if (groups.length > 1) {
+       const lab = document.createElement('span'); lab.className = 'kind-label'; lab.textContent = g.kind;
+       tabs.appendChild(lab);
+     }
+     g.lots.forEach(function(l) {
       const b = document.createElement('button');
       const c = countOf(l);
       b.textContent = l.prefix + l.start + '〜 (' + (c.filled + c.missing) + '/' + c.size + ')';
@@ -933,6 +980,7 @@
       if (l.lotId === S.viewLotId) active = b;
       b.onclick = function() { S.viewLotId = l.lotId; b.blur(); render(); };
       tabs.appendChild(b);
+     });
     });
     // 再描画でスクロール位置が戻らないようにし、表示するロットが変わったときだけそのタブを見える位置へ
     tabs.scrollLeft = keep;
