@@ -6,7 +6,7 @@
 const TEMPLATE_SOURCE_CANDIDATES = ['検査成績表 (001-100)', '検査成績表(001-100)', '検査成績表 ※例'];
 
 function setup() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getSpreadsheet_();
   PropertiesService.getScriptProperties().setProperty('SPREADSHEET_ID', ss.getId());
 
   ensureSheet_(ss, SHEET_LOTS, LOT_HEADERS);
@@ -38,7 +38,8 @@ function setup() {
   }
   msg.push('セットアップが完了しました。');
   msg.push('「設定」シートの送付先と、「担当者」シートのスタッフ名を入力してください。');
-  SpreadsheetApp.getUi().alert(msg.join('\n'));
+  // エディタから実行したときは画面にダイアログを出せないので、実行ログに出す
+  try { SpreadsheetApp.getUi().alert(msg.join('\n')); } catch (e) { console.log(msg.join('\n')); }
 }
 
 function ensureSheet_(ss, name, headers) {

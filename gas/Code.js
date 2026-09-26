@@ -47,9 +47,16 @@ function onOpen() {
     .addToUi();
 }
 
+// 記録先のスプレッドシート。スクリプトプロパティ SPREADSHEET_ID があればそれを、
+// なければスクリプトが入っているスプレッドシート（拡張機能 > Apps Script から作った場合）を使う
 function getSpreadsheet_() {
   const id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
-  return id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActiveSpreadsheet();
+  const ss = id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    throw new Error('記録先のスプレッドシートが見つかりません。Apps Script の「プロジェクトの設定 > スクリプト プロパティ」に ' +
+      'SPREADSHEET_ID（スプレッドシートURLの /d/ と /edit の間の文字列）を追加してください。');
+  }
+  return ss;
 }
 
 function getSheet_(name) {
