@@ -193,19 +193,21 @@ function getBootstrap() {
   try { ensureTokyoTime_(); } catch (e) { /* 権限がない場合も画面は開く */ }
   const lots = readLots_().filter(function(l) { return l.status === STATUS_ACTIVE; });
   const settings = readSettings_();
+  const dups = readDupsAll_();
   return {
     user: userEmail_(),
     workers: readWorkers_(),
     mail: { to: settings.to, cc: settings.cc, auto: settings.auto },
     typical: settings.typical,
-    lots: lots.map(function(l) { return withProgress_(l); }),
+    lots: lots.map(function(l) { return withProgress_(l, dups); }),
     recentDone: readLots_().filter(function(l) { return l.status === STATUS_DONE; })
-      .slice(-10).reverse().map(function(l) { return withProgress_(l); })
+      .slice(-10).reverse().map(function(l) { return withProgress_(l, dups); })
   };
 }
 
-function withProgress_(lot) {
+function withProgress_(lot, dupMap) {
   lot.entries = readProgress_(lot);
+  lot.dups = (dupMap || readDupsAll_())[lot.lotId] || {};
   delete lot.row;
   return lot;
 }
@@ -416,6 +418,21 @@ function undoEntry(recordId) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// ダブり（入力済みの容器を上書きした記録）の数: { ロットID: { 容器番号: 回数 } }。入力記録の直近5000行から数える
+function readDupsAll_() {
+  const log = getSpreadsheet_().getSheetByName(SHEET_LOG);
+  if (!log || log.getLastRow() < 2) return {};
+  const last = log.getLastRow(), from = Math.max(2, last - 5000);
+  const out = {};
+  log.getRange(from, 1, last - from + 1, 12).getDisplayValues().forEach(function(r) {
+    if (r[11] === '有効' && r[9] !== '') {
+      out[r[2]] = out[r[2]] || {};
+      out[r[2]][r[3]] = (out[r[2]][r[3]] || 0) + 1;
+    }
+  });
+  return out;
 }
 
 function getLot(lotId) {

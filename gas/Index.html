@@ -71,6 +71,33 @@
     .input-layout { grid-template-columns: 1fr; }
     .input-layout > .panel:last-child { order: -1; }
   }
+  /* タブレット縦向き: 上に表、下に入力（入力は 番号・質量 | 前回±・候補 | テンキー の3列） */
+  @media (orientation: portrait) and (min-width: 701px) {
+    .input-layout { grid-template-columns: 1fr; gap: 8px; }
+    .input-layout > .panel:last-child { order: -1; }
+    .input-layout #inPanel { display: grid; grid-template-columns: 1fr 1.15fr 1fr; column-gap: 10px; align-items: start;
+      grid-template-areas: "num steps pad" "match cands pad" "actual cands pad" "mass cands pad" "notice note pad" "queue opts pad"; }
+    #fldNum { grid-area: num; } #matchRow { grid-area: match; } #fldActual { grid-area: actual; } #steps { grid-area: steps; }
+    #fldMass { grid-area: mass; } #notice { grid-area: notice; } #cands { grid-area: cands; } #candsNote { grid-area: note; }
+    #pad { grid-area: pad; } #opts { grid-area: opts; } #queue { grid-area: queue; }
+    .input-layout .field { margin-bottom: 6px; padding: 4px 10px; }
+    .input-layout .field .val { font-size: 30px; min-height: 38px; }
+    .input-layout .field .val .cursor { height: 30px; }
+    .input-layout .match { margin-bottom: 6px; } .input-layout .match button { padding: 6px; font-size: 15px; }
+    .input-layout .notice { font-size: 14px; min-height: 40px; margin-bottom: 6px; }
+    .input-layout .cands { grid-template-columns: repeat(5, 1fr); gap: 5px; }
+    .input-layout .cands button { font-size: 16px; padding: 12px 0; }
+    .input-layout .pad button { padding: 9px 0; }
+    .input-layout #opts .keys.opt { font-size: 11px; }
+    .input-layout .grid .cell { padding: 3px 6px; font-size: 13px; }
+    .input-layout .grid { gap: 3px 6px; }
+    .input-layout .notice.dup { font-size: 17px; }
+  }
+  /* ダブり（入力済みの番号をもう一度入れた）の表示 */
+  .notice.dup { background: var(--ng); color: #fff; font-size: 20px; animation: dupflash .45s ease-in-out 4; }
+  @keyframes dupflash { 50% { opacity: .35; } }
+  .cell.dup { border-color: var(--ng); box-shadow: 0 0 0 2px var(--ng) inset; }
+  .cell .badge { display: inline-block; margin-left: 3px; padding: 0 3px; border-radius: 3px; background: var(--ng); color: #fff; font-size: 10px; font-weight: 700; vertical-align: 1px; }
   .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
   .field { border: 2px solid var(--line); border-radius: 12px; padding: 8px 14px; margin-bottom: 10px; background: #fbfcff; }
   .field.active { border-color: var(--navy); background: var(--pend); }
@@ -143,7 +170,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v16（タブレット縦向き対応）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v17（上下配置・ダブり表示）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -190,13 +217,13 @@
 
 <main id="entry" class="hidden">
   <div class="input-layout">
-    <div class="panel">
+    <div class="panel" id="inPanel">
       <div class="field" id="fldNum">
         <div class="lbl"><span>容器番号</span><span id="numHint">下3桁でOK（先頭の0は不要）</span></div>
         <div class="val" id="valNum"></div>
         <div class="resolved" id="resolved"></div>
       </div>
-      <div class="match">
+      <div class="match" id="matchRow">
         <button id="btnOk" class="on ok" tabindex="-1">一致 OK</button>
         <button id="btnNg" class="ng" tabindex="-1">NG（／キー）</button>
       </div>
@@ -223,6 +250,7 @@
         <button data-k="0">0</button><button data-k=".">.</button><button class="fn" data-k="-">－ 欠番</button>
         <button class="fn" data-k="Escape">やり直し</button><button class="fn" data-k="*">＊ 直前を取消</button><button class="fn" data-k="/">／ NG</button>
       </div>
+      <div id="opts">
       <div class="keys">
         テンキー操作: <b>Enter</b>次へ・保存　<b>+</b>前回と同じ質量　<b>-</b>欠番　<b>/</b>番号NG　<b>*</b>直前の入力を取消　<b>⌫</b>1字消す（空のとき前の欄へ戻る）
       </div>
@@ -232,6 +260,7 @@
       <label class="keys opt" style="display:flex;gap:8px;align-items:center">
         <input type="checkbox" id="shortMode" style="width:auto" tabindex="-1"> 質量は小数第1位の1桁だけで保存（標準±0.5kgの範囲。範囲外は「.」のあと3桁）
       </label>
+      </div>
       <div class="queue" id="queue"></div>
     </div>
 
@@ -381,6 +410,7 @@
     div.querySelector('.sub').textContent = (l.kind || '') + '　' + l.sheetName;
     div.querySelector('.bar > div').style.width = Math.round((c.filled + c.missing) / c.size * 100) + '%';
     div.querySelector('.cnt').textContent = '入力 ' + c.filled + ' 本' + (c.missing ? '・欠番 ' + c.missing : '') + ' ／ ' + c.size + ' 本' +
+      (l.dups && Object.keys(l.dups).length ? '　ダブり ' + Object.keys(l.dups).length + '件' : '') +
       (done ? (l.sentAt ? '　送信済 ' + l.sentAt : (l.sentTo ? '　' + l.sentTo : '　未送信')) : '') +
       '';
     const row = div.querySelector('.row');
@@ -773,8 +803,8 @@
     const prev = hit.lot.entries[hit.serial];
     if (prev !== undefined && !S.confirmDup) {
       S.confirmDup = true; S.target = hit;
-      setNotice(label(hit.lot, hit.serial) + ' は入力済み（' + fmtMass(prev) + '）です。上書きするなら Enter（またはもう一度タップ）', 'warn');
-      beep(false); S.viewLotId = hit.lot.lotId; render(); return;
+      setNotice('⚠ ダブり: ' + label(hit.lot, hit.serial) + ' は入力済み（' + fmtMass(prev) + '）。刻印を確認し、上書きなら Enter（またはもう一度タップ）', 'dup');
+      beep(false); setTimeout(function() { beep(false); }, 400); S.viewLotId = hit.lot.lotId; render(); return;
     }
     S.target = hit;
     S.stage = 'mass'; S.bufMass = ''; S.confirmMassText = null; S.viewLotId = hit.lot.lotId; S.fullMass = false;
@@ -831,6 +861,10 @@
       S.saved.push({ recordId: res.recordId, lotId: e.lotId, serial: e.serial, mass: res.mass });
       if (S.saved.length > 50) S.saved.shift();
       S.sending = false;
+      if (res.prev !== null && res.prev !== undefined) {
+        const dl = lotById(e.lotId);
+        if (dl) { dl.dups = dl.dups || {}; const dk = dl.prefix + e.serial; dl.dups[dk] = (dl.dups[dk] || 0) + 1; }
+      }
       if (res.full) onLotFull(e.lotId, res);
       render(); pump();
     }).catch(function(err) {
@@ -903,6 +937,7 @@
       call('undoEntry', last.recordId).then(function(r) {
         const l = lotById(r.lotId);
         if (l) { if (r.mass === null) delete l.entries[r.serial]; else l.entries[r.serial] = r.mass; }
+        call('getLot', r.lotId).then(function(fresh) { const cur = lotById(fresh.lotId); if (cur) { cur.entries = fresh.entries; cur.dups = fresh.dups; render(); } });
         S.lastKey = null;
         resetEntry('取り消しました: ' + (l ? label(l, r.serial) : r.serial) + '。容器番号を入力', 'ok');
       }).catch(function(e) {
@@ -1040,7 +1075,10 @@
     if (!l) return;
     const c = countOf(l);
     $('gridTitle').textContent = l.prefix + l.start + ' ～ ' + l.prefix + l.end;
-    $('gridSub').textContent = (l.kind || '') + (median(l) !== null ? '　標準 ' + fmtMass(median(l)) + ' kg' : '');
+    const dupTotal = l.dups ? Object.keys(l.dups).length : 0;
+    $('gridSub').innerHTML = '';
+    $('gridSub').appendChild(document.createTextNode((l.kind || '') + (median(l) !== null ? '　標準 ' + fmtMass(median(l)) + ' kg' : '')));
+    if (dupTotal) { const ds = document.createElement('b'); ds.style.color = 'var(--ng)'; ds.textContent = '　ダブり ' + dupTotal + '件'; $('gridSub').appendChild(ds); }
     $('gridCount').textContent = (c.filled + c.missing) + ' / ' + c.size;
     const frag = document.createDocumentFragment();
     for (let i = 0; i < 100; i++) {
@@ -1055,9 +1093,12 @@
       if (S.errors[key]) cls += ' error';
       if (S.target && S.target.lot.lotId === l.lotId && S.target.serial === serial) cls += ' target';
       if (S.lastKey === key) cls += ' last';
+      const dupN = l.dups ? (l.dups[label(l, serial)] || 0) : 0;
+      if (dupN) cls += ' dup';
       div.className = cls;
       div.innerHTML = '<span></span><span class="m"></span>';
       div.firstChild.textContent = disp3(serial);
+      if (dupN) { const bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = '重' + (dupN > 1 ? dupN : ''); div.firstChild.appendChild(bd); }
       div.lastChild.textContent = m === undefined ? '' : fmtMass(m);
       div.setAttribute('data-serial', serial);
       div.onclick = function() { tapCell(l, serial); };

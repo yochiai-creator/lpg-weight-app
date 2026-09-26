@@ -114,7 +114,11 @@ function check(name, ok, detail) {
   await page.click('#steps button[data-delta="-1"]'); await page.waitForTimeout(400);
   check('前回−0.1のタップで保存', (await page.textContent('#notice')).includes('HEP37067　34.8'));
   check('入力済みは上書き確認', (await keys('7023')).includes('入力済み'));
-  await keys('E.349');
+  check('ダブりは赤い点滅表示', (await page.getAttribute('#notice', 'class')).includes('dup') && (await page.textContent('#notice')).includes('ダブり'));
+  await keys('E.349', 400);
+  check('ダブったマスは赤枠＋「重」', (await page.getAttribute('#grid .cell[data-serial="37023"]', 'class')).includes('dup') && (await page.textContent('#grid .cell[data-serial="37023"]')).includes('重'));
+  check('表の見出しにダブり件数', (await page.textContent('#gridSub')).includes('ダブり 1件'));
+  check('開き直してもダブりが残る（サーバー記録）', ctx.getBootstrap().lots.find(l => l.lotId === 'HEP37001').dups['HEP37023'] === 1);
   check('欠番', (await keys('7031-E', 400)).includes('欠番'));
   check('成績表に「欠 番」', slot(30).join('|') === '031|false|欠|番||', slot(30).join('|'));
   check('範囲外の番号はエラー', (await keys('9999')).includes('どのロットの範囲にもありません'));
@@ -144,6 +148,17 @@ function check(name, ok, detail) {
   check('入力記録に担当者・端末', rows.every(r => r[12] === '山田' && r[13] === 'iPad-1'));
   const over = rows.filter(r => r[3] === 'HEP37023');
   check('上書き前の値を記録', over.length === 2 && over[1][9] === 34.8);
+
+  // ---- タブレット縦向き: 上に表・下に入力
+  await page.setViewportSize({ width: 820, height: 1180 }); await page.waitForTimeout(200);
+  await keys('7070');
+  const gridBox = await page.locator('#grid').boundingBox(), padBox = await page.locator('#pad').boundingBox(), numBox = await page.locator('#fldNum').boundingBox();
+  check('縦向きは表が上・入力が下', gridBox.y + gridBox.height <= numBox.y + 1);
+  check('入力欄は横に並ぶ（番号欄の右にテンキー）', padBox.x > numBox.x + numBox.width && Math.abs(padBox.y - numBox.y) < 80);
+  check('縦向きでも1画面に収まる', (await page.evaluate(() => document.documentElement.scrollHeight)) <= 1180 + 40);
+  await page.screenshot({ path: path.join(__dirname, 'out', 'portrait.png') });
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 1180, height: 820 }); await page.waitForTimeout(200);
 
   // ---- 手動完了（送信なし）
   await page.click('#btnHome'); await page.waitForTimeout(300);
