@@ -171,6 +171,9 @@
       <label class="keys" style="display:flex;gap:8px;align-items:center;margin-top:6px">
         <input type="checkbox" id="autoMode" style="width:auto" tabindex="-1"> Enterなしで自動確定（桁数がそろったら次へ・保存）
       </label>
+      <label class="keys" style="display:flex;gap:8px;align-items:center">
+        <input type="checkbox" id="shortMode" style="width:auto" tabindex="-1"> 質量は小数第1位の1桁だけで保存（標準±0.5kgの範囲。範囲外は「.」のあと3桁）
+      </label>
       <div class="queue" id="queue"></div>
     </div>
 
@@ -221,7 +224,9 @@
     lastKey: null,
     workers: [], mail: { to: '', cc: '', auto: true },
     auto: true,        // Enterなしで自動確定
-    numDigits: 3       // 容器番号の入力桁数（入力中ロットの中で重ならない最小の下桁数）
+    numDigits: 3,      // 容器番号の入力桁数（入力中ロットの中で重ならない最小の下桁数）
+    short: true,       // 質量を1桁（小数第1位）で入力
+    fullMass: false    // 「.」を押して3桁入力に切り替えた状態
   };
   // 担当者・端末名はこの端末に記憶する（保存できない環境でも画面を開いている間は保持）
   const memo = {};
@@ -289,6 +294,11 @@
   }
   S.auto = store.get('lpg.auto') !== '0';
   $('autoMode').checked = S.auto;
+  S.short = store.get('lpg.short') !== '0';
+  $('shortMode').checked = S.short;
+  $('shortMode').onchange = function() {
+    S.short = $('shortMode').checked; store.set('lpg.short', S.short ? '1' : '0'); this.blur(); render();
+  };
   $('autoMode').onchange = function() {
     S.auto = $('autoMode').checked; store.set('lpg.auto', S.auto ? '1' : '0'); this.blur(); render();
   };
@@ -428,7 +438,7 @@
 
   function resetEntry(msg, kind) {
     S.stage = 'num'; S.ng = false; S.bufNum = ''; S.bufActual = ''; S.bufMass = '';
-    S.target = null; S.confirmDup = false; S.confirmMassText = null; S.ngFrom = '';
+    S.target = null; S.confirmDup = false; S.confirmMassText = null; S.ngFrom = ''; S.fullMass = false;
     setNotice(msg || '容器番号を入力', kind || 'info');
     render();
   }
@@ -467,6 +477,18 @@
       if (ok) return len;
     }
     return 6;
+  }
+
+  // 1桁入力の範囲: 標準値±0.5kg（10通り）。小数第1位の数字1つで値が1つに決まる。標準がまだなければ null
+  function shortWindow(lot) {
+    if (!S.auto || !S.short || S.fullMass) return null;
+    const med = median(lot);
+    if (med === null) return null;
+    const lo = Math.round(med * 10) - 5;
+    return {
+      lo: lo / 10, hi: (lo + 9) / 10,
+      value: function(d) { for (let t = lo; t <= lo + 9; t++) if (t % 10 === d) return t / 10; return null; }
+    };
   }
 
   // 質量の入力桁数（小数点なし）: そのロットの標準が10kg以上なら3桁（34.8）、未満なら2桁（6.8）。決められなければ0（Enterで確定）
@@ -526,6 +548,12 @@
     if (S.stage === 'mass') {
       if (/^\d$/.test(k) || k === '.') {
         if (S.bufMass === MISSING) S.bufMass = '';
+        const win = shortWindow(S.target.lot);
+        if (win && S.bufMass === '') {
+          if (k === '.') { S.fullMass = true; setNotice('範囲外の質量: 3桁で入力（例 353→35.3）', 'warn'); render(); return; }
+          S.bufMass = win.value(Number(k)).toFixed(1);
+          return submitMass();
+        }
         if (k === '.' && S.bufMass.indexOf('.') >= 0) return;
         if (S.bufMass.length < 5) S.bufMass += k;
         S.confirmMassText = null;
@@ -593,7 +621,7 @@
       beep(false); S.viewLotId = hit.lot.lotId; render(); return;
     }
     S.target = hit;
-    S.stage = 'mass'; S.bufMass = ''; S.confirmMassText = null; S.viewLotId = hit.lot.lotId;
+    S.stage = 'mass'; S.bufMass = ''; S.confirmMassText = null; S.viewLotId = hit.lot.lotId; S.fullMass = false;
     setNotice('質量を入力', 'info');
     render();
   }
@@ -736,7 +764,9 @@
     S.numDigits = Math.max(S.numDigits, computeNumDigits());
     $('numHint').textContent = S.auto ? '下' + S.numDigits + '桁を入力（Enter不要）' : '下3桁でOK・Enterで確定';
     const md = S.target ? massDigitsFor(S.target.lot) : 0;
-    $('massHint').textContent = S.auto && md ? md + '桁で自動保存（' + (md === 3 ? '348→34.8' : '68→6.8') + '）' : '「68」→6.8 と入力して Enter';
+    const win = S.target ? shortWindow(S.target.lot) : null;
+    $('massHint').textContent = win ? '1桁で保存（' + win.lo.toFixed(1) + '〜' + win.hi.toFixed(1) + '）範囲外は「.」→3桁'
+      : S.auto && md ? md + '桁で自動保存（' + (md === 3 ? '348→34.8' : '68→6.8') + '）' : '「68」→6.8 と入力して Enter';
     const cur = '<span class="cursor"></span>';
     $('valNum').innerHTML = esc(S.bufNum) + (S.stage === 'num' ? cur : '');
     $('valActual').innerHTML = esc(S.bufActual) + (S.stage === 'actual' ? cur : '');
