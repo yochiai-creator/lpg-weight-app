@@ -57,6 +57,10 @@ function check(name, ok, detail) {
   check('下3桁が2ロットに当たると4桁以上を要求', (await keys('23E')).includes('4桁以上'));
   await page.keyboard.press('Escape');
   check('入力桁数の表示は下4桁', (await page.textContent('#numHint')).includes('下4桁'));
+  check('1本目から候補ボタン（50kgのいつもの値34.8が真ん中）', (await keys('7001'), (await page.locator('#cands button').count()) === 10 && (await page.getAttribute('#cands button:nth-child(6)', 'data-mass')) === '34.8'));
+  check('1本目でも前回±ボタン（いつもの値基準）', (await page.getAttribute('#steps button[data-delta="0"]', 'data-mass')) === '34.8');
+  check('5本入るまでは1桁入力しない（範囲表示なし）', !(await page.textContent('#massHint')).includes('1桁で保存'));
+  await page.keyboard.press('Escape');
   check('4桁でEnterなしに記録先が決まる', (await keys('7023')).includes('質量を入力'));
   check('質量「348」を3桁でEnterなしに34.8として保存', (await keys('348', 400)).includes('34.8 kg'));
   check('成績表に 023 ☑ 3 4 , 8 が入る', slot(22).join('|') === '023|true|3|4|,|8', slot(22).join('|'));

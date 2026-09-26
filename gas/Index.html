@@ -116,7 +116,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v9（前回±0.1ボタン）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v10（1本目から候補ボタン）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -252,7 +252,8 @@
     pending: {}, errors: {},  // key: lotId|serial
     saved: [],         // サーバー保存済み { recordId, lotId, serial }
     lastKey: null,
-    lastByLot: {},     // ロットごとの最後に入れた質量（前回±0.1ボタン用）
+    lastByLot: {},
+    typical: {},       // 容器区分ごとのいつもの質量（設定シート「標準質量」）     // ロットごとの最後に入れた質量（前回±0.1ボタン用）
     workers: [], mail: { to: '', cc: '', auto: true },
     auto: true,        // Enterなしで自動確定
     numDigits: 3,      // 容器番号の入力桁数（入力中ロットの中で重ならない最小の下桁数）
@@ -299,7 +300,7 @@
   function loadHome() {
     return call('getBootstrap').then(function(b) {
       $('user').textContent = b.user;
-      S.lots = b.lots; S.done = b.recentDone; S.workers = b.workers; S.mail = b.mail;
+      S.lots = b.lots; S.done = b.recentDone; S.workers = b.workers; S.mail = b.mail; S.typical = b.typical || {};
       renderWorkers();
       renderHome();
     }).catch(function(e) { $('lotMsg').className = 'msg err'; $('lotMsg').textContent = errText(e); });
@@ -534,12 +535,23 @@
   // 1桁入力の範囲: 標準値±0.5kg（10通り）。小数第1位の数字1つで値が1つに決まる。標準がまだなければ null
   function shortWindow(lot) {
     if (!S.auto || !S.short || S.fullMass) return null;
-    return massWindow(lot);
+    return massWindow(lot, false);
+  }
+
+  // 真ん中にする値: 実際の中央値（5本以上）→ そのロットで最後に入れた値 → 容器区分のいつもの値
+  function baseMass(lot) {
+    const med = median(lot);
+    if (med !== null) return med;
+    if (lot.lotId in S.lastByLot) return S.lastByLot[lot.lotId];
+    const vals = Object.keys(lot.entries).map(function(k) { return lot.entries[k]; }).filter(function(m) { return m !== MISSING; });
+    if (vals.length) return vals[vals.length - 1];
+    return S.typical[lot.kind] || null;
   }
 
   // 標準値±0.5kgの10通り（候補ボタン・1桁入力の共通）
-  function massWindow(lot) {
-    const med = median(lot);
+  // allowGuess=false: 実際の中央値があるときだけ（1桁入力用）。true: いつもの値なども使う（ボタン用。値が見えるので安全）
+  function massWindow(lot, allowGuess) {
+    const med = allowGuess ? baseMass(lot) : median(lot);
     if (med === null) return null;
     const lo = Math.round(med * 10) - 5;
     return {
@@ -844,7 +856,7 @@
   // 前回±0.1・前回と同じ のボタン。「前回」はそのロットで最後に入れた値（なければ標準値）
   function stepBase(lot) {
     if (lot.lotId in S.lastByLot) return S.lastByLot[lot.lotId];
-    return median(lot);
+    return baseMass(lot);
   }
   function renderSteps() {
     const box = $('steps');
@@ -868,7 +880,7 @@
   // 質量の候補ボタン（標準±0.5kgの10個）。よく出る値ほど濃い色
   function renderCands() {
     const box = $('cands');
-    const win = S.stage === 'mass' && S.target && S.bufMass === '' ? massWindow(S.target.lot) : null;
+    const win = S.stage === 'mass' && S.target && S.bufMass === '' ? massWindow(S.target.lot, true) : null;
     box.classList.toggle('hidden', !win);
     $('candsNote').classList.toggle('hidden', !win);
     if (!win) { box.innerHTML = ''; return; }

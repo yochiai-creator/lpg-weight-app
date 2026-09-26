@@ -190,6 +190,7 @@ function getBootstrap() {
     user: userEmail_(),
     workers: readWorkers_(),
     mail: { to: settings.to, cc: settings.cc, auto: settings.auto },
+    typical: settings.typical,
     lots: lots.map(function(l) { return withProgress_(l); }),
     recentDone: readLots_().filter(function(l) { return l.status === STATUS_DONE; })
       .slice(-10).reverse().map(function(l) { return withProgress_(l); })

@@ -14,8 +14,20 @@ const SETTING_ROWS = [
     'ご担当者様\n\nいつもお世話になっております。\n高圧ガス容器検査成績表をお送りします。\n\n' +
     '組容器番号：{組容器番号}\n容器区分：{容器区分}\n本数：{本数}（欠番 {欠番}）\n\n' +
     '添付：検査成績表（PDF）、質量データ（CSV）\n\nよろしくお願いいたします。',
-    '改行はそのまま使えます']
+    '改行はそのまま使えます'],
+  ['標準質量', '5kg=6.8, 8kg=9.6, 20kg=16.7, 30kg=24.0, 50kg=34.8, 50kg S付=36.3',
+    'ロットの1本目から候補ボタンを出すときの真ん中の値（容器区分=kg）。5本以上入るとそのロットの実際の中央値を使う']
 ];
+
+// 「5kg=6.8, 50kg S付=36.3」→ { '5kg': 6.8, '50kg S付': 36.3 }
+function parseTypical_(text) {
+  const out = {};
+  String(text || '').split(/[,、\n]/).forEach(function(part) {
+    const m = part.match(/^\s*(.+?)\s*[=＝]\s*([\d.]+)\s*$/);
+    if (m) out[m[1]] = Number(m[2]);
+  });
+  return out;
+}
 
 function readSettings_() {
   const sh = getSpreadsheet_().getSheetByName(SHEET_SETTINGS);
@@ -34,7 +46,8 @@ function readSettings_() {
     auto: get('自動送信').trim() !== 'しない',
     senderName: get('差出人名'),
     subject: get('件名'),
-    body: get('本文')
+    body: get('本文'),
+    typical: parseTypical_(get('標準質量'))
   };
 }
 
