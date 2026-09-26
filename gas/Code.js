@@ -460,6 +460,21 @@ function resendLot(lotId) {
   return { lotId: lot.lotId, pdfUrl: pdf.url, sentTo: sendLotMail_(lot, pdf.blob) };
 }
 
+// ロットの容器区分（機種）を変える
+function changeLotKind(input) {
+  const kind = String(input.kind || '').trim();
+  if (!kind) throw new Error('容器区分を選んでください');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const lot = findLot_(input.lotId);
+    getSheet_(SHEET_LOTS).getRange(lot.row, 6).setValue(kind);
+    return { lotId: lot.lotId, kind: kind };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function reopenLot(lotId) {
   const lot = findLot_(lotId);
   getSheet_(SHEET_LOTS).getRange(lot.row, 7).setValue(STATUS_ACTIVE);

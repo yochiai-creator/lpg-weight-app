@@ -53,6 +53,12 @@ function check(name, ok, detail) {
   await page.click('#kindFilter button:has-text("20kg")');
   check('20kgを選ぶと20kgのロットだけ', (await page.locator('#activeLots .card').count()) === 1);
   await page.click('#kindFilter button:has-text("すべて")');
+  const c73 = page.locator('#activeLots .card', { hasText: '73301' });
+  await c73.locator('button:has-text("機種を変更")').click();
+  await c73.locator('select').selectOption('30kg');
+  await c73.locator('button:has-text("変更")').first().click(); await page.waitForTimeout(400);
+  check('機種を変更できる', (await page.textContent('#kindFilter')).includes('30kg（1）') && (await page.textContent('#kindFilter')).includes('20kg（0）'));
+  check('ロットシートの容器区分も変わる', ss.getSheetByName('ロット').getRange(2, 1, 3, 6).getValues().some(r => r[0] === '73301' && r[5] === '30kg'));
   check('同じ組容器番号は登録できない', (await create('HEP', '37001')).includes('登録済み'));
   check('担当者を選ぶまで入力開始できない', await page.isDisabled('#btnStart'));
   await page.selectOption('#fWorker', '山田'); await page.fill('#fDevice', 'iPad-1');
@@ -140,7 +146,7 @@ function check(name, ok, detail) {
 
   // ---- 手動完了（送信なし）
   await page.click('#btnHome'); await page.waitForTimeout(300);
-  await page.locator('#activeLots .card', { hasText: 'HEP37001' }).locator('button').click();
+  await page.locator('#activeLots .card', { hasText: 'HEP37001' }).locator('button:has-text("完了にする")').click();
   check('完了ダイアログに未入力本数', (await page.textContent('#dlgMissing')).includes('未入力'));
   await page.uncheck('#dSend'); await page.click('#dSave'); await page.waitForTimeout(400);
   const lots = () => ss.getSheetByName('ロット').getRange(2, 1, 2, 17).getDisplayValues();

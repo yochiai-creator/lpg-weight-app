@@ -124,7 +124,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v12（機種ボタン常時表示）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v13（機種を変更）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -370,6 +370,28 @@
       b.className = 'btn sec'; b.textContent = '完了にする';
       b.onclick = function() { openDone(l); };
       row.appendChild(b);
+      // 機種を変更（押すと選択欄が出る）
+      const kb = document.createElement('button');
+      kb.className = 'btn sec'; kb.textContent = '機種を変更';
+      kb.onclick = function() {
+        const sel = document.createElement('select');
+        sel.style.width = 'auto'; sel.style.fontSize = '16px';
+        KIND_ORDER.forEach(function(k) {
+          const o = document.createElement('option'); o.value = k; o.textContent = k; if (k === l.kind) o.selected = true; sel.appendChild(o);
+        });
+        const ok = document.createElement('button'); ok.className = 'btn'; ok.textContent = '変更';
+        const cancel = document.createElement('button'); cancel.className = 'btn sec'; cancel.textContent = 'やめる';
+        const wrap = document.createElement('span'); wrap.className = 'row'; wrap.style.gap = '6px';
+        wrap.appendChild(sel); wrap.appendChild(ok); wrap.appendChild(cancel);
+        row.replaceChild(wrap, kb);
+        cancel.onclick = function() { row.replaceChild(kb, wrap); };
+        ok.onclick = function() {
+          ok.disabled = true;
+          call('changeLotKind', { lotId: l.lotId, kind: sel.value }).then(loadHome)
+            .catch(function(e) { alert(errText(e)); ok.disabled = false; });
+        };
+      };
+      row.appendChild(kb);
     } else {
       const b = document.createElement('button');
       b.className = 'btn sec'; b.textContent = '入力を再開';
