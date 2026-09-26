@@ -27,6 +27,7 @@
   .kinds button { flex: 0 0 auto; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 8px 16px;
     font-size: 15px; color: var(--navy); white-space: nowrap; }
   .kinds button.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .kinds button.zero { color: #a3abc0; }
   .kind-head { grid-column: 1 / -1; font-size: 14px; font-weight: 700; color: var(--navy); margin: 6px 0 -4px;
     border-left: 4px solid var(--navy); padding-left: 8px; }
   .tabs .kind-label { flex: 0 0 auto; align-self: center; font-size: 12px; font-weight: 700; color: var(--muted); padding: 0 2px 0 6px; }
@@ -123,7 +124,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v11（ロットを機種ごとに表示）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v12（機種ボタン常時表示）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -409,22 +410,25 @@
   function renderHome() {
     const act = $('activeLots'); act.innerHTML = '';
     const groups = groupByKind(S.lots);
-    if (kindFilter && !groups.some(function(g) { return g.kind === kindFilter; })) kindFilter = '';
     // 機種の切り替えボタン
+    // 機種の切り替えボタン（ロットが0の機種も出す）
     const kf = $('kindFilter'); kf.innerHTML = '';
-    if (groups.length > 1) {
-      [{ kind: '', lots: S.lots }].concat(groups).forEach(function(g) {
-        const b = document.createElement('button');
-        b.textContent = (g.kind || 'すべて') + '（' + g.lots.length + '）';
-        if (g.kind === kindFilter) b.className = 'on';
-        b.onclick = function() { kindFilter = g.kind; store.set('lpg.kind', kindFilter); renderHome(); };
-        kf.appendChild(b);
-      });
-    }
+    const counts = {};
+    groups.forEach(function(g) { counts[g.kind] = g.lots.length; });
+    const kinds = KIND_ORDER.concat(groups.map(function(g) { return g.kind; }).filter(function(k) { return KIND_ORDER.indexOf(k) < 0; }));
+    [''].concat(kinds).forEach(function(k) {
+      const n = k ? (counts[k] || 0) : S.lots.length;
+      const b = document.createElement('button');
+      b.textContent = (k || 'すべて') + '（' + n + '）';
+      b.className = (k === kindFilter ? 'on' : '') + (n === 0 ? ' zero' : '');
+      b.onclick = function() { kindFilter = k; store.set('lpg.kind', kindFilter); renderHome(); };
+      kf.appendChild(b);
+    });
     const shown = groups.filter(function(g) { return !kindFilter || g.kind === kindFilter; });
     const n = shown.reduce(function(a, g) { return a + g.lots.length; }, 0);
     $('activeCount').textContent = S.lots.length ? n + 'ロット' + (kindFilter ? '（' + kindFilter + '）' : '') + '・枠の中をスクロールできます' : '';
     if (!S.lots.length) act.innerHTML = '<div class="sub">入力中のロットはありません。下で組容器番号を登録してください。</div>';
+    else if (!n) act.innerHTML = '<div class="sub">' + kindFilter + 'の入力中ロットはありません。</div>';
     shown.forEach(function(g) {
       if (groups.length > 1 && !kindFilter) {
         const h = document.createElement('div'); h.className = 'kind-head';

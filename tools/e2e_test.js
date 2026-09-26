@@ -47,6 +47,7 @@ function check(name, ok, detail) {
   await create('HEP', '36001');
   await page.fill('#fPrefix', ''); await page.fill('#fStart', '73301'); await page.selectOption('#fKind', '20kg');
   await page.click('#btnCreate'); await page.waitForTimeout(300);
+  check('機種ボタンはロット0の機種も表示', (await page.textContent('#kindFilter')).includes('5kg（0）'));
   check('機種の切り替えボタン（すべて・20kg・50kg）', (await page.textContent('#kindFilter')).includes('すべて（3）') && (await page.textContent('#kindFilter')).includes('20kg（1）') && (await page.textContent('#kindFilter')).includes('50kg（2）'));
   check('すべてのときは機種ごとの見出し', (await page.locator('#activeLots .kind-head').count()) === 2);
   await page.click('#kindFilter button:has-text("20kg")');
