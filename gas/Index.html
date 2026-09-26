@@ -132,6 +132,7 @@
   .steps button.same { background: var(--navy); color: #fff; }
   .steps button.same span { color: #cfd6ef; }
   .steps button:active { transform: scale(.96); }
+  small.w { font-size: .6em; font-weight: 700; opacity: .6; margin-right: 1px; }
   .cands { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 10px; }
   .cands button { border: 2px solid var(--line); background: #fff; border-radius: 10px; font-size: 22px; font-weight: 700;
     padding: 12px 0; color: var(--text); font-variant-numeric: tabular-nums; }
@@ -179,7 +180,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v18（修正・シール違いを記録）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v19（W表示）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -246,7 +247,7 @@
         <button tabindex="-1" data-delta="1"><b></b><span>前回 ＋0.1</span></button>
       </div>
       <div class="field" id="fldMass">
-        <div class="lbl"><span>質量 (kg)</span><span id="massHint">「68」→6.8 と入力してもOK</span></div>
+        <div class="lbl"><span>W（kg）</span><span id="massHint">「68」→6.8 と入力してもOK</span></div>
         <div class="val" id="valMass"></div>
       </div>
       <div class="notice info" id="notice">容器番号を入力</div>
@@ -355,7 +356,8 @@
   function lotSize(l) { return Number(l.end) - Number(l.start) + 1; }
   function label(l, serial) { return l.prefix + serial; }
   function lotById(id) { return S.lots.filter(function(l) { return l.lotId === id; })[0]; }
-  function fmtMass(m) { return m === MISSING ? MISSING : Number(m).toFixed(1); }
+  // 刻印の表記に合わせて「W34.8」で表示する
+  function fmtMass(m) { return m === MISSING ? MISSING : 'W' + Number(m).toFixed(1); }
 
   let audio = null;
   function beep(ok) {
@@ -849,7 +851,7 @@
       const med = median(t.lot);
       if (med !== null && Math.abs(mass - med) > DEVIATION_KG + 1e-9 && S.confirmMassText !== S.bufMass) {
         S.confirmMassText = S.bufMass;
-        setNotice(fmtMass(mass) + ' kg はこのロットの標準（' + fmtMass(med) + ' kg）から離れています。刻印を再確認して、正しければ Enter', 'warn');
+        setNotice(fmtMass(mass) + ' はこのロットの標準（' + fmtMass(med) + '）から離れています。刻印を再確認して、正しければ Enter', 'warn');
         beep(false); render(); return;
       }
     }
@@ -861,7 +863,7 @@
     S.lastKey = t.lot.lotId + '|' + t.serial;
     beep(true);
     const tag = (S.overwrite === 'dup' ? '【ダブり】' : S.overwrite === 'fix' ? '【修正】' : '') + (S.seal ? '【シール違い】' : '');
-    resetEntry('保存: ' + tag + label(t.lot, t.serial) + '　' + fmtMass(mass) + (mass === MISSING ? '' : ' kg') + '　→ 次の容器番号', 'ok');
+    resetEntry('保存: ' + tag + label(t.lot, t.serial) + '　' + fmtMass(mass) + '　→ 次の容器番号', 'ok');
   }
 
   // ---------- 送信キュー（入力を止めずに順番に保存） ----------
@@ -986,8 +988,8 @@
     $('numHint').textContent = S.auto ? '下' + S.numDigits + '桁を入力（Enter不要）' : '下3桁でOK・Enterで確定';
     const md = S.target ? massDigitsFor(S.target.lot) : 0;
     const win = S.target ? shortWindow(S.target.lot) : null;
-    $('massHint').textContent = win ? '1桁で保存（' + win.lo.toFixed(1) + '〜' + win.hi.toFixed(1) + '）範囲外は「.」→3桁'
-      : S.auto && md ? md + '桁で自動保存（' + (md === 3 ? '348→34.8' : '68→6.8') + '）' : '「68」→6.8 と入力して Enter';
+    $('massHint').textContent = win ? '1桁で保存（W' + win.lo.toFixed(1) + '〜' + win.hi.toFixed(1) + '）範囲外は「.」→3桁'
+      : S.auto && md ? md + '桁で自動保存（' + (md === 3 ? '348→W34.8' : '68→W6.8') + '）' : '「68」→6.8 と入力して Enter';
     const cur = '<span class="cursor"></span>';
     $('valNum').innerHTML = esc(S.bufNum) + (S.stage === 'num' ? cur : '');
     $('valActual').innerHTML = esc(S.bufActual) + (S.stage === 'actual' ? cur : '');
@@ -1020,7 +1022,7 @@
     if (base === null) return;
     Array.prototype.forEach.call(box.querySelectorAll('button'), function(b) {
       const v = (Math.round(base * 10) + Number(b.getAttribute('data-delta'))) / 10;
-      b.querySelector('b').textContent = v.toFixed(1);
+      b.querySelector('b').innerHTML = '<small class="w">W</small>' + v.toFixed(1);
       b.setAttribute('data-mass', v.toFixed(1));
     });
   }
@@ -1053,7 +1055,7 @@
     for (let t = Math.round(win.lo * 10); t <= Math.round(win.hi * 10); t++) {
       const v = (t / 10).toFixed(1);
       const b = document.createElement('button');
-      b.textContent = v; b.tabIndex = -1; b.setAttribute('data-mass', v);
+      b.innerHTML = '<small class="w">W</small>' + v; b.tabIndex = -1; b.setAttribute('data-mass', v);
       const rank = ranked.indexOf(v);
       if (rank === 0) b.className = 'freq1'; else if (rank > 0 && rank <= 2) b.className = 'freq2';
       b.onclick = function() {
@@ -1114,7 +1116,7 @@
     const c = countOf(l);
     $('gridTitle').textContent = l.prefix + l.start + ' ～ ' + l.prefix + l.end;
     $('gridSub').innerHTML = '';
-    $('gridSub').appendChild(document.createTextNode((l.kind || '') + (median(l) !== null ? '　標準 ' + fmtMass(median(l)) + ' kg' : '')));
+    $('gridSub').appendChild(document.createTextNode((l.kind || '') + (median(l) !== null ? '　標準 ' + fmtMass(median(l)) : '')));
     const markText = function(obj, name, color) {
       const n = obj ? Object.keys(obj).length : 0;
       if (!n) return;
