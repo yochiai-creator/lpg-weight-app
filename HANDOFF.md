@@ -18,7 +18,9 @@ iPad＋Bluetoothテンキーで「容器番号」と「質量」を入力し、�
 - **デプロイID**: `AKfycbyDM2IQ8NY6LgQpLb0gpQoK32fAQtWVBrdBQduZ6FOBWREFn61Qb55R9Q20Y4u9IfQ5`（URLを変えずに新バージョンへ更新するときに使う）
 - スクリプトIDは `.clasp.json` に記載済み
 - **記録先スプレッドシート**: `LPG容器_質量入力`（ID `1h0VM9ECv1NnSuwuo2jxTaiPVC6o5oYwWi1lZ9Qx1hms`）。スクリプトはこのスプレッドシートにバインドされている
-- 旧プロジェクト `1WRdps6z…`（スプレッドシートにつながっていないスタンドアロン）は使わない。そちらで動かすと記録先が見つからずエラーになる
+- 旧プロジェクト `1WRdps6z…`（スタンドアロン）の旧URL `…AKfycbwTY85bp6X5FSaC8PsQpaXN4OIs7HGTW-Fba7hMHUUz-QqVohL45A_8yttGMrpZ_AIS/exec` も
+  iPadに登録済みの可能性があるため、同じコードを push して最新版にそろえている（記録先はIDで開くので同じスプレッドシートに書く）。
+  デプロイするときは両方更新するか、iPadを新URLに切り替えてから旧URLを削除する
 
 ## ファイル構成と役割
 
