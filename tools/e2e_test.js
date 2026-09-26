@@ -86,6 +86,14 @@ function check(name, ok, detail) {
   await page.click('#grid .cell[data-serial="37065"]'); await page.waitForTimeout(100);
   check('もう一度タップで上書きの質量入力へ', (await page.locator('#cands button').count()) === 10);
   await page.keyboard.press('Escape');
+  await keys('7066');
+  check('前回±0.1のボタン（前回34.8）', (await page.getAttribute('#steps button[data-delta="-1"]', 'data-mass')) === '34.7' && (await page.getAttribute('#steps button[data-delta="1"]', 'data-mass')) === '34.9');
+  await page.click('#steps button[data-delta="1"]'); await page.waitForTimeout(400);
+  check('前回＋0.1のタップで保存', (await page.textContent('#notice')).includes('HEP37066　34.9'));
+  await keys('7067');
+  check('次の「前回」はいま入れた34.9', (await page.getAttribute('#steps button[data-delta="0"]', 'data-mass')) === '34.9');
+  await page.click('#steps button[data-delta="-1"]'); await page.waitForTimeout(400);
+  check('前回−0.1のタップで保存', (await page.textContent('#notice')).includes('HEP37067　34.8'));
   check('入力済みは上書き確認', (await keys('7023')).includes('入力済み'));
   await keys('E.349');
   check('欠番', (await keys('7031-E', 400)).includes('欠番'));

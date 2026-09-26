@@ -61,6 +61,14 @@
   .notice.ok { background: var(--okbg); color: var(--ok); }
   .notice.warn { background: var(--warnbg); color: var(--warn); }
   .notice.err { background: var(--ngbg); color: var(--ng); }
+  .steps { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .steps button { border: 2px solid var(--navy2); background: #fff; border-radius: 12px; padding: 8px 0; color: var(--navy);
+    font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .steps button b { display: block; font-size: 26px; }
+  .steps button span { font-size: 12px; color: var(--muted); }
+  .steps button.same { background: var(--navy); color: #fff; }
+  .steps button.same span { color: #cfd6ef; }
+  .steps button:active { transform: scale(.96); }
   .cands { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 10px; }
   .cands button { border: 2px solid var(--line); background: #fff; border-radius: 10px; font-size: 22px; font-weight: 700;
     padding: 12px 0; color: var(--text); font-variant-numeric: tabular-nums; }
@@ -108,7 +116,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v8（番号タップ・ロット一覧スクロール）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v9（前回±0.1ボタン）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -167,6 +175,11 @@
       <div class="field hidden" id="fldActual">
         <div class="lbl"><span>実容器番号（刻印の番号）</span></div>
         <div class="val" id="valActual"></div>
+      </div>
+      <div class="steps hidden" id="steps">
+        <button tabindex="-1" data-delta="-1"><b></b><span>前回 −0.1</span></button>
+        <button tabindex="-1" data-delta="0" class="same"><b></b><span>前回と同じ</span></button>
+        <button tabindex="-1" data-delta="1"><b></b><span>前回 ＋0.1</span></button>
       </div>
       <div class="field" id="fldMass">
         <div class="lbl"><span>質量 (kg)</span><span id="massHint">「68」→6.8 と入力してもOK</span></div>
@@ -239,6 +252,7 @@
     pending: {}, errors: {},  // key: lotId|serial
     saved: [],         // サーバー保存済み { recordId, lotId, serial }
     lastKey: null,
+    lastByLot: {},     // ロットごとの最後に入れた質量（前回±0.1ボタン用）
     workers: [], mail: { to: '', cc: '', auto: true },
     auto: true,        // Enterなしで自動確定
     numDigits: 3,      // 容器番号の入力桁数（入力中ロットの中で重ならない最小の下桁数）
@@ -689,7 +703,7 @@
     enqueue({ lotId: t.lot.lotId, serial: t.serial, mass: mass === MISSING ? null : mass,
       missing: mass === MISSING, ngInput: t.ngInput || '', worker: worker(), device: $('fDevice').value.trim() });
     t.lot.entries[t.serial] = mass;
-    if (mass !== MISSING) S.lastMass = mass;
+    if (mass !== MISSING) { S.lastMass = mass; S.lastByLot[t.lot.lotId] = mass; }
     S.lastKey = t.lot.lotId + '|' + t.serial;
     beep(true);
     resetEntry('保存: ' + label(t.lot, t.serial) + '　' + fmtMass(mass) + (mass === MISSING ? '' : ' kg') + '　→ 次の容器番号', 'ok');
@@ -822,10 +836,34 @@
     $('btnNg').classList.toggle('on', S.ng);
     const t = S.target;
     $('resolved').textContent = t ? '→ ' + label(t.lot, t.serial) + '（' + t.lot.sheetName + '）' : '';
-    renderCands(); renderTabs(); renderGrid();
+    renderSteps(); renderCands(); renderTabs(); renderGrid();
   }
 
   function esc(s) { return String(s).replace(/[&<>]/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
+
+  // 前回±0.1・前回と同じ のボタン。「前回」はそのロットで最後に入れた値（なければ標準値）
+  function stepBase(lot) {
+    if (lot.lotId in S.lastByLot) return S.lastByLot[lot.lotId];
+    return median(lot);
+  }
+  function renderSteps() {
+    const box = $('steps');
+    const base = S.stage === 'mass' && S.target && S.bufMass === '' ? stepBase(S.target.lot) : null;
+    box.classList.toggle('hidden', base === null);
+    if (base === null) return;
+    Array.prototype.forEach.call(box.querySelectorAll('button'), function(b) {
+      const v = (Math.round(base * 10) + Number(b.getAttribute('data-delta'))) / 10;
+      b.querySelector('b').textContent = v.toFixed(1);
+      b.setAttribute('data-mass', v.toFixed(1));
+    });
+  }
+  $('steps').addEventListener('click', function(ev) {
+    const b = ev.target.closest('button'); if (!b) return;
+    b.blur();
+    if (S.stage !== 'mass') return;
+    S.bufMass = b.getAttribute('data-mass'); S.confirmMassText = null;
+    submitMass();
+  });
 
   // 質量の候補ボタン（標準±0.5kgの10個）。よく出る値ほど濃い色
   function renderCands() {
