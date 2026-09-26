@@ -95,7 +95,7 @@ function check(name, ok, detail) {
   check('候補ボタンのタップで保存', (await page.textContent('#notice')).includes('HEP37064　34.9'));
   check('保存後は候補ボタンが消える', (await page.locator('#cands button').count()) === 0);
   await page.click('#grid .cell[data-serial="37065"]'); await page.waitForTimeout(100);
-  check('ロットのタブは1行の横スクロール', await page.evaluate(() => { const t = getComputedStyle(document.getElementById('tabs')); return t.flexWrap === 'nowrap' && t.overflowX === 'auto'; }));
+  check('ロットのタブは2段の横スクロール', await page.evaluate(() => { const t = getComputedStyle(document.getElementById('tabs')); return t.gridAutoFlow.startsWith('column') && t.gridTemplateRows.split(' ').length === 2 && t.overflowX === 'auto'; }));
   check('マスのタップで容器を選べる', (await page.textContent('#resolved')).includes('HEP37065'));
   await page.click('#cands button[data-mass="34.8"]'); await page.waitForTimeout(400);
   check('マス→候補ボタンのタップ2回で保存', (await page.textContent('#notice')).includes('HEP37065　34.8'));

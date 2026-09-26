@@ -30,7 +30,7 @@
   .kinds button.zero { color: #a3abc0; }
   .kind-head { grid-column: 1 / -1; font-size: 14px; font-weight: 700; color: var(--navy); margin: 6px 0 -4px;
     border-left: 4px solid var(--navy); padding-left: 8px; }
-  .tabs .kind-label { flex: 0 0 auto; align-self: center; font-size: 12px; font-weight: 700; color: var(--muted); padding: 0 2px 0 6px; }
+  .tabs .kind-label { grid-row: span 2; align-self: center; writing-mode: vertical-rl; letter-spacing: .05em; font-size: 12px; font-weight: 700; color: var(--muted); padding: 0 2px 0 6px; }
   .cards.scroll { max-height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 2px 4px 2px 0; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
   .card h3 { margin: 0 0 4px; font-size: 18px; }
@@ -92,11 +92,11 @@
   .keys { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.7; }
   .keys b { display: inline-block; min-width: 22px; text-align: center; border: 1px solid var(--line); border-radius: 4px; background: #fff; margin-right: 2px; }
 
-  /* ロットが多くても1行で横スクロール */
+  /* ロットのタブは2段で、多いときは横スクロール */
   .input-layout > .panel { min-width: 0; }
-  .tabs { position: relative; display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
-    margin-bottom: 10px; padding-bottom: 6px; }
-  .tabs button { flex: 0 0 auto; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 8px 14px;
+  .tabs { position: relative; display: grid; grid-template-rows: auto auto; grid-auto-flow: column; grid-auto-columns: max-content;
+    gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 10px; padding-bottom: 6px; }
+  .tabs button { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 8px 14px;
     font-size: 14px; color: var(--navy); white-space: nowrap; }
   .tabs button.done { border-color: var(--ok); color: var(--ok); }
   .tabs button.on { background: var(--navy); color: #fff; }
@@ -124,7 +124,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v13（機種を変更）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v14（ロットのタブ2段）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -552,6 +552,7 @@
     $('home').classList.add('hidden'); $('entry').classList.remove('hidden'); $('btnHome').classList.remove('hidden');
     if (!S.viewLotId || !lotById(S.viewLotId)) S.viewLotId = S.lots[0].lotId;
     S.numDigits = computeNumDigits();
+    window.scrollTo(0, 0);
     if (document.activeElement) document.activeElement.blur();
     resetEntry('容器番号を入力', 'info');
   }
