@@ -12,11 +12,13 @@ iPad＋Bluetoothテンキーで「容器番号」と「質量」を入力し、�
 
 ## 重要なID・URL
 
-- **スクリプトID**: `1WRdps6zQgFVtqMeW9OhRvLeZGafuOCXFZkv-89skSv6WJ0atLhBZnSfG`
+- **スクリプトID**: `17mOYxTzPwzIsrILrYL7pH0Rn-jYOjQ8f52n5KZm0-0p-ojhxBG246vu4`
 - **ウェブアプリURL**:
-  `https://script.google.com/a/macros/nodagumi40.com/s/AKfycbwTY85bp6X5FSaC8PsQpaXN4OIs7HGTW-Fba7hMHUUz-QqVohL45A_8yttGMrpZ_AIS/exec`
-- **デプロイID**: `AKfycbwTY85bp6X5FSaC8PsQpaXN4OIs7HGTW-Fba7hMHUUz-QqVohL45A_8yttGMrpZ_AIS`（URLを変えずに新バージョンへ更新するときに使う）
+  `https://script.google.com/a/macros/nodagumi40.com/s/AKfycbyDM2IQ8NY6LgQpLb0gpQoK32fAQtWVBrdBQduZ6FOBWREFn61Qb55R9Q20Y4u9IfQ5/exec`
+- **デプロイID**: `AKfycbyDM2IQ8NY6LgQpLb0gpQoK32fAQtWVBrdBQduZ6FOBWREFn61Qb55R9Q20Y4u9IfQ5`（URLを変えずに新バージョンへ更新するときに使う）
 - スクリプトIDは `.clasp.json` に記載済み
+- **記録先スプレッドシート**: `LPG容器_質量入力`（ID `1h0VM9ECv1NnSuwuo2jxTaiPVC6o5oYwWi1lZ9Qx1hms`）。スクリプトはこのスプレッドシートにバインドされている
+- 旧プロジェクト `1WRdps6z…`（スプレッドシートにつながっていないスタンドアロン）は使わない。そちらで動かすと記録先が見つからずエラーになる
 
 ## ファイル構成と役割
 
@@ -51,7 +53,7 @@ clasp pull                      # 作業前に本番との差分を確認（エ�
 npm run check && npm test       # 構文チェックとE2Eテスト（初回は npm install）
 clasp push --force
 clasp version "変更内容"         # → Created version N
-clasp redeploy AKfycbwTY85bp6X5FSaC8PsQpaXN4OIs7HGTW-Fba7hMHUUz-QqVohL45A_8yttGMrpZ_AIS -V N -d "変更内容"
+clasp redeploy AKfycbyDM2IQ8NY6LgQpLb0gpQoK32fAQtWVBrdBQduZ6FOBWREFn61Qb55R9Q20Y4u9IfQ5 -V N -d "変更内容"
 ```
 
 - デプロイは必ず上のIDを更新する（新しいデプロイを作るとURLが変わってiPadのホーム画面から開けなくなる）

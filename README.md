@@ -22,9 +22,9 @@ AppSheet版の操作マニュアル（容器番号と質量の2つだけ入力�
 
 ## 重要なID・URL
 
-- **スクリプトID**: `1WRdps6zQgFVtqMeW9OhRvLeZGafuOCXFZkv-89skSv6WJ0atLhBZnSfG`（`.clasp.json` に設定済み）
+- **スクリプトID**: `17mOYxTzPwzIsrILrYL7pH0Rn-jYOjQ8f52n5KZm0-0p-ojhxBG246vu4`（`.clasp.json` に設定済み）
 - **ウェブアプリURL（iPad入力画面）**:
-  `https://script.google.com/a/macros/nodagumi40.com/s/AKfycbwTY85bp6X5FSaC8PsQpaXN4OIs7HGTW-Fba7hMHUUz-QqVohL45A_8yttGMrpZ_AIS/exec`
+  `https://script.google.com/a/macros/nodagumi40.com/s/AKfycbyDM2IQ8NY6LgQpLb0gpQoK32fAQtWVBrdBQduZ6FOBWREFn61Qb55R9Q20Y4u9IfQ5/exec`
   （組織内アカウントのみ。コードを更新したら「デプロイを管理」で新バージョンにするとURLはそのまま反映される）
 
 ## 全体構成
