@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  :root {
+    --navy: #1f2a5c; --navy2: #2d3a78; --bg: #f3f6fb; --card: #fff; --line: #d8e0ee;
+    --text: #1b2240; --muted: #6b7591; --ok: #1e7a4c; --okbg: #e3f4ea; --ng: #b94a3d; --ngbg: #fbe6e3;
+    --warn: #9a6a00; --warnbg: #fff4d6; --pend: #e8eefc;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  button { font: inherit; cursor: pointer; }
+  header { background: var(--navy); color: #fff; padding: 10px 16px; display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 18px; margin: 0; flex: 1; }
+  header .user { font-size: 12px; opacity: .7; }
+  header button { background: var(--navy2); color: #fff; border: 1px solid #56619a; border-radius: 8px; padding: 6px 12px; }
+  .hidden { display: none !important; }
+  main { padding: 16px; max-width: 1400px; margin: 0 auto; }
+
+  /* ホーム */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .card h3 { margin: 0 0 4px; font-size: 18px; }
+  .card .sub { color: var(--muted); font-size: 13px; }
+  .bar { height: 8px; background: #e6ebf5; border-radius: 4px; margin: 10px 0 6px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--navy); }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .btn { border: 0; border-radius: 10px; padding: 10px 16px; background: var(--navy); color: #fff; font-weight: 600; }
+  .btn.sec { background: #e6ebf5; color: var(--navy); }
+  .btn.big { font-size: 20px; padding: 16px 28px; }
+  .btn:disabled { opacity: .5; }
+  h2 { font-size: 16px; color: var(--muted); margin: 24px 0 10px; letter-spacing: .05em; }
+  form.lot { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; align-items: end; }
+  label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px; }
+  input, select { width: 100%; font-size: 18px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcff; }
+  .msg { margin-top: 10px; font-size: 14px; }
+  .msg.err { color: var(--ng); }
+
+  /* 入力画面 */
+  .input-layout { display: grid; grid-template-columns: minmax(340px, 420px) 1fr; gap: 16px; }
+  @media (max-width: 900px) { .input-layout { grid-template-columns: 1fr; } }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .field { border: 2px solid var(--line); border-radius: 12px; padding: 8px 14px; margin-bottom: 10px; background: #fbfcff; }
+  .field.active { border-color: var(--navy); background: var(--pend); }
+  .field .lbl { font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; }
+  .field .val { font-size: 44px; font-weight: 700; min-height: 56px; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+  .field .val .cursor { display: inline-block; width: 3px; height: 40px; background: var(--navy); vertical-align: -4px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .resolved { font-size: 15px; color: var(--navy); font-weight: 600; min-height: 20px; }
+  .match { display: flex; gap: 8px; margin-bottom: 10px; }
+  .match button { flex: 1; border-radius: 10px; padding: 10px; border: 1px solid var(--line); background: #f0f3fa; color: var(--muted); font-size: 18px; }
+  .match button.on.ok { background: var(--navy); color: #fff; }
+  .match button.on.ng { background: var(--ng); color: #fff; }
+  .notice { border-radius: 10px; padding: 10px 12px; font-size: 16px; font-weight: 600; min-height: 46px; margin-bottom: 10px; }
+  .notice.info { background: var(--pend); color: var(--navy); }
+  .notice.ok { background: var(--okbg); color: var(--ok); }
+  .notice.warn { background: var(--warnbg); color: var(--warn); }
+  .notice.err { background: var(--ngbg); color: var(--ng); }
+  .pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .pad button { border: 1px solid var(--line); background: #fff; border-radius: 10px; font-size: 26px; padding: 12px 0; color: var(--text); }
+  .pad button.fn { font-size: 14px; background: #eef2fa; color: var(--navy); font-weight: 600; }
+  .pad button.enter { grid-row: span 2; background: var(--navy); color: #fff; font-size: 20px; }
+  .pad button:active { transform: scale(.97); }
+  .keys { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.7; }
+  .keys b { display: inline-block; min-width: 22px; text-align: center; border: 1px solid var(--line); border-radius: 4px; background: #fff; margin-right: 2px; }
+
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .tabs button { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 14px; font-size: 14px; color: var(--navy); }
+  .tabs button.on { background: var(--navy); color: #fff; }
+  .gridhead { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .gridhead .count { font-size: 22px; font-weight: 700; }
+  .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px 10px; grid-auto-flow: column; grid-template-rows: repeat(20, auto); }
+  .cell { display: flex; justify-content: space-between; border-radius: 6px; padding: 3px 8px; font-size: 15px;
+    background: #f5f7fb; color: #a3abc0; font-variant-numeric: tabular-nums; border: 1px solid transparent; }
+  .cell .m { font-weight: 700; }
+  .cell.filled { background: var(--okbg); color: var(--text); }
+  .cell.missing { background: #eee; color: var(--muted); }
+  .cell.pending { background: var(--pend); color: var(--navy); }
+  .cell.error { background: var(--ngbg); color: var(--ng); }
+  .cell.target { border-color: var(--navy); box-shadow: 0 0 0 2px var(--navy) inset; }
+  .cell.last { border-color: var(--ok); }
+  .queue { font-size: 13px; color: var(--muted); }
+  .queue.err { color: var(--ng); font-weight: 600; }
+
+  dialog { border: 0; border-radius: 14px; padding: 20px; width: min(560px, 94vw); }
+  dialog::backdrop { background: rgba(20, 26, 60, .45); }
+  dialog h3 { margin-top: 0; }
+  dialog .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .missing-list { font-size: 13px; color: var(--ng); margin: 8px 0; max-height: 80px; overflow: auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>LPG容器 質量入力</h1>
+  <span class="user" id="workerBadge"></span>
+  <span class="user" id="user"></span>
+  <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
+</header>
+
+<main id="home">
+  <h2>担当者（この端末で入力する人）</h2>
+  <div class="card">
+    <div class="row" style="align-items:flex-end">
+      <div style="flex:1;min-width:200px"><label>担当者</label><select id="fWorker"></select></div>
+      <div style="flex:1;min-width:160px"><label>端末名（例: iPad-1）</label><input id="fDevice" autocomplete="off"></div>
+    </div>
+    <div class="msg" id="workerMsg"></div>
+  </div>
+
+  <h2>入力中のロット</h2>
+  <div class="cards" id="activeLots"></div>
+  <div class="row" style="margin-top:14px">
+    <button class="btn big" id="btnStart" disabled>入力を始める</button>
+  </div>
+
+  <h2>新しい組容器番号を登録（神鋼機器から受け取った番号）</h2>
+  <div class="card">
+    <form class="lot" id="lotForm" onsubmit="return false">
+      <div><label>記号（例: HRH）</label><input id="fPrefix" autocomplete="off" autocapitalize="characters"></div>
+      <div><label>組容器番号 開始</label><input id="fStart" inputmode="numeric" autocomplete="off" placeholder="52001"></div>
+      <div><label>組容器番号 終了</label><input id="fEnd" inputmode="numeric" autocomplete="off" placeholder="自動（+99）"></div>
+      <div><label>容器区分</label>
+        <select id="fKind">
+          <option>5kg</option><option>8kg</option><option>10kg</option><option>20kg</option>
+          <option>30kg</option><option selected>50kg</option><option>50kg S付</option><option>その他</option>
+        </select>
+      </div>
+      <div><button class="btn" id="btnCreate" type="button" style="width:100%;padding:12px">登録</button></div>
+    </form>
+    <div class="msg" id="lotMsg"></div>
+  </div>
+
+  <h2>最近完了したロット</h2>
+  <div class="cards" id="doneLots"></div>
+</main>
+
+<main id="entry" class="hidden">
+  <div class="input-layout">
+    <div class="panel">
+      <div class="field" id="fldNum">
+        <div class="lbl"><span>容器番号</span><span id="numHint">下3桁でOK（先頭の0は不要）</span></div>
+        <div class="val" id="valNum"></div>
+        <div class="resolved" id="resolved"></div>
+      </div>
+      <div class="match">
+        <button id="btnOk" class="on ok" tabindex="-1">一致 OK</button>
+        <button id="btnNg" class="ng" tabindex="-1">NG（／キー）</button>
+      </div>
+      <div class="field hidden" id="fldActual">
+        <div class="lbl"><span>実容器番号（刻印の番号）</span></div>
+        <div class="val" id="valActual"></div>
+      </div>
+      <div class="field" id="fldMass">
+        <div class="lbl"><span>質量 (kg)</span><span id="massHint">「68」→6.8 と入力してもOK</span></div>
+        <div class="val" id="valMass"></div>
+      </div>
+      <div class="notice info" id="notice">容器番号を入力して Enter</div>
+      <div class="pad" id="pad">
+        <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button><button class="fn" data-k="Backspace">⌫ 1字消す</button>
+        <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button><button class="fn" data-k="+">＋ 前回と同じ質量</button>
+        <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button><button class="enter" data-k="Enter">Enter<br>次へ／保存</button>
+        <button data-k="0">0</button><button data-k=".">.</button><button class="fn" data-k="-">－ 欠番</button>
+        <button class="fn" data-k="Escape">やり直し</button><button class="fn" data-k="*">＊ 直前を取消</button><button class="fn" data-k="/">／ NG</button>
+      </div>
+      <div class="keys">
+        テンキー操作: <b>Enter</b>次へ・保存　<b>+</b>前回と同じ質量　<b>-</b>欠番　<b>/</b>番号NG　<b>*</b>直前の入力を取消　<b>⌫</b>1字消す（空のとき前の欄へ戻る）
+      </div>
+      <div class="queue" id="queue"></div>
+    </div>
+
+    <div class="panel">
+      <div class="tabs" id="tabs"></div>
+      <div class="gridhead">
+        <div><b id="gridTitle"></b> <span class="sub" id="gridSub"></span></div>
+        <div class="count" id="gridCount"></div>
+      </div>
+      <div class="grid" id="grid"></div>
+    </div>
+  </div>
+</main>
+
+<dialog id="dlgDone">
+  <h3 id="dlgTitle">完了・送信</h3>
+  <div class="missing-list" id="dlgMissing"></div>
+  <label style="font-size:15px;color:var(--text)"><input type="checkbox" id="dSend" checked style="width:auto"> メールで納品する</label>
+  <p class="sub" id="dMailTo" style="font-size:13px;color:var(--muted)"></p>
+  <p class="sub" style="font-size:12px;color:var(--muted)">全数（欠番を含む）そろうと自動で完了・PDF作成・メール送信されます。未入力が残っていても完了にしたいときだけ使います。</p>
+  <div class="msg" id="dlgMsg"></div>
+  <div class="row" style="justify-content:flex-end;margin-top:12px">
+    <button class="btn sec" id="dCancel">閉じる</button>
+    <button class="btn" id="dSave">完了にする</button>
+  </div>
+</dialog>
+
+<script>
+(function() {
+  const MASS_MIN = 0.1, MASS_MAX = 99.9, DEVIATION_KG = 0.5, MISSING = '欠番';
+  const $ = function(id) { return document.getElementById(id); };
+
+  const S = {
+    lots: [],          // 入力中ロット（entries: {serial: mass}）
+    done: [],
+    stage: 'num',      // num | actual | mass | undo
+    ng: false,
+    bufNum: '', bufActual: '', bufMass: '',
+    target: null,      // { lot, serial }
+    confirmDup: false,
+    ngFrom: '',        // NG時に最初に入力した番号
+    confirmMassText: null,
+    viewLotId: null,
+    lastMass: null,
+    queue: [], sending: false, sendError: null,
+    pending: {}, errors: {},  // key: lotId|serial
+    saved: [],         // サーバー保存済み { recordId, lotId, serial }
+    lastKey: null,
+    workers: [], mail: { to: '', cc: '', auto: true }
+  };
+  // 担当者・端末名はこの端末に記憶する（保存できない環境でも画面を開いている間は保持）
+  const memo = {};
+  const store = {
+    get: function(k) {
+      if (k in memo) return memo[k];
+      try { return localStorage.getItem(k) || ''; } catch (e) { return ''; }
+    },
+    set: function(k, v) { memo[k] = v; try { localStorage.setItem(k, v); } catch (e) { /* 無視 */ } }
+  };
+
+  // ---------- 共通 ----------
+  function call(fn, arg) {
+    return new Promise(function(resolve, reject) {
+      google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](arg);
+    });
+  }
+  function errText(e) { return (e && e.message) ? e.message : String(e); }
+  function pad(n, w) { let s = String(n); while (s.length < w) s = '0' + s; return s; }
+  function disp3(serial) { return ('00' + (Number(serial) % 1000)).slice(-3); }
+  function lotSize(l) { return Number(l.end) - Number(l.start) + 1; }
+  function label(l, serial) { return l.prefix + serial; }
+  function lotById(id) { return S.lots.filter(function(l) { return l.lotId === id; })[0]; }
+  function fmtMass(m) { return m === MISSING ? MISSING : Number(m).toFixed(1); }
+
+  let audio = null;
+  function beep(ok) {
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.frequency.value = ok ? 1320 : 330; o.type = ok ? 'sine' : 'square';
+      g.gain.value = ok ? 0.08 : 0.12;
+      o.connect(g); g.connect(audio.destination);
+      o.start(); o.stop(audio.currentTime + (ok ? 0.08 : 0.35));
+    } catch (e) { /* 音が出せない環境は無視 */ }
+  }
+
+  // ---------- ホーム ----------
+  function loadHome() {
+    return call('getBootstrap').then(function(b) {
+      $('user').textContent = b.user;
+      S.lots = b.lots; S.done = b.recentDone; S.workers = b.workers; S.mail = b.mail;
+      renderWorkers();
+      renderHome();
+    }).catch(function(e) { $('lotMsg').className = 'msg err'; $('lotMsg').textContent = errText(e); });
+  }
+
+  function renderWorkers() {
+    const sel = $('fWorker'), saved = store.get('lpg.worker');
+    sel.innerHTML = '<option value="">（選択してください）</option>';
+    S.workers.forEach(function(n) {
+      const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o);
+    });
+    if (saved && S.workers.indexOf(saved) < 0 && S.workers.length === 0) {
+      const o = document.createElement('option'); o.value = saved; o.textContent = saved; sel.appendChild(o);
+    }
+    sel.value = S.workers.indexOf(saved) >= 0 || !S.workers.length ? saved : '';
+    $('fDevice').value = store.get('lpg.device');
+    $('workerMsg').textContent = S.workers.length ? '' : '「担当者」シートにスタッフ名を登録すると、ここで選べるようになります。';
+    updateWorkerBadge();
+  }
+  function worker() { return $('fWorker').value; }
+  function updateWorkerBadge() {
+    $('workerBadge').textContent = worker() ? '担当: ' + worker() + ($('fDevice').value ? '（' + $('fDevice').value + '）' : '') : '';
+  }
+  $('fWorker').onchange = function() { store.set('lpg.worker', worker()); updateWorkerBadge(); renderHome(); };
+  $('fDevice').oninput = function() { store.set('lpg.device', $('fDevice').value.trim()); updateWorkerBadge(); };
+
+  function countOf(l) {
+    let filled = 0, missing = 0;
+    Object.keys(l.entries).forEach(function(k) { if (l.entries[k] === MISSING) missing++; else filled++; });
+    return { filled: filled, missing: missing, size: lotSize(l) };
+  }
+
+  function lotCard(l, done) {
+    const c = countOf(l);
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.innerHTML = '<h3></h3><div class="sub"></div><div class="bar"><div></div></div><div class="sub cnt"></div><div class="row" style="margin-top:10px"></div>';
+    div.querySelector('h3').textContent = l.prefix + l.start + ' ～ ' + l.prefix + l.end;
+    div.querySelector('.sub').textContent = (l.kind || '') + '　' + l.sheetName;
+    div.querySelector('.bar > div').style.width = Math.round((c.filled + c.missing) / c.size * 100) + '%';
+    div.querySelector('.cnt').textContent = '入力 ' + c.filled + ' 本' + (c.missing ? '・欠番 ' + c.missing : '') + ' ／ ' + c.size + ' 本' +
+      (done ? (l.sentAt ? '　送信済 ' + l.sentAt : (l.sentTo ? '　' + l.sentTo : '　未送信')) : '') +
+      '';
+    const row = div.querySelector('.row');
+    if (!done) {
+      const b = document.createElement('button');
+      b.className = 'btn sec'; b.textContent = '完了にする';
+      b.onclick = function() { openDone(l); };
+      row.appendChild(b);
+    } else {
+      const b = document.createElement('button');
+      b.className = 'btn sec'; b.textContent = '入力を再開';
+      b.onclick = function() {
+        b.disabled = true;
+        call('reopenLot', l.lotId).then(loadHome).catch(function(e) { alert(errText(e)); b.disabled = false; });
+      };
+      row.appendChild(b);
+      const r = document.createElement('button');
+      r.className = 'btn sec'; r.textContent = l.sentAt ? '再送信' : 'メールで送信';
+      r.onclick = function() {
+        if (!confirm((S.mail.to || '（送付先未設定）') + ' に送信しますか？')) return;
+        r.disabled = true;
+        call('resendLot', l.lotId).then(function(x) { alert('送信しました: ' + x.sentTo); return loadHome(); })
+          .catch(function(e) { alert(errText(e)); r.disabled = false; });
+      };
+      row.appendChild(r);
+      if (l.pdf) {
+        const a = document.createElement('a');
+        a.href = l.pdf; a.target = '_blank'; a.textContent = 'PDFを開く'; a.style.marginLeft = '8px';
+        row.appendChild(a);
+      }
+    }
+    return div;
+  }
+
+  function renderHome() {
+    const act = $('activeLots'); act.innerHTML = '';
+    if (!S.lots.length) act.innerHTML = '<div class="sub">入力中のロットはありません。下で組容器番号を登録してください。</div>';
+    S.lots.forEach(function(l) { act.appendChild(lotCard(l, false)); });
+    const dn = $('doneLots'); dn.innerHTML = '';
+    if (!S.done.length) dn.innerHTML = '<div class="sub">まだありません</div>';
+    S.done.forEach(function(l) { dn.appendChild(lotCard(l, true)); });
+    $('btnStart').disabled = !S.lots.length || (S.workers.length > 0 && !worker());
+    $('btnStart').textContent = S.workers.length && !worker() ? '担当者を選ぶと入力できます' : '入力を始める';
+  }
+
+  $('fStart').addEventListener('input', function() {
+    const v = $('fStart').value.trim();
+    $('fEnd').placeholder = /^\d+$/.test(v) ? pad(Number(v) + 99, v.length) + '（自動）' : '自動（+99）';
+  });
+
+  $('btnCreate').onclick = function() {
+    const btn = $('btnCreate'); btn.disabled = true;
+    $('lotMsg').className = 'msg'; $('lotMsg').textContent = '登録中…（成績表シートを作成しています）';
+    call('createLot', {
+      prefix: $('fPrefix').value, start: $('fStart').value, end: $('fEnd').value, kind: $('fKind').value
+    }).then(function(lot) {
+      $('lotMsg').textContent = '登録しました: ' + lot.lotId + '（' + lot.sheetName + '）';
+      $('fStart').value = ''; $('fEnd').value = '';
+      return loadHome();
+    }).catch(function(e) {
+      $('lotMsg').className = 'msg err'; $('lotMsg').textContent = errText(e);
+    }).then(function() { btn.disabled = false; });
+  };
+
+  $('btnStart').onclick = function() { showEntry(); };
+  $('btnHome').onclick = function() {
+    if (S.queue.length && !confirm('まだ送信中の入力があります。一覧に戻っても送信は続きます。戻りますか？')) return;
+    $('entry').classList.add('hidden'); $('home').classList.remove('hidden'); $('btnHome').classList.add('hidden');
+    loadHome();
+  };
+
+  // ---------- 完了ダイアログ ----------
+  let doneLot = null;
+  function openDone(l) {
+    doneLot = l;
+    $('dlgTitle').textContent = '完了・送信　' + l.prefix + l.start + ' ～ ' + l.end;
+    const miss = [];
+    for (let i = 0; i < lotSize(l); i++) {
+      const s = pad(Number(l.start) + i, l.start.length);
+      if (!(s in l.entries)) miss.push(disp3(s));
+    }
+    $('dlgMissing').textContent = miss.length ? '未入力 ' + miss.length + ' 本: ' + miss.join(', ') : '';
+    $('dlgMsg').textContent = '';
+    $('dSend').checked = !!S.mail.to;
+    $('dSend').disabled = !S.mail.to;
+    $('dMailTo').textContent = S.mail.to ? '送付先: ' + S.mail.to + (S.mail.cc ? '　CC: ' + S.mail.cc : '')
+      : '送付先が未設定です（スプレッドシートの「設定」シートで設定）';
+    $('dlgDone').showModal();
+  }
+  $('dCancel').onclick = function() { $('dlgDone').close(); };
+  function doneResultText(r) {
+    return '完了しました（PDF保存）' + (r.sentTo ? '。メール送信: ' + r.sentTo : '') + (r.mailError ? '。メール送信失敗: ' + r.mailError : '');
+  }
+  $('dSave').onclick = function() {
+    const miss = $('dlgMissing').textContent;
+    if (miss && !confirm(miss.split(':')[0] + ' あります。このまま完了にしますか？')) return;
+    const btn = $('dSave'); btn.disabled = true;
+    $('dlgMsg').className = 'msg'; $('dlgMsg').textContent = 'PDFを作成中…' + ($('dSend').checked ? '（メール送信します）' : '');
+    call('completeLot', { lotId: doneLot.lotId, send: $('dSend').checked }).then(function(r) {
+      $('dlgDone').close(); alert(doneResultText(r));
+      return loadHome();
+    }).catch(function(e) {
+      $('dlgMsg').className = 'msg err'; $('dlgMsg').textContent = errText(e);
+    }).then(function() { btn.disabled = false; });
+  };
+
+  // ---------- 入力画面 ----------
+  function showEntry() {
+    $('home').classList.add('hidden'); $('entry').classList.remove('hidden'); $('btnHome').classList.remove('hidden');
+    if (!S.viewLotId || !lotById(S.viewLotId)) S.viewLotId = S.lots[0].lotId;
+    if (document.activeElement) document.activeElement.blur();
+    resetEntry('容器番号を入力して Enter', 'info');
+  }
+
+  function resetEntry(msg, kind) {
+    S.stage = 'num'; S.ng = false; S.bufNum = ''; S.bufActual = ''; S.bufMass = '';
+    S.target = null; S.confirmDup = false; S.confirmMassText = null; S.ngFrom = '';
+    setNotice(msg || '容器番号を入力して Enter', kind || 'info');
+    render();
+  }
+
+  function setNotice(text, kind) { const n = $('notice'); n.textContent = text; n.className = 'notice ' + kind; }
+
+  // 入力された番号から、どのロットのどの容器かを決める。
+  // 3桁以下は下3桁として扱い（「23」= 023）、4桁以上は末尾の桁で照合する。
+  function resolve(text) {
+    let digits = text.replace(/^0+(?=\d)/, '');
+    if (digits === '1000') digits = '0'; // 1000番目は「000」
+    const n = Number(digits);
+    const len = Math.max(3, digits.length);
+    const mod = Math.pow(10, len);
+    const key = digits.length <= 3 ? n % 1000 : n % mod;
+    const hits = [];
+    S.lots.forEach(function(l) {
+      for (let v = Number(l.start); v <= Number(l.end); v++) {
+        if (v % mod === key) hits.push({ lot: l, serial: pad(v, l.start.length) });
+      }
+    });
+    return hits;
+  }
+
+  function median(lot) {
+    const arr = Object.keys(lot.entries).map(function(k) { return lot.entries[k]; })
+      .filter(function(m) { return m !== MISSING; }).sort(function(a, b) { return a - b; });
+    if (arr.length < 5) return null;
+    const h = Math.floor(arr.length / 2);
+    return arr.length % 2 ? arr[h] : (arr[h - 1] + arr[h]) / 2;
+  }
+
+  function parseMass(text) {
+    if (!/^\d+(\.\d?)?$|^\.\d$/.test(text)) return NaN;
+    if (text.indexOf('.') >= 0) return Math.round(parseFloat(text) * 10) / 10;
+    if (text.length === 1) return NaN;
+    return Number(text) / 10;
+  }
+
+  function handleKey(k) {
+    if (S.stage === 'undo') return handleUndoKey(k);
+    if (k === '*') return askUndo();
+    if (k === 'Escape') return resetEntry('やり直します。容器番号を入力して Enter', 'info');
+
+    if (S.stage === 'num') {
+      if (/^\d$/.test(k)) { if (S.bufNum.length < 8) S.bufNum += k; S.confirmDup = false; }
+      else if (k === 'Backspace') { S.bufNum = S.bufNum.slice(0, -1); S.confirmDup = false; }
+      else if (k === 'Enter') return submitNum();
+      else if (k === '/') { S.ng = !S.ng; }
+      render(); return;
+    }
+    if (S.stage === 'actual') {
+      if (/^\d$/.test(k)) { if (S.bufActual.length < 8) S.bufActual += k; S.confirmDup = false; }
+      else if (k === 'Backspace') {
+        if (!S.bufActual) { S.stage = 'num'; S.ng = false; S.target = null; setNotice('容器番号を入力して Enter', 'info'); }
+        else S.bufActual = S.bufActual.slice(0, -1);
+      }
+      else if (k === '/') { S.ng = false; S.bufActual = ''; S.ngFrom = ''; S.confirmDup = false; return goMass(S.target); }
+      else if (k === 'Enter') return submitActual();
+      render(); return;
+    }
+    if (S.stage === 'mass') {
+      if (/^\d$/.test(k) || k === '.') {
+        if (S.bufMass === MISSING) S.bufMass = '';
+        if (k === '.' && S.bufMass.indexOf('.') >= 0) return;
+        if (S.bufMass.length < 5) S.bufMass += k;
+        S.confirmMassText = null;
+      } else if (k === 'Backspace') {
+        if (!S.bufMass) { backToNum(); }
+        else { S.bufMass = S.bufMass === MISSING ? '' : S.bufMass.slice(0, -1); S.confirmMassText = null; }
+      } else if (k === '+') {
+        if (S.lastMass === null) { setNotice('前回の質量がまだありません', 'warn'); beep(false); }
+        else { S.bufMass = String(S.lastMass.toFixed(1)); S.confirmMassText = null; return submitMass(); }
+      } else if (k === '-') {
+        S.bufMass = MISSING; setNotice('欠番として記録します。Enter で保存', 'warn');
+      } else if (k === '/') {
+        S.ng = !S.ng;
+        if (S.ng) { S.ngFrom = label(S.target.lot, S.target.serial); S.confirmDup = false; S.stage = 'actual'; S.bufActual = ''; setNotice('NG: 刻印の実容器番号を入力して Enter', 'err'); }
+        else { delete S.target.ngInput; S.ngFrom = ''; }
+      } else if (k === 'Enter') return submitMass();
+      render(); return;
+    }
+  }
+
+  function backToNum() {
+    S.stage = 'num'; S.target = null; S.ng = false; S.bufActual = ''; S.confirmDup = false;
+    setNotice('容器番号を入力して Enter', 'info');
+  }
+
+  function pickTarget(text, onOk) {
+    if (!text) { setNotice('番号を入力してください', 'warn'); beep(false); render(); return; }
+    const hits = resolve(text);
+    if (!hits.length) {
+      setNotice('「' + text + '」はどのロットの範囲にもありません。番号を確認してください', 'err'); beep(false); render(); return;
+    }
+    if (hits.length > 1) {
+      setNotice('複数のロットに該当します（' + hits.map(function(h) { return label(h.lot, h.serial); }).join('、') +
+        '）。4桁以上で入力してください', 'err');
+      beep(false); render(); return;
+    }
+    onOk(hits[0]);
+  }
+
+  function submitNum() {
+    pickTarget(S.bufNum, function(hit) {
+      if (S.ng) {
+        S.target = hit; S.ngFrom = label(hit.lot, hit.serial); S.stage = 'actual'; S.bufActual = '';
+        setNotice('NG: 刻印の実容器番号を入力して Enter', 'err'); render(); return;
+      }
+      goMass(hit);
+    });
+  }
+
+  function submitActual() {
+    pickTarget(S.bufActual, function(hit) {
+      goMass({ lot: hit.lot, serial: hit.serial, ngInput: S.ngFrom });
+    });
+  }
+
+  function goMass(hit) {
+    const prev = hit.lot.entries[hit.serial];
+    if (prev !== undefined && !S.confirmDup) {
+      S.confirmDup = true; S.target = hit;
+      setNotice(label(hit.lot, hit.serial) + ' は入力済み（' + fmtMass(prev) + '）です。上書きするなら Enter', 'warn');
+      beep(false); S.viewLotId = hit.lot.lotId; render(); return;
+    }
+    S.target = hit;
+    S.stage = 'mass'; S.bufMass = ''; S.confirmMassText = null; S.viewLotId = hit.lot.lotId;
+    setNotice('質量を入力して Enter', 'info');
+    render();
+  }
+
+  function submitMass() {
+    const t = S.target;
+    let mass;
+    if (S.bufMass === MISSING) {
+      mass = MISSING;
+    } else {
+      mass = parseMass(S.bufMass);
+      if (!(mass >= MASS_MIN && mass <= MASS_MAX)) {
+        setNotice('質量は ' + MASS_MIN + '〜' + MASS_MAX + ' kg で入力してください', 'err'); beep(false); render(); return;
+      }
+      const med = median(t.lot);
+      if (med !== null && Math.abs(mass - med) > DEVIATION_KG + 1e-9 && S.confirmMassText !== S.bufMass) {
+        S.confirmMassText = S.bufMass;
+        setNotice(fmtMass(mass) + ' kg はこのロットの標準（' + fmtMass(med) + ' kg）から離れています。刻印を再確認して、正しければ Enter', 'warn');
+        beep(false); render(); return;
+      }
+    }
+    enqueue({ lotId: t.lot.lotId, serial: t.serial, mass: mass === MISSING ? null : mass,
+      missing: mass === MISSING, ngInput: t.ngInput || '', worker: worker(), device: $('fDevice').value.trim() });
+    t.lot.entries[t.serial] = mass;
+    if (mass !== MISSING) S.lastMass = mass;
+    S.lastKey = t.lot.lotId + '|' + t.serial;
+    beep(true);
+    resetEntry('保存: ' + label(t.lot, t.serial) + '　' + fmtMass(mass) + (mass === MISSING ? '' : ' kg') + '　→ 次の容器番号', 'ok');
+  }
+
+  // ---------- 送信キュー（入力を止めずに順番に保存） ----------
+  let seq = 0;
+  function enqueue(entry) {
+    entry.clientId = 'c' + (++seq);
+    const key = entry.lotId + '|' + entry.serial;
+    S.pending[key] = (S.pending[key] || 0) + 1;
+    delete S.errors[key];
+    S.queue.push(entry);
+    pump();
+  }
+
+  function pump() {
+    renderQueue();
+    if (S.sending || !S.queue.length || S.sendError) return;
+    S.sending = true;
+    const e = S.queue[0];
+    const key = e.lotId + '|' + e.serial;
+    call('recordEntry', e).then(function(res) {
+      S.queue.shift();
+      S.pending[key]--; if (!S.pending[key]) delete S.pending[key];
+      S.saved.push({ recordId: res.recordId, lotId: e.lotId, serial: e.serial, mass: res.mass });
+      if (S.saved.length > 50) S.saved.shift();
+      S.sending = false;
+      if (res.full) onLotFull(e.lotId, res);
+      render(); pump();
+    }).catch(function(err) {
+      S.sending = false;
+      S.sendError = errText(err);
+      S.errors[key] = true;
+      beep(false);
+      render(); renderQueue();
+    });
+  }
+
+  // ロットの全数がそろったとき
+  function onLotFull(lotId, res) {
+    const l = lotById(lotId);
+    const name = l ? l.prefix + l.start + '～' + l.end : lotId;
+    if (res.completed) {
+      S.lots = S.lots.filter(function(x) { return x.lotId !== lotId; });
+      if (S.viewLotId === lotId && S.lots.length) S.viewLotId = S.lots[0].lotId;
+      setNotice('★ ' + name + ' 全数そろいました。成績表PDFを作成' +
+        (res.sentTo ? 'し、' + res.sentTo + ' へ送信しました' : '') +
+        (res.mailError ? '（メール送信失敗: ' + res.mailError + '）' : ''), res.mailError ? 'err' : 'ok');
+      if (!S.lots.length) setTimeout(function() { $('btnHome').click(); }, 2500);
+    } else {
+      setNotice('★ ' + name + ' 全数そろいました。ロット一覧から完了にしてください', 'ok');
+    }
+    beep(true); setTimeout(function() { beep(true); }, 150);
+  }
+
+  function retry() { S.sendError = null; pump(); }
+  function dropFailed() {
+    const e = S.queue.shift();
+    const key = e.lotId + '|' + e.serial;
+    S.pending[key]--; if (!S.pending[key]) delete S.pending[key];
+    delete S.errors[key];
+    S.sendError = null;
+    call('getLot', e.lotId).then(function(l) { const cur = lotById(l.lotId); if (cur) cur.entries = l.entries; render(); });
+    pump();
+  }
+
+  function renderQueue() {
+    const q = $('queue');
+    if (S.sendError) {
+      q.className = 'queue err';
+      q.innerHTML = '';
+      q.appendChild(document.createTextNode('保存に失敗: ' + S.sendError + '　'));
+      const b1 = document.createElement('button'); b1.className = 'btn'; b1.textContent = '再送'; b1.tabIndex = -1; b1.onclick = retry;
+      const b2 = document.createElement('button'); b2.className = 'btn sec'; b2.textContent = 'この入力を破棄'; b2.tabIndex = -1; b2.onclick = dropFailed;
+      q.appendChild(b1); q.appendChild(document.createTextNode(' ')); q.appendChild(b2);
+    } else {
+      q.className = 'queue';
+      q.textContent = S.queue.length ? '送信中 ' + S.queue.length + ' 件…' : 'すべて保存済み';
+    }
+  }
+
+  // ---------- 取り消し ----------
+  function askUndo() {
+    if (S.queue.length) { setNotice('送信が終わってから取り消してください（送信中 ' + S.queue.length + ' 件）', 'warn'); beep(false); render(); return; }
+    const last = S.saved[S.saved.length - 1];
+    if (!last) { setNotice('取り消せる入力がありません', 'warn'); beep(false); render(); return; }
+    const l = lotById(last.lotId);
+    S.stage = 'undo';
+    setNotice('直前の入力「' + (l ? label(l, last.serial) : last.serial) + '　' + fmtMass(last.mass) + '」を取り消しますか？ Enter=取消 ／ ⌫=やめる', 'warn');
+    render();
+  }
+
+  function handleUndoKey(k) {
+    if (k === 'Enter') {
+      const last = S.saved.pop();
+      setNotice('取り消し中…', 'info');
+      call('undoEntry', last.recordId).then(function(r) {
+        const l = lotById(r.lotId);
+        if (l) { if (r.mass === null) delete l.entries[r.serial]; else l.entries[r.serial] = r.mass; }
+        S.lastKey = null;
+        resetEntry('取り消しました: ' + (l ? label(l, r.serial) : r.serial) + '。容器番号を入力して Enter', 'ok');
+      }).catch(function(e) {
+        S.saved.push(last);
+        resetEntry('取り消しに失敗: ' + errText(e), 'err'); beep(false);
+      });
+    } else if (k === 'Backspace' || k === 'Escape') {
+      resetEntry('取り消しをやめました。容器番号を入力して Enter', 'info');
+    }
+  }
+
+  // ---------- 描画 ----------
+  function render() {
+    const cur = '<span class="cursor"></span>';
+    $('valNum').innerHTML = esc(S.bufNum) + (S.stage === 'num' ? cur : '');
+    $('valActual').innerHTML = esc(S.bufActual) + (S.stage === 'actual' ? cur : '');
+    $('valMass').innerHTML = esc(S.bufMass) + (S.stage === 'mass' ? cur : '');
+    $('fldNum').classList.toggle('active', S.stage === 'num');
+    $('fldActual').classList.toggle('active', S.stage === 'actual');
+    $('fldActual').classList.toggle('hidden', !S.ng);
+    $('fldMass').classList.toggle('active', S.stage === 'mass');
+    $('btnOk').classList.toggle('on', !S.ng);
+    $('btnNg').classList.toggle('on', S.ng);
+    const t = S.target;
+    $('resolved').textContent = t ? '→ ' + label(t.lot, t.serial) + '（' + t.lot.sheetName + '）' : '';
+    renderTabs(); renderGrid();
+  }
+
+  function esc(s) { return String(s).replace(/[&<>]/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
+
+  function renderTabs() {
+    const tabs = $('tabs'); tabs.innerHTML = '';
+    if (S.lots.length < 2) return;
+    S.lots.forEach(function(l) {
+      const b = document.createElement('button');
+      const c = countOf(l);
+      b.textContent = l.prefix + l.start + '〜 (' + (c.filled + c.missing) + '/' + c.size + ')';
+      b.tabIndex = -1;
+      if (l.lotId === S.viewLotId) b.className = 'on';
+      b.onclick = function() { S.viewLotId = l.lotId; b.blur(); render(); };
+      tabs.appendChild(b);
+    });
+  }
+
+  function renderGrid() {
+    const l = lotById(S.viewLotId);
+    const g = $('grid'); g.innerHTML = '';
+    if (!l) return;
+    const c = countOf(l);
+    $('gridTitle').textContent = l.prefix + l.start + ' ～ ' + l.prefix + l.end;
+    $('gridSub').textContent = (l.kind || '') + (median(l) !== null ? '　標準 ' + fmtMass(median(l)) + ' kg' : '');
+    $('gridCount').textContent = (c.filled + c.missing) + ' / ' + c.size;
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < 100; i++) {
+      const div = document.createElement('div');
+      if (i >= c.size) { div.className = 'cell'; div.style.visibility = 'hidden'; div.textContent = '-'; frag.appendChild(div); continue; }
+      const serial = pad(Number(l.start) + i, l.start.length);
+      const key = l.lotId + '|' + serial;
+      const m = l.entries[serial];
+      let cls = 'cell';
+      if (m === MISSING) cls += ' missing'; else if (m !== undefined) cls += ' filled';
+      if (S.pending[key]) cls += ' pending';
+      if (S.errors[key]) cls += ' error';
+      if (S.target && S.target.lot.lotId === l.lotId && S.target.serial === serial) cls += ' target';
+      if (S.lastKey === key) cls += ' last';
+      div.className = cls;
+      div.innerHTML = '<span></span><span class="m"></span>';
+      div.firstChild.textContent = disp3(serial);
+      div.lastChild.textContent = m === undefined ? '' : fmtMass(m);
+      frag.appendChild(div);
+    }
+    g.appendChild(frag);
+  }
+
+  // ---------- キー入力 ----------
+  const CODE_MAP = {
+    Numpad0: '0', Numpad1: '1', Numpad2: '2', Numpad3: '3', Numpad4: '4', Numpad5: '5', Numpad6: '6',
+    Numpad7: '7', Numpad8: '8', Numpad9: '9', NumpadDecimal: '.', NumpadEnter: 'Enter', NumpadAdd: '+',
+    NumpadSubtract: '-', NumpadMultiply: '*', NumpadDivide: '/'
+  };
+  document.addEventListener('keydown', function(ev) {
+    if ($('entry').classList.contains('hidden') || $('dlgDone').open) return;
+    // NumLockがオフでも数字として扱うため、物理キー(code)を優先
+    let k = CODE_MAP[ev.code] || ev.key;
+    if (k === 'Delete') k = 'Backspace';
+    if (k === ',') k = '.';
+    if (!/^[0-9.]$|^(Enter|Backspace|Escape|\+|-|\*|\/)$/.test(k)) return;
+    ev.preventDefault();
+    if (ev.repeat && k === 'Enter') return;
+    handleKey(k);
+  });
+  $('pad').addEventListener('click', function(ev) {
+    const b = ev.target.closest('button'); if (!b) return;
+    b.blur(); handleKey(b.getAttribute('data-k'));
+  });
+  $('btnOk').onclick = function() { this.blur(); if (S.ng) handleKey('/'); };
+  $('btnNg').onclick = function() { this.blur(); if (!S.ng) handleKey('/'); };
+  Array.prototype.forEach.call(document.querySelectorAll('#pad button'), function(b) { b.tabIndex = -1; });
+
+  window.addEventListener('beforeunload', function(e) {
+    if (S.queue.length) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  loadHome();
+})();
+</script>
+</body>
+</html>

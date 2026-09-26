@@ -1,0 +1,124 @@
+// E2Eテスト: 本物の gas/*.js を模擬スプレッドシート上で動かし、gas/Index.html をChromiumで開いて
+// テンキー操作をシミュレートする。  実行: npm test
+const fs = require('fs');
+const path = require('path');
+const { chromium } = require('playwright');
+const { load } = require('./gas_mock.js');
+
+const results = [];
+function check(name, ok, detail) {
+  results.push({ name, ok: !!ok });
+  console.log((ok ? 'PASS' : 'FAIL') + '  ' + name + (ok || detail === undefined ? '' : '  → ' + detail));
+}
+
+(async () => {
+  const { ctx, ss } = load();
+  let html = fs.readFileSync(path.join(__dirname, '..', 'gas', 'Index.html'), 'utf8');
+  // google.script.run をNode側のGAS関数に橋渡しする
+  const stub = `<script>window.google={script:{run:new Proxy({},{get(t,p){ if(p==='withSuccessHandler') return function(ok){ return {withFailureHandler(fail){ return new Proxy({},{get(_,fn){return function(arg){ window.__gas(fn,JSON.stringify(arg===undefined?null:arg)).then(r=>{const o=JSON.parse(r); if(o.err) fail(new Error(o.err)); else setTimeout(()=>ok(o.v),10);});}}});}}};}})}};</script>`;
+  html = html.replace('<head>', '<head>' + stub);
+
+  const exe = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  const browser = await chromium.launch(fs.existsSync(exe) ? { executablePath: exe } : {});
+  const page = await browser.newPage({ viewport: { width: 1180, height: 820 } });
+  page.on('pageerror', e => check('ページでJSエラーなし', false, e.message));
+  page.on('dialog', d => d.accept());
+  await page.exposeFunction('__gas', (fn, arg) => {
+    try { const v = ctx[fn](JSON.parse(arg)); return JSON.stringify({ v: JSON.parse(JSON.stringify(v === undefined ? null : v)) }); }
+    catch (e) { return JSON.stringify({ err: e.message }); }
+  });
+  await page.setContent(html);
+  await page.waitForTimeout(300);
+
+  const KEY = { '.': 'NumpadDecimal', '+': 'NumpadAdd', '-': 'NumpadSubtract', '*': 'NumpadMultiply', '/': 'NumpadDivide', E: 'NumpadEnter' };
+  const keys = async (seq, wait = 150) => {
+    for (const c of seq) await page.keyboard.press(KEY[c] || 'Numpad' + c);
+    await page.waitForTimeout(wait);
+    return page.textContent('#notice');
+  };
+  const create = async (pre, st) => {
+    await page.fill('#fPrefix', pre); await page.fill('#fStart', st); await page.selectOption('#fKind', '50kg');
+    await page.click('#btnCreate'); await page.waitForTimeout(300);
+    return page.textContent('#lotMsg');
+  };
+
+  // ---- ロット登録
+  check('ロット登録', (await create('HEP', '37001')).includes('登録しました'));
+  await create('HEP', '36001');
+  check('同じ組容器番号は登録できない', (await create('HEP', '37001')).includes('登録済み'));
+  check('担当者を選ぶまで入力開始できない', await page.isDisabled('#btnStart'));
+  await page.selectOption('#fWorker', '山田'); await page.fill('#fDevice', 'iPad-1');
+  await page.click('#btnStart'); await page.waitForTimeout(100);
+
+  const sh = () => ss.getSheetByName('成績表_HEP37001-37100');
+  const slot = i => sh().getRange(5 + i % 20, 2 + Math.floor(i / 20) * 6, 1, 6).getValues()[0];
+
+  // ---- 容器番号の判定
+  check('下3桁が2ロットに当たると4桁以上を要求', (await keys('23E')).includes('4桁以上'));
+  await page.keyboard.press('Escape');
+  check('4桁で記録先が決まる', (await keys('7023E')).includes('質量を入力'));
+  check('質量「348」を34.8として保存', (await keys('348E', 400)).includes('34.8 kg'));
+  check('成績表に 023 ☑ 3 4 , 8 が入る', slot(22).join('|') === '023|true|3|4|,|8', slot(22).join('|'));
+  for (const n of ['7024', '7025', '7026', '7027']) await keys(n + 'E+');
+  check('＋で前回と同じ質量', (await page.textContent('#notice')).includes('HEP37027　34.8'));
+  check('標準から外れた質量は再確認', (await keys('7030E340E')).includes('離れています'));
+  check('再度Enterで確定', (await keys('E')).includes('34.0 kg'));
+  check('入力済みは上書き確認', (await keys('7023E')).includes('入力済み'));
+  await keys('E349E');
+  check('欠番', (await keys('7031E-E', 400)).includes('欠番'));
+  check('成績表に「欠 番」', slot(30).join('|') === '031|false|欠|番||', slot(30).join('|'));
+  check('範囲外の番号はエラー', (await keys('9999E')).includes('どのロットの範囲にもありません'));
+  await page.keyboard.press('Escape');
+  check('NG→実容器番号で保存', (await keys('7040E/7041E347E', 400)).includes('HEP37041'));
+  check('質量の範囲外はエラー', (await keys('7050E1000E')).includes('0.1〜99.9'));
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(500);
+  await keys('*');
+  check('直前の取消', (await keys('E', 500)).includes('取り消しました'));
+  check('取消でセルが空に戻る', slot(40)[2] === '' && slot(40)[1] === false, slot(40).join('|'));
+
+  const log = ss.getSheetByName('入力記録');
+  const rows = log.getRange(2, 1, log.getLastRow() - 1, 15).getValues();
+  const ng = rows.find(r => r[3] === 'HEP37041');
+  check('入力記録にNGと最初の番号が残る', ng && ng[7] === 'NG' && ng[8] === 'HEP37040');
+  check('取消した行は「取消」で残る', ng && ng[11] === '取消' && ng[14] !== '');
+  check('入力記録に担当者・端末', rows.every(r => r[12] === '山田' && r[13] === 'iPad-1'));
+  const over = rows.filter(r => r[3] === 'HEP37023');
+  check('上書き前の値を記録', over.length === 2 && over[1][9] === 34.8);
+
+  // ---- 手動完了（送信なし）
+  await page.click('#btnHome'); await page.waitForTimeout(300);
+  await page.locator('#activeLots .card').first().locator('button').click();
+  check('完了ダイアログに未入力本数', (await page.textContent('#dlgMissing')).includes('未入力'));
+  await page.uncheck('#dSend'); await page.click('#dSave'); await page.waitForTimeout(400);
+  const lots = () => ss.getSheetByName('ロット').getRange(2, 1, 2, 17).getDisplayValues();
+  check('手動完了で状態=完了・PDF保存', lots()[0][6] === '完了' && lots()[0][13] !== '');
+  check('送信しない指定ではメールなし', global.MAILS.length === 0);
+
+  // ---- 全数そろったら自動完了・送信
+  await page.click('#btnStart'); await page.waitForTimeout(100);
+  for (let i = 1; i <= 100; i++) {
+    for (const c of String(36000 + i)) await page.keyboard.press('Numpad' + c);
+    await page.keyboard.press('NumpadEnter');
+    if (i === 50) await page.keyboard.press('NumpadSubtract');
+    else for (const c of '347') await page.keyboard.press('Numpad' + c);
+    await page.keyboard.press('NumpadEnter');
+  }
+  await page.waitForTimeout(3000);
+  check('全数そろうと画面に送信完了', (await page.textContent('#notice')).includes('全数そろいました'));
+  const mail = global.MAILS[0] || {};
+  check('メールを1通送信', global.MAILS.length === 1);
+  check('宛先・件名', mail.to === 'nouhin@example.com' && (mail.sub || '').includes('HEP36001～HEP36100'));
+  check('本文に本数と欠番', (mail.body || '').includes('本数：99本（欠番 1）'));
+  check('本文に空の差し込み行が残らない', !(mail.body || '').includes('耐圧試験日'));
+  check('PDFとCSVを添付', JSON.stringify(mail.att) === JSON.stringify(['成績表_HEP36001-36100.pdf', '成績表_HEP36001-36100.csv']));
+  check('ロットに送信日時・送信先', lots()[1][6] === '完了' && lots()[1][15] !== '' && lots()[1][16] === 'nouhin@example.com');
+
+  fs.mkdirSync(path.join(__dirname, 'out'), { recursive: true });
+  await page.screenshot({ path: path.join(__dirname, 'out', 'home.png'), fullPage: true });
+  await browser.close();
+
+  const failed = results.filter(r => !r.ok).length;
+  console.log('\n' + (results.length - failed) + ' / ' + results.length + ' PASS');
+  process.exit(failed ? 1 : 0);
+})().catch(e => { console.error(e); process.exit(1); });

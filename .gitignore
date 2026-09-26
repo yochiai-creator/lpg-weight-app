@@ -1,0 +1,6 @@
+# clasp のログイン情報（scriptIdは .clasp.json に入れて共有している）
+.clasprc.json
+# テスト用の依存パッケージ（npm install で再取得できる）
+node_modules
+# テストのスクリーンショット
+tools/out/

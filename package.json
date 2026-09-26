@@ -1,0 +1,13 @@
+{
+  "name": "lpg-weight-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LPG容器 質量転記アプリ（GAS）のテスト",
+  "scripts": {
+    "test": "node tools/e2e_test.js",
+    "check": "node tools/syntax_check.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1"
+  }
+}
