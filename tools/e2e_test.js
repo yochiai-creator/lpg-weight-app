@@ -101,7 +101,7 @@ function check(name, ok, detail) {
   await page.click('#cands button[data-mass="34.8"]'); await page.waitForTimeout(400);
   check('マス→候補ボタンのタップ2回で保存', (await page.textContent('#notice')).includes('HEP37065　34.8'));
   await page.click('#grid .cell[data-serial="37065"]'); await page.waitForTimeout(100);
-  check('入力済みのマスは上書き確認', (await page.textContent('#notice')).includes('もう一度タップ'));
+  check('入力済みのマスは上書きの理由を選ぶ', (await page.textContent('#notice')).includes('理由') && !(await page.getAttribute('#dupChoice', 'class')).includes('hidden'));
   await page.click('#grid .cell[data-serial="37065"]'); await page.waitForTimeout(100);
   check('もう一度タップで上書きの質量入力へ', (await page.locator('#cands button').count()) === 10);
   await page.keyboard.press('Escape');
@@ -115,10 +115,27 @@ function check(name, ok, detail) {
   check('前回−0.1のタップで保存', (await page.textContent('#notice')).includes('HEP37067　34.8'));
   check('入力済みは上書き確認', (await keys('7023')).includes('入力済み'));
   check('ダブりは赤い点滅表示', (await page.getAttribute('#notice', 'class')).includes('dup') && (await page.textContent('#notice')).includes('ダブり'));
-  await keys('E.349', 400);
+  await keys('+.349', 400);
   check('ダブったマスは赤枠＋「重」', (await page.getAttribute('#grid .cell[data-serial="37023"]', 'class')).includes('dup') && (await page.textContent('#grid .cell[data-serial="37023"]')).includes('重'));
   check('表の見出しにダブり件数', (await page.textContent('#gridSub')).includes('ダブり 1件'));
   check('開き直してもダブりが残る（サーバー記録）', ctx.getBootstrap().lots.find(l => l.lotId === 'HEP37001').dups['HEP37023'] === 1);
+  // 修正（入力ミスを直す）
+  check('修正: Enterで修正として上書き', (await keys('7024E', 150)).includes('修正'));
+  await keys('0', 400);
+  check('修正は「修」の印', (await page.textContent('#grid .cell[data-serial="37024"]')).includes('修') && !(await page.getAttribute('#grid .cell[data-serial="37024"]', 'class')).includes('dup'));
+  check('表の見出しに修正件数', (await page.textContent('#gridSub')).includes('修正 1件'));
+  // シール違い
+  await keys('7068');
+  await page.click('#btnSeal');
+  check('シール違いボタンで印が付く', (await page.getAttribute('#btnSeal', 'class')).includes('on'));
+  await page.click('#cands button[data-mass="34.8"]'); await page.waitForTimeout(400);
+  check('保存メッセージにシール違い', (await page.textContent('#notice')).includes('【シール違い】'));
+  check('シール違いは「シ」の印', (await page.textContent('#grid .cell[data-serial="37068"]')).includes('シ'));
+  const logRows = () => { const lg = ss.getSheetByName('入力記録'); return lg.getRange(2, 1, lg.getLastRow() - 1, 16).getValues(); };
+  const r24 = logRows().filter(r => r[3] === 'HEP37024').pop(), r23 = logRows().filter(r => r[3] === 'HEP37023').pop(), r68 = logRows().filter(r => r[3] === 'HEP37068').pop();
+  check('入力記録: 修正の区分と上書き前', r24[6] === '修正' && r24[9] === 34.8 && r24[5] === 35);
+  check('入力記録: ダブりの区分', r23[6] === 'ダブり');
+  check('入力記録: 備考にシール違い', r68[15] === 'シール違い' && r68[6] === '通常');
   check('欠番', (await keys('7031-E', 400)).includes('欠番'));
   check('成績表に「欠 番」', slot(30).join('|') === '031|false|欠|番||', slot(30).join('|'));
   check('範囲外の番号はエラー', (await keys('9999')).includes('どのロットの範囲にもありません'));
@@ -147,7 +164,7 @@ function check(name, ok, detail) {
   check('取消した行は「取消」で残る', undone && undone[11] === '取消' && undone[14] !== '');
   check('入力記録に担当者・端末', rows.every(r => r[12] === '山田' && r[13] === 'iPad-1'));
   const over = rows.filter(r => r[3] === 'HEP37023');
-  check('上書き前の値を記録', over.length === 2 && over[1][9] === 34.8);
+  check('上書き前の値を記録', over.length === 2 && over[1][9] === 34.8 && over[1][6] === 'ダブり');
 
   // ---- タブレット縦向き: 上に表・下に入力
   await page.setViewportSize({ width: 820, height: 1180 }); await page.waitForTimeout(200);
