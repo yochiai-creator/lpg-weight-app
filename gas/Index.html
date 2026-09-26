@@ -22,6 +22,8 @@
 
   /* ホーム */
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+  /* 入力中のロット一覧は枠の中でスクロール */
+  .cards.scroll { max-height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 2px 4px 2px 0; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
   .card h3 { margin: 0 0 4px; font-size: 18px; }
   .card .sub { color: var(--muted); font-size: 13px; }
@@ -74,13 +76,18 @@
   .keys { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.7; }
   .keys b { display: inline-block; min-width: 22px; text-align: center; border: 1px solid var(--line); border-radius: 4px; background: #fff; margin-right: 2px; }
 
-  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
-  .tabs button { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 14px; font-size: 14px; color: var(--navy); }
+  /* ロットが多くても1行で横スクロール */
+  .input-layout > .panel { min-width: 0; }
+  .tabs { position: relative; display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    margin-bottom: 10px; padding-bottom: 6px; }
+  .tabs button { flex: 0 0 auto; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 8px 14px;
+    font-size: 14px; color: var(--navy); white-space: nowrap; }
+  .tabs button.done { border-color: var(--ok); color: var(--ok); }
   .tabs button.on { background: var(--navy); color: #fff; }
   .gridhead { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
   .gridhead .count { font-size: 22px; font-weight: 700; }
   .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px 10px; grid-auto-flow: column; grid-template-rows: repeat(20, auto); }
-  .cell { display: flex; justify-content: space-between; border-radius: 6px; padding: 3px 8px; font-size: 15px;
+  .cell { display: flex; justify-content: space-between; border-radius: 6px; padding: 5px 8px; font-size: 15px; cursor: pointer; user-select: none;
     background: #f5f7fb; color: #a3abc0; font-variant-numeric: tabular-nums; border: 1px solid transparent; }
   .cell .m { font-weight: 700; }
   .cell.filled { background: var(--okbg); color: var(--text); }
@@ -101,7 +108,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v7（ロット一括登録）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v8（番号タップ・ロット一覧スクロール）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -118,7 +125,8 @@
   </div>
 
   <h2>入力中のロット</h2>
-  <div class="cards" id="activeLots"></div>
+  <div class="sub" id="activeCount" style="margin:-4px 0 8px;font-size:13px;color:var(--muted)"></div>
+  <div class="cards scroll" id="activeLots"></div>
   <div class="row" style="margin-top:14px">
     <button class="btn big" id="btnStart" disabled>入力を始める</button>
   </div>
@@ -366,6 +374,7 @@
 
   function renderHome() {
     const act = $('activeLots'); act.innerHTML = '';
+    $('activeCount').textContent = S.lots.length ? S.lots.length + 'ロット（枠の中をスクロールできます）' : '';
     if (!S.lots.length) act.innerHTML = '<div class="sub">入力中のロットはありません。下で組容器番号を登録してください。</div>';
     S.lots.forEach(function(l) { act.appendChild(lotCard(l, false)); });
     const dn = $('doneLots'); dn.innerHTML = '';
@@ -651,7 +660,7 @@
     const prev = hit.lot.entries[hit.serial];
     if (prev !== undefined && !S.confirmDup) {
       S.confirmDup = true; S.target = hit;
-      setNotice(label(hit.lot, hit.serial) + ' は入力済み（' + fmtMass(prev) + '）です。上書きするなら Enter', 'warn');
+      setNotice(label(hit.lot, hit.serial) + ' は入力済み（' + fmtMass(prev) + '）です。上書きするなら Enter（またはもう一度タップ）', 'warn');
       beep(false); S.viewLotId = hit.lot.lotId; render(); return;
     }
     S.target = hit;
@@ -848,18 +857,37 @@
     }
   }
 
+  // 一覧のマスをタップしてその容器を選ぶ（入力済みはもう一度タップで上書き）
+  function tapCell(lot, serial) {
+    if (S.stage === 'undo') return;
+    const same = S.target && S.target.lot.lotId === lot.lotId && S.target.serial === serial;
+    if (!same) { S.confirmDup = false; S.ng = false; S.bufActual = ''; S.ngFrom = ''; }
+    S.stage = 'num';
+    S.bufNum = serial.slice(-S.numDigits);
+    goMass({ lot: lot, serial: serial });
+  }
+
+  let lastTabLot = null;
   function renderTabs() {
-    const tabs = $('tabs'); tabs.innerHTML = '';
+    const tabs = $('tabs');
+    const keep = tabs.scrollLeft;
+    tabs.innerHTML = '';
     if (S.lots.length < 2) return;
+    let active = null;
     S.lots.forEach(function(l) {
       const b = document.createElement('button');
       const c = countOf(l);
       b.textContent = l.prefix + l.start + '〜 (' + (c.filled + c.missing) + '/' + c.size + ')';
       b.tabIndex = -1;
-      if (l.lotId === S.viewLotId) b.className = 'on';
+      b.className = (l.lotId === S.viewLotId ? 'on' : '') + (c.filled + c.missing >= c.size ? ' done' : '');
+      if (l.lotId === S.viewLotId) active = b;
       b.onclick = function() { S.viewLotId = l.lotId; b.blur(); render(); };
       tabs.appendChild(b);
     });
+    // 再描画でスクロール位置が戻らないようにし、表示するロットが変わったときだけそのタブを見える位置へ
+    tabs.scrollLeft = keep;
+    if (active && lastTabLot !== S.viewLotId) tabs.scrollLeft = active.offsetLeft - (tabs.clientWidth - active.offsetWidth) / 2;
+    lastTabLot = S.viewLotId;
   }
 
   function renderGrid() {
@@ -887,6 +915,8 @@
       div.innerHTML = '<span></span><span class="m"></span>';
       div.firstChild.textContent = disp3(serial);
       div.lastChild.textContent = m === undefined ? '' : fmtMass(m);
+      div.setAttribute('data-serial', serial);
+      div.onclick = function() { tapCell(l, serial); };
       frag.appendChild(div);
     }
     g.appendChild(frag);

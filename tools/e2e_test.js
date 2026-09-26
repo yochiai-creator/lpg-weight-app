@@ -76,6 +76,16 @@ function check(name, ok, detail) {
   await page.click('#cands button[data-mass="34.9"]'); await page.waitForTimeout(400);
   check('候補ボタンのタップで保存', (await page.textContent('#notice')).includes('HEP37064　34.9'));
   check('保存後は候補ボタンが消える', (await page.locator('#cands button').count()) === 0);
+  await page.click('#grid .cell[data-serial="37065"]'); await page.waitForTimeout(100);
+  check('ロットのタブは1行の横スクロール', await page.evaluate(() => { const t = getComputedStyle(document.getElementById('tabs')); return t.flexWrap === 'nowrap' && t.overflowX === 'auto'; }));
+  check('マスのタップで容器を選べる', (await page.textContent('#resolved')).includes('HEP37065'));
+  await page.click('#cands button[data-mass="34.8"]'); await page.waitForTimeout(400);
+  check('マス→候補ボタンのタップ2回で保存', (await page.textContent('#notice')).includes('HEP37065　34.8'));
+  await page.click('#grid .cell[data-serial="37065"]'); await page.waitForTimeout(100);
+  check('入力済みのマスは上書き確認', (await page.textContent('#notice')).includes('もう一度タップ'));
+  await page.click('#grid .cell[data-serial="37065"]'); await page.waitForTimeout(100);
+  check('もう一度タップで上書きの質量入力へ', (await page.locator('#cands button').count()) === 10);
+  await page.keyboard.press('Escape');
   check('入力済みは上書き確認', (await keys('7023')).includes('入力済み'));
   await keys('E.349');
   check('欠番', (await keys('7031-E', 400)).includes('欠番'));
@@ -140,6 +150,7 @@ function check(name, ok, detail) {
   await page.fill('#fPrefix', 'HEP'); await page.fill('#fStart', '38050'); await page.fill('#fEnd', '38350');
   check('まとめ登録のプレビュー', (await page.textContent('#lotMsg')).includes('HEP38001〜HEP38400') && (await page.textContent('#btnCreate')) === '4ロット登録');
   await page.click('#btnCreate'); await page.waitForTimeout(1500);
+  check('入力中ロット一覧は枠の中でスクロール', await page.evaluate(() => getComputedStyle(document.getElementById('activeLots')).overflowY === 'auto'));
   check('100本ずつ4ロット作成', (await page.textContent('#lotMsg')).includes('4ロット登録しました'));
   check('成績表シートが4枚できる', ['38001-38100', '38101-38200', '38201-38300', '38301-38400'].every(r => ss.getSheetByName('成績表_HEP' + r)));
   await page.fill('#fPrefix', 'HEP'); await page.fill('#fStart', '38201'); await page.fill('#fEnd', '38500');
