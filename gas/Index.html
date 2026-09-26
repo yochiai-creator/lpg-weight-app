@@ -101,7 +101,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v6（候補ボタン対応）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v7（ロット一括登録）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -123,12 +123,12 @@
     <button class="btn big" id="btnStart" disabled>入力を始める</button>
   </div>
 
-  <h2>新しい組容器番号を登録（神鋼機器から受け取った番号）</h2>
+  <h2>新しい組容器番号を登録（範囲を入れると100本ずつまとめて作成）</h2>
   <div class="card">
     <form class="lot" id="lotForm" onsubmit="return false">
       <div><label>記号（例: HRH）</label><input id="fPrefix" autocomplete="off" autocapitalize="characters"></div>
       <div><label>組容器番号 開始</label><input id="fStart" inputmode="numeric" autocomplete="off" placeholder="52001"></div>
-      <div><label>組容器番号 終了</label><input id="fEnd" inputmode="numeric" autocomplete="off" placeholder="自動（+99）"></div>
+      <div><label>組容器番号 終了（まとめて作るとき）</label><input id="fEnd" inputmode="numeric" autocomplete="off" placeholder="空欄なら100本"></div>
       <div><label>容器区分</label>
         <select id="fKind">
           <option>5kg</option><option>8kg</option><option>10kg</option><option>20kg</option>
@@ -375,19 +375,39 @@
     $('btnStart').textContent = S.workers.length && !worker() ? '担当者を選ぶと入力できます' : '入力を始める';
   }
 
-  $('fStart').addEventListener('input', function() {
-    const v = $('fStart').value.trim();
-    $('fEnd').placeholder = /^\d+$/.test(v) ? pad(Number(v) + 99, v.length) + '（自動）' : '自動（+99）';
-  });
+  // 開始〜終了を 001〜100 区切りの100本単位に分けた各ロットの開始番号
+  function lotBlocks(s, e) {
+    const out = [];
+    for (let b = s - ((s - 1) % 100 + 100) % 100; b <= e; b += 100) out.push(b);
+    return out;
+  }
+  function updateLotPreview() {
+    const st = $('fStart').value.trim(), en = $('fEnd').value.trim();
+    $('fEnd').placeholder = /^\d+$/.test(st) ? '空欄なら ' + pad(Number(st) + 99, st.length) + ' まで' : '空欄なら100本';
+    const btn = $('btnCreate');
+    if (/^\d+$/.test(st) && /^\d+$/.test(en) && Number(en) >= Number(st)) {
+      const b = lotBlocks(Number(st), Number(en)), w = Math.max(st.length, en.length), pre = $('fPrefix').value.trim().toUpperCase();
+      btn.textContent = b.length + 'ロット登録';
+      $('lotMsg').className = 'msg';
+      $('lotMsg').textContent = pre + pad(b[0], w) + '〜' + pre + pad(b[b.length - 1] + 99, w) + ' を100本ずつ ' + b.length + 'ロットに分けて作ります';
+    } else {
+      btn.textContent = '登録';
+    }
+  }
+  ['fStart', 'fEnd', 'fPrefix'].forEach(function(id) { $(id).addEventListener('input', updateLotPreview); });
 
   $('btnCreate').onclick = function() {
     const btn = $('btnCreate'); btn.disabled = true;
-    $('lotMsg').className = 'msg'; $('lotMsg').textContent = '登録中…（成績表シートを作成しています）';
-    call('createLot', {
-      prefix: $('fPrefix').value, start: $('fStart').value, end: $('fEnd').value, kind: $('fKind').value
-    }).then(function(lot) {
-      $('lotMsg').textContent = '登録しました: ' + lot.lotId + '（' + lot.sheetName + '）';
-      $('fStart').value = ''; $('fEnd').value = '';
+    const input = { prefix: $('fPrefix').value, start: $('fStart').value, end: $('fEnd').value, kind: $('fKind').value };
+    const bulk = input.end.trim() !== '';
+    $('lotMsg').className = 'msg';
+    $('lotMsg').textContent = '登録中…（成績表シートを作成しています' + (bulk ? '。ロット数が多いと1〜2分かかります' : '') + '）';
+    call(bulk ? 'createLots' : 'createLot', input).then(function(r) {
+      $('lotMsg').textContent = bulk
+        ? r.created.length + 'ロット登録しました' + (r.created.length ? '（' + r.created[0] + (r.created.length > 1 ? '〜' + r.created[r.created.length - 1] : '') + '）' : '') +
+          (r.skipped.length ? '。登録済みのため飛ばしたもの: ' + r.skipped.join('、') : '')
+        : '登録しました: ' + r.lotId + '（' + r.sheetName + '）';
+      $('fStart').value = ''; $('fEnd').value = ''; $('btnCreate').textContent = '登録';
       return loadHome();
     }).catch(function(e) {
       $('lotMsg').className = 'msg err'; $('lotMsg').textContent = errText(e);

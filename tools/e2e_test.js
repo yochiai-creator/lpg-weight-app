@@ -135,6 +135,18 @@ function check(name, ok, detail) {
   check('PDFとCSVを添付', JSON.stringify(mail.att) === JSON.stringify(['成績表_HEP36001-36100.pdf', '成績表_HEP36001-36100.csv']));
   check('ロットに送信日時・送信先', lots()[1][6] === '完了' && lots()[1][15] !== '' && lots()[1][16] === 'nouhin@example.com');
 
+  // ---- 範囲を入れてまとめて登録
+  await page.click('#btnHome'); await page.waitForTimeout(300);
+  await page.fill('#fPrefix', 'HEP'); await page.fill('#fStart', '38050'); await page.fill('#fEnd', '38350');
+  check('まとめ登録のプレビュー', (await page.textContent('#lotMsg')).includes('HEP38001〜HEP38400') && (await page.textContent('#btnCreate')) === '4ロット登録');
+  await page.click('#btnCreate'); await page.waitForTimeout(1500);
+  check('100本ずつ4ロット作成', (await page.textContent('#lotMsg')).includes('4ロット登録しました'));
+  check('成績表シートが4枚できる', ['38001-38100', '38101-38200', '38201-38300', '38301-38400'].every(r => ss.getSheetByName('成績表_HEP' + r)));
+  await page.fill('#fPrefix', 'HEP'); await page.fill('#fStart', '38201'); await page.fill('#fEnd', '38500');
+  await page.click('#btnCreate'); await page.waitForTimeout(1500);
+  const m2 = await page.textContent('#lotMsg');
+  check('登録済みは飛ばして残りだけ作成', m2.includes('1ロット登録しました（HEP38401）') && m2.includes('HEP38201') && m2.includes('HEP38301'));
+
   fs.mkdirSync(path.join(__dirname, 'out'), { recursive: true });
   await page.screenshot({ path: path.join(__dirname, 'out', 'home.png'), fullPage: true });
   await browser.close();

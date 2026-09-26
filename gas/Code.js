@@ -219,6 +219,37 @@ function readProgress_(lot) {
   return result;
 }
 
+// 範囲をまとめて登録: 開始〜終了を 001〜100 区切り（紙の成績表と同じ100本単位）に分けてロットを作る
+// input: { prefix, start, end, kind } → { created: [ロットID], skipped: [既にあったロットID] }
+function createLots(input) {
+  const start = String(input.start || '').trim();
+  const end = String(input.end || '').trim();
+  if (!/^\d{3,8}$/.test(start) || !/^\d{3,8}$/.test(end)) throw new Error('開始・終了は数字で入力してください');
+  const s = Number(start), e = Number(end);
+  if (e < s) throw new Error('終了が開始より小さくなっています');
+  const width = Math.max(start.length, end.length);
+  const blocks = lotBlocks_(s, e);
+  if (blocks.length > 50) throw new Error('一度に作れるのは50ロット（5000本）までです（' + blocks.length + 'ロットになります）');
+  const prefix = String(input.prefix || '').trim().toUpperCase();
+  const created = [], skipped = [];
+  blocks.forEach(function(b) {
+    try {
+      created.push(createLot({ prefix: prefix, start: padSerial_(b, width), end: padSerial_(b + LOT_MAX - 1, width), kind: input.kind }).lotId);
+    } catch (err) {
+      if (/登録済み/.test(err.message)) skipped.push(prefix + padSerial_(b, width));
+      else throw new Error(err.message + '（' + created.length + 'ロット作成済み）');
+    }
+  });
+  return { created: created, skipped: skipped };
+}
+
+// 範囲 s〜e を含む100本単位のロットの開始番号（xx01始まり）
+function lotBlocks_(s, e) {
+  const out = [];
+  for (let b = s - ((s - 1) % LOT_MAX + LOT_MAX) % LOT_MAX; b <= e; b += LOT_MAX) out.push(b);
+  return out;
+}
+
 function createLot(input) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
