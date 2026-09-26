@@ -59,6 +59,13 @@
   .notice.ok { background: var(--okbg); color: var(--ok); }
   .notice.warn { background: var(--warnbg); color: var(--warn); }
   .notice.err { background: var(--ngbg); color: var(--ng); }
+  .cands { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 10px; }
+  .cands button { border: 2px solid var(--line); background: #fff; border-radius: 10px; font-size: 22px; font-weight: 700;
+    padding: 12px 0; color: var(--text); font-variant-numeric: tabular-nums; }
+  .cands button.freq1 { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .cands button.freq2 { background: #dfe6f7; border-color: var(--navy2); color: var(--navy); }
+  .cands button:active { transform: scale(.96); }
+  .cands-note { font-size: 12px; color: var(--muted); margin: -4px 0 8px; }
   .pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
   .pad button { border: 1px solid var(--line); background: #fff; border-radius: 10px; font-size: 26px; padding: 12px 0; color: var(--text); }
   .pad button.fn { font-size: 14px; background: #eef2fa; color: var(--navy); font-weight: 600; }
@@ -158,6 +165,8 @@
         <div class="val" id="valMass"></div>
       </div>
       <div class="notice info" id="notice">容器番号を入力</div>
+      <div class="cands hidden" id="cands"></div>
+      <div class="cands-note hidden" id="candsNote">タップで保存（濃い色ほどこのロットでよく出る値）</div>
       <div class="pad" id="pad">
         <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button><button class="fn" data-k="Backspace">⌫ 1字消す</button>
         <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button><button class="fn" data-k="+">＋ 前回と同じ質量</button>
@@ -482,6 +491,11 @@
   // 1桁入力の範囲: 標準値±0.5kg（10通り）。小数第1位の数字1つで値が1つに決まる。標準がまだなければ null
   function shortWindow(lot) {
     if (!S.auto || !S.short || S.fullMass) return null;
+    return massWindow(lot);
+  }
+
+  // 標準値±0.5kgの10通り（候補ボタン・1桁入力の共通）
+  function massWindow(lot) {
     const med = median(lot);
     if (med === null) return null;
     const lo = Math.round(med * 10) - 5;
@@ -779,10 +793,40 @@
     $('btnNg').classList.toggle('on', S.ng);
     const t = S.target;
     $('resolved').textContent = t ? '→ ' + label(t.lot, t.serial) + '（' + t.lot.sheetName + '）' : '';
-    renderTabs(); renderGrid();
+    renderCands(); renderTabs(); renderGrid();
   }
 
   function esc(s) { return String(s).replace(/[&<>]/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
+
+  // 質量の候補ボタン（標準±0.5kgの10個）。よく出る値ほど濃い色
+  function renderCands() {
+    const box = $('cands');
+    const win = S.stage === 'mass' && S.target && S.bufMass === '' ? massWindow(S.target.lot) : null;
+    box.classList.toggle('hidden', !win);
+    $('candsNote').classList.toggle('hidden', !win);
+    if (!win) { box.innerHTML = ''; return; }
+    const freq = {};
+    Object.keys(S.target.lot.entries).forEach(function(k) {
+      const m = S.target.lot.entries[k];
+      if (m !== MISSING) freq[m.toFixed(1)] = (freq[m.toFixed(1)] || 0) + 1;
+    });
+    const ranked = Object.keys(freq).sort(function(a, b) { return freq[b] - freq[a]; });
+    box.innerHTML = '';
+    for (let t = Math.round(win.lo * 10); t <= Math.round(win.hi * 10); t++) {
+      const v = (t / 10).toFixed(1);
+      const b = document.createElement('button');
+      b.textContent = v; b.tabIndex = -1; b.setAttribute('data-mass', v);
+      const rank = ranked.indexOf(v);
+      if (rank === 0) b.className = 'freq1'; else if (rank > 0 && rank <= 2) b.className = 'freq2';
+      b.onclick = function() {
+        b.blur();
+        if (S.stage !== 'mass') return;
+        S.bufMass = v; S.confirmMassText = null;
+        submitMass();
+      };
+      box.appendChild(b);
+    }
+  }
 
   function renderTabs() {
     const tabs = $('tabs'); tabs.innerHTML = '';

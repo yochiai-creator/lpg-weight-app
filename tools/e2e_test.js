@@ -68,6 +68,14 @@ function check(name, ok, detail) {
   check('1桁「7」で34.7を保存', (await keys('7', 400)).includes('HEP37061　34.7'));
   check('1桁「0」は範囲内の35.0', (await keys('70620', 400)).includes('HEP37062　35.0'));
   check('「.」のあと3桁で範囲外も入力', (await keys('7063.353', 400)).includes('HEP37063　35.3'));
+  await keys('7064');
+  fs.mkdirSync(path.join(__dirname, 'out'), { recursive: true });
+  await page.screenshot({ path: path.join(__dirname, 'out', 'candidates.png') });
+  check('候補ボタンが10個出る', (await page.locator('#cands button').count()) === 10);
+  check('一番多い値のボタンが濃い色', (await page.getAttribute('#cands button.freq1', 'data-mass')) === '34.8');
+  await page.click('#cands button[data-mass="34.9"]'); await page.waitForTimeout(400);
+  check('候補ボタンのタップで保存', (await page.textContent('#notice')).includes('HEP37064　34.9'));
+  check('保存後は候補ボタンが消える', (await page.locator('#cands button').count()) === 0);
   check('入力済みは上書き確認', (await keys('7023')).includes('入力済み'));
   await keys('E.349');
   check('欠番', (await keys('7031-E', 400)).includes('欠番'));
