@@ -61,6 +61,12 @@ function getSpreadsheet_() {
   return ss;
 }
 
+// スプレッドシートのタイムゾーンが日本時間でないと入力日時がずれて表示されるので、日本時間にそろえる
+function ensureTokyoTime_() {
+  const ss = getSpreadsheet_();
+  if (ss.getSpreadsheetTimeZone() !== 'Asia/Tokyo') ss.setSpreadsheetTimeZone('Asia/Tokyo');
+}
+
 function getSheet_(name) {
   const sh = getSpreadsheet_().getSheetByName(name);
   if (!sh) throw new Error('シート「' + name + '」がありません。メニュー「LPG容器検査 > 初期セットアップ」を実行してください。');
@@ -184,6 +190,7 @@ function lotSize_(lot) {
 }
 
 function getBootstrap() {
+  try { ensureTokyoTime_(); } catch (e) { /* 権限がない場合も画面は開く */ }
   const lots = readLots_().filter(function(l) { return l.status === STATUS_ACTIVE; });
   const settings = readSettings_();
   return {

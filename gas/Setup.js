@@ -8,6 +8,7 @@ const TEMPLATE_SOURCE_CANDIDATES = ['検査成績表 (001-100)', '検査成績�
 function setup() {
   const ss = getSpreadsheet_();
   PropertiesService.getScriptProperties().setProperty('SPREADSHEET_ID', ss.getId());
+  if (ss.getSpreadsheetTimeZone() !== 'Asia/Tokyo') ss.setSpreadsheetTimeZone('Asia/Tokyo');
 
   ensureSheet_(ss, SHEET_LOTS, LOT_HEADERS);
   ensureSheet_(ss, SHEET_LOG, LOG_HEADERS);

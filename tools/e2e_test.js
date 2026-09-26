@@ -43,6 +43,7 @@ function check(name, ok, detail) {
   };
 
   // ---- ロット登録
+  check('スプレッドシートを日本時間にそろえる', ss.getSpreadsheetTimeZone() === 'Asia/Tokyo');
   check('ロット登録', (await create('HEP', '37001')).includes('登録しました'));
   await create('HEP', '36001');
   await page.fill('#fPrefix', ''); await page.fill('#fStart', '73301'); await page.selectOption('#fKind', '20kg');

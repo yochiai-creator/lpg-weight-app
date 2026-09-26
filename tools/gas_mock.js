@@ -19,7 +19,7 @@ class Range{constructor(sh,r,c,nr,nc){Object.assign(this,{sh,r,c,nr,nc})}
  setValue(x){return this.setValues([[x]])} clearContent(){for(let i=0;i<this.nr;i++)for(let j=0;j<this.nc;j++)this.sh.set(this.r+i,this.c+j,'');return this}
  setNumberFormat(){return this} insertCheckboxes(){return this} clearDataValidations(){return this}
  setFontWeight(){return this} setBackground(){return this} setFontColor(){return this}}
-class SS{constructor(){this.sheets=[]} getId(){return 'SSID'} getSheetByName(n){return this.sheets.find(s=>s.name===n)||null}
+class SS{constructor(){this.sheets=[];this.tz='America/Los_Angeles'} getSpreadsheetTimeZone(){return this.tz} setSpreadsheetTimeZone(z){this.tz=z} getId(){return 'SSID'} getSheetByName(n){return this.sheets.find(s=>s.name===n)||null}
  insertSheet(n){const s=new Sheet(this,n);this.sheets.push(s);return s} setActiveSheet(){} moveActiveSheet(){} getNumSheets(){return this.sheets.length}}
 function load(){
  const ss=new SS(); const props={};
