@@ -128,10 +128,10 @@
   .cell.dup { border-color: var(--ng); box-shadow: 0 0 0 2px var(--ng) inset; }
   .cell .badge.fix { background: #c77700; }
   .cell .badge.seal { background: #7a5bc4; }
-  .dupchoice { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .dupchoice { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
   .dupchoice button { border: 0; border-radius: 10px; padding: 12px 6px; font-size: 16px; font-weight: 700; color: #fff; line-height: 1.2; }
   .dupchoice button span { display: block; font-size: 11px; font-weight: 400; opacity: .85; }
-  .dupchoice .fix { background: #c77700; } .dupchoice .dup { background: var(--ng); }
+  .dupchoice .fix { background: #c77700; } .dupchoice .del { background: #fff; color: var(--ng); border: 2px solid var(--ng); } .dupchoice .dup { background: var(--ng); }
   #massSheet { display: none; }
   #massSheet.open { display: block; }
   .stale { background: #fff6d6; color: #7a5a00; font-size: 13px; text-align: center; padding: 4px 8px; }
@@ -141,6 +141,8 @@
   .sheet-title { font-size: 15px; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
   .cell.repair { background: #fff1dc; color: #9a5a00; }
   .extra-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .extra-row.has-clear { grid-template-columns: 1fr 1fr 1fr; }
+  .clearbtn { border: 2px solid var(--ng); background: #fff; color: var(--ng); border-radius: 10px; padding: 8px; font-size: 15px; font-weight: 700; }
   .repairbtn { border: 2px solid #c77700; background: #fff; color: #9a5a00; border-radius: 10px; padding: 8px; font-size: 15px; font-weight: 700; }
   .sealbtn { width: 100%; border: 2px dashed #7a5bc4; background: #fff; color: #7a5bc4; border-radius: 10px; padding: 8px; font-size: 15px; font-weight: 700; }
   .sealbtn.on { background: #7a5bc4; color: #fff; border-style: solid; }
@@ -218,7 +220,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v32（起動を高速化）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v33（入力ミスを消す）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -289,6 +291,7 @@
       <div class="dupchoice hidden" id="dupChoice">
         <button class="fix" id="btnFix" tabindex="-1">訂正して上書き<span>入力ミスを直す（Enter・もう一度タップ）</span></button>
         <button class="dup" id="btnDup" tabindex="-1">ダブりとして記録<span>2回流れてきた（＋キー）</span></button>
+        <button class="del" id="btnDel" tabindex="-1">入力を消す<span>ミスを取り消して空に戻す</span></button>
       </div>
       <!-- 質量の入力バー: 容器番号が決まると出る -->
       <div id="massSheet">
@@ -307,6 +310,7 @@
       <div class="extra-row" id="extraRow">
         <button class="sealbtn" id="btnSeal" tabindex="-1">シール違い</button>
         <button class="repairbtn" id="btnRepair" tabindex="-1">修正（品質不良）</button>
+        <button class="clearbtn hidden" id="btnClear" tabindex="-1">この入力を消す</button>
       </div>
       </div>
       <div class="pad" id="pad">
@@ -1142,6 +1146,9 @@
       (S.target.lot.entries[S.target.serial] !== undefined ? '（前は ' + fmtMass(S.target.lot.entries[S.target.serial]) + '）' : '') : '';
     placeSheet();
     $('btnSeal').classList.toggle('on', S.seal);
+    const canClear = sheetOpen && S.target && S.target.lot.entries[S.target.serial] !== undefined;
+    $('btnClear').classList.toggle('hidden', !canClear);
+    $('extraRow').classList.toggle('has-clear', !!canClear);
     renderSteps(); renderCands(); renderTabs(); renderGrid();
   }
 
@@ -1180,6 +1187,31 @@
     if (S.stage !== 'mass') return;
     S.bufMass = REPAIR; S.confirmMassText = null;
     submitMass();
+  };
+
+  // 入力ミスを消す（そのマスを空に戻す）
+  function clearEntryOf(lot, serial) {
+    const key = lot.lotId + '|' + serial;
+    if (S.pending[key]) { setNotice('保存中です。少し待ってからもう一度押してください', 'warn'); beep(false); render(); return; }
+    if (!confirm(label(lot, serial) + '（' + fmtMass(lot.entries[serial]) + '）の入力を消して、空に戻します。よろしいですか？')) return;
+    setNotice('消しています…', 'info'); render();
+    call('clearEntry', { lotId: lot.lotId, serial: serial }).then(function() {
+      delete lot.entries[serial];
+      if (lot.dups) delete lot.dups[label(lot, serial)];
+      if (lot.seals) delete lot.seals[label(lot, serial)];
+      S.localOps = S.localOps.filter(function(op) { return !(op.lotId === lot.lotId && String(op.serial) === String(serial)); });
+      S.saved = S.saved.filter(function(x) { return !(x.lotId === lot.lotId && String(x.serial) === String(serial)); });
+      if (S.lastKey === key) S.lastKey = null;
+      resetEntry('消しました: ' + label(lot, serial) + ' → 次の容器番号', 'ok');
+    }).catch(function(e) { setNotice(errText(e), 'err'); beep(false); render(); });
+  }
+  $('btnDel').onclick = function() {
+    this.blur();
+    if (S.confirmDup && S.target) clearEntryOf(S.target.lot, S.target.serial);
+  };
+  $('btnClear').onclick = function() {
+    this.blur();
+    if (S.stage === 'mass' && S.target) clearEntryOf(S.target.lot, S.target.serial);
   };
 
   $('steps').addEventListener('click', function(ev) {
@@ -1223,6 +1255,8 @@
   // 一覧のマスをタップしてその容器を選ぶ（入力済みはもう一度タップで上書き）
   function tapCell(lot, serial) {
     if (S.stage === 'undo') return;
+    // 底黒の〇済みのマスは質量バーが出ないので、タップで消せるようにする
+    if (lot.spec === SOKO && lot.entries[serial] === CIRCLE) { clearEntryOf(lot, serial); return; }
     const same = S.target && S.target.lot.lotId === lot.lotId && S.target.serial === serial;
     if (!same) { S.confirmDup = false; S.ng = false; S.bufActual = ''; S.ngFrom = ''; }
     S.stage = 'num';

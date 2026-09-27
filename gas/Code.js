@@ -527,6 +527,38 @@ function undoEntry(recordId) {
   }
 }
 
+// 入力ミスを消す: その容器のマスを空に戻し、入力記録の有効な行をすべて「取消」にする（行は履歴として残す）
+function clearEntry(input) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const lot = findLot_(input.lotId);
+    const serial = String(input.serial);
+    const idx = Number(serial) - Number(lot.start);
+    if (!(idx >= 0 && idx <= Number(lot.end) - Number(lot.start))) throw new Error('このロットの番号ではありません: ' + serial);
+    const pos = slotPosition_(idx);
+    getSheet_(lot.sheetName).getRange(pos.row, pos.numberCol + 1, 1, 5).setValues([massCells_(null)]);
+    const log = getSheet_(SHEET_LOG);
+    const label = lot.prefix + serial;
+    let marked = 0;
+    if (log.getLastRow() >= 2) {
+      const last = log.getLastRow(), from = Math.max(2, last - 5000);
+      const v = log.getRange(from, 1, last - from + 1, 12).getDisplayValues();
+      const now = new Date();
+      v.forEach(function(r, i) {
+        if (r[2] === lot.lotId && r[3] === label && r[11] === '有効') {
+          log.getRange(from + i, 12).setValue('取消');
+          log.getRange(from + i, 15).setValue(now);
+          marked++;
+        }
+      });
+    }
+    return { lotId: lot.lotId, serial: serial, marked: marked };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // 印（ダブり・シール違い）の数: { ロットID: { dups: {容器番号: 回数}, seals: {...} } }
 // 入力記録の直近5000行の有効な行から数える（区分が「通常」のままの上書きは以前の記録なのでダブり扱い）
 function readMarksAll_() {

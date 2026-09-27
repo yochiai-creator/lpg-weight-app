@@ -177,6 +177,21 @@ function check(name, ok, detail) {
   const over = rows.filter(r => r[3] === 'HEP37023');
   check('上書き前の値を記録', over.length === 2 && over[1][9] === 34.8 && over[1][6] === 'ダブり');
 
+  // ---- 入力ミスを消す
+  await page.click('#grid .cell[data-serial="37090"]'); await page.waitForTimeout(150);
+  check('空のマスには「この入力を消す」を出さない', !(await page.isVisible('#btnClear')));
+  await page.click('#cands button >> nth=4'); await page.waitForTimeout(400);
+  const hasBefore = ctx.getBootstrap().lots.find(l => l.lotId === 'HEP37001').entries['37090'] !== undefined;
+  await page.click('#grid .cell[data-serial="37090"]'); await page.waitForTimeout(150);
+  await page.screenshot({ path: path.join(__dirname, 'out', 'clear.png') });
+  check('入力済みのマスをタップすると「入力を消す」が出る', hasBefore && await page.isVisible('#btnDel'));
+  await page.click('#btnDel'); await page.waitForTimeout(400);
+  check('消すとマスが空に戻る', ctx.getBootstrap().lots.find(l => l.lotId === 'HEP37001').entries['37090'] === undefined && !(await page.textContent('#grid .cell[data-serial="37090"]')).includes('W'));
+  const hepSh = ss.getSheetByName('成績表_HEP37001-37100');
+  check('消すと成績表の質量欄も空', hepSh.getRange(5 + 89 % 20, 2 + Math.floor(89 / 20) * 6, 1, 6).getValues()[0].slice(2).join('') === ',');
+  const cl = ss.getSheetByName('入力記録').getRange(2, 1, ss.getSheetByName('入力記録').getLastRow() - 1, 16).getValues().filter(r => r[3] === 'HEP37090');
+  check('消した記録は「取消」で残る', cl.length >= 1 && cl.every(r => r[11] === '取消'));
+
   // ---- タブレット縦向き: 上に表・下に入力
   await page.setViewportSize({ width: 820, height: 1180 }); await page.waitForTimeout(200);
   await keys('7070');
