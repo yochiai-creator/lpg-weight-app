@@ -144,7 +144,9 @@ function check(name, ok, detail) {
   await page.click('#cands button[data-mass="34.8"]'); await page.waitForTimeout(400);
   check('保存メッセージにシール違い', (await page.textContent('#notice')).includes('【シール違い】'));
   check('シール違いは「シ」の印', (await page.textContent('#grid .cell[data-serial="37068"]')).includes('シ'));
-  const logRows = () => { const lg = ss.getSheetByName('入力記録'); return lg.getRange(2, 1, lg.getLastRow() - 1, 16).getValues(); };
+  const logRows = () => { const lg = ss.getSheetByName('入力記録'); return lg.getRange(2, 1, lg.getLastRow() - 1, 18).getValues(); };
+  { const r = logRows().find(x => x[3] === 'HEP37024'); check('入力記録にグループNoと容器区分（HEP37024・50kg → 371）', r && r[16] === 371 && r[17] === '50kg', r && r.slice(16).join('|')); }
+  { const g = ctx.groupNoOf_; check('グループNoの計算（20kg 59701→195・62050→241 ／ 50kg 59800→598）', g('20kg', '59701') === 195 && g('20kg', '62050') === 241 && g('8kg', '50051') === 2 && g('50kg S付', '59800') === 598); }
   const r69 = logRows().filter(r => r[3] === 'HEP37069').pop();
   check('入力記録: 修正の区分（質量なし）', r69[6] === '修正' && r69[5] === '');
   const r24 = logRows().filter(r => r[3] === 'HEP37024').pop(), r23 = logRows().filter(r => r[3] === 'HEP37023').pop(), r68 = logRows().filter(r => r[3] === 'HEP37068').pop();

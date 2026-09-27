@@ -11,7 +11,8 @@ const LOT_HEADERS = ['ロットID', '登録日時', '記号', '開始番号', '�
   '成績表シート', '代表容器番号', '耐圧試験日', '全増加(cm3)', '恒久増加(cm3)', '恒久増加率(%)',
   'PDF', '登録者', '送信日時', '送信先', '仕様'];
 const LOG_HEADERS = ['記録ID', '入力日時', 'ロットID', '容器番号', '表示番号', '質量(kg)', '区分',
-  '一致結果', '入力番号(NG時)', '上書き前', 'Googleアカウント', '状態', '入力者', '端末', '取消日時', '備考'];
+  '一致結果', '入力番号(NG時)', '上書き前', 'Googleアカウント', '状態', '入力者', '端末', '取消日時', '備考',
+  'グループNo', '容器区分'];
 
 const STATUS_ACTIVE = '入力中';
 const STATUS_DONE = '完了';
@@ -177,6 +178,21 @@ function ensureLogHeaders_() {
       formatLogMass_(log, 2, log.getMaxRows() - 1);
       props.setProperty('LOG_MASS_FORMAT', '0.0');
     }
+    // これまでの記録にもグループNo・容器区分を入れる（1回だけ）
+    if (props.getProperty('LOG_GROUP_FILLED') !== '1' && log.getLastRow() > 1) {
+      const kinds = {};
+      readLots_().forEach(function(l) { kinds[l.lotId] = l; });
+      const n = log.getLastRow() - 1;
+      const ids = log.getRange(2, 3, n, 2).getDisplayValues();
+      const out = log.getRange(2, 17, n, 2).getValues();
+      ids.forEach(function(r, i) {
+        const l = kinds[r[0]];
+        if (!l || out[i][1] !== '') return;
+        out[i] = [groupNoOf_(l.kind, String(r[1]).slice(l.prefix.length)), l.kind];
+      });
+      log.getRange(2, 17, n, 2).setValues(out);
+      props.setProperty('LOG_GROUP_FILLED', '1');
+    }
   }
   const lotsSh = ss.getSheetByName(SHEET_LOTS);
   if (lotsSh) {
@@ -201,6 +217,15 @@ function userEmail_() {
 }
 
 // ---------- 純粋ロジック（テスト可能） ----------
+
+// グループNo（容器1本ごと）: 5kg・8kg・20kg は50本ごと（50001〜50050 → 1）、30kg・50kg系は100本ごと（59701〜59800 → 598）
+function groupNoOf_(kind, serial) {
+  const k = String(kind || '').trim(), n = Number(serial);
+  if (!(n > 0)) return '';
+  if (/^(30kg|50kg)/.test(k)) return Math.floor((n - 1) / 100) + 1;
+  if (/^(5kg|8kg|20kg)/.test(k)) return n >= 50001 ? Math.floor((n - 50001) / 50) + 1 : '';
+  return '';
+}
 
 // 容器番号の下3桁（1000番目は "000"）。成績表の「容器番号」欄に表示する値。
 function displayNumber_(serial) {
@@ -522,7 +547,8 @@ function recordEntry(payload) {
     logSh.appendRow([recordId, new Date(), lot.lotId, "'" + lot.prefix + serial,
       "'" + displayNumber_(serial), typeof mass === 'number' ? mass : '', kind,
       payload.ngInput ? 'NG' : 'OK', payload.ngInput ? "'" + payload.ngInput : '',
-      prev === null ? '' : prev, userEmail_(), '有効', String(payload.worker || ''), String(payload.device || ''), '', note]);
+      prev === null ? '' : prev, userEmail_(), '有効', String(payload.worker || ''), String(payload.device || ''), '', note,
+      groupNoOf_(lot.kind, serial), lot.kind || '']);
     formatLogMass_(logSh, logSh.getLastRow(), 1);
     const result = { recordId: recordId, clientId: payload.clientId, serial: serial, mass: mass, prev: prev, kind: kind, note: note };
 
