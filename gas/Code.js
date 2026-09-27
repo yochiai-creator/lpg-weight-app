@@ -48,7 +48,15 @@ function doGet() {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
+// シートの整備（タイムゾーン・列見出し・シート名・見出しの文字サイズ）。1つが失敗しても残りは必ず行う
+function ensureSheets_() {
+  [ensureTokyoTime_, ensureLogHeaders_, ensureTitleFont_].forEach(function(fn) {
+    try { fn(); } catch (e) { console.error('シートの整備に失敗: ' + (fn.name || '') + ' ' + e.message); }
+  });
+}
+
 function onOpen() {
+  ensureSheets_();
   SpreadsheetApp.getUi().createMenu('LPG容器検査')
     .addItem('初期セットアップ', 'setup')
     .addItem('入力画面のURLを表示', 'showWebAppUrl')
@@ -251,7 +259,7 @@ function lotSize_(lot) {
 }
 
 function getBootstrap() {
-  try { ensureTokyoTime_(); ensureLogHeaders_(); ensureTitleFont_(); } catch (e) { /* 権限がない場合も画面は開く */ }
+  ensureSheets_();
   const lots = readLots_().filter(function(l) { return l.status === STATUS_ACTIVE; });
   const settings = readSettings_();
   const marks = readMarksAll_();
