@@ -223,7 +223,10 @@ function check(name, ok, detail) {
   check('まとめ登録のプレビュー', (await page.textContent('#lotMsg')).includes('HEP38001〜HEP38400') && (await page.textContent('#btnCreate')) === '4ロット登録');
   await page.click('#btnCreate'); await page.waitForTimeout(1500);
   check('入力中ロット一覧は枠の中でスクロール', await page.evaluate(() => getComputedStyle(document.getElementById('activeLots')).overflowY === 'auto'));
-  check('成績表の見出しは文字サイズ11', ss.getSheetByName('成績表_HEP38001-38100').getRange('A1').getFontSize() === 11 && ss.getSheetByName('書式_成績表').getRange('A1').getFontSize() === 11);
+  const titleOk = (sheet) => { const rt = ss.getSheetByName(sheet).getRange('A1').getRichText(); if (!rt) return false;
+    const cut = rt.text.indexOf('※'); return rt.runs.some(r => r.a === 0 && r.z === cut && r.size === 15 && r.bold) && rt.runs.some(r => r.a === cut && r.z === rt.text.length && r.size === 11 && r.bold); };
+  check('見出し: タイトル15pt・※の行11pt（新しい成績表）', titleOk('成績表_HEP38001-38100'));
+  check('見出し: 書式シートも同じ', titleOk('書式_成績表'));
   check('100本ずつ4ロット作成', (await page.textContent('#lotMsg')).includes('4ロット登録しました'));
   check('成績表シートが4枚できる', ['38001-38100', '38101-38200', '38201-38300', '38301-38400'].every(r => ss.getSheetByName('成績表_HEP' + r)));
   await page.fill('#fPrefix', 'HEP'); await page.fill('#fStart', '38201'); await page.fill('#fEnd', '38500');

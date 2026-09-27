@@ -30,7 +30,9 @@ const BLOCK_WIDTH = 6;
 const BLOCKS = 5;
 const LOT_MAX = GRID_ROWS * BLOCKS; // 100本
 
-const TITLE_FONT_SIZE = 11;   // 成績表の見出し（A1: 高圧ガス容器検査成績表／※容器の製造年月を…）の文字サイズ
+// 成績表の見出し（A1）の文字サイズ: 1行目「高圧ガス容器検査成績表」と、「※容器の製造年月を…」の行を分けて設定
+const TITLE_FONT_SIZE = 15;   // 高圧ガス容器検査成績表（元Excelと同じ）
+const NOTE_FONT_SIZE = 11;    // ※容器の製造年月を目視確認の上、容器番号前にチェックを入れる
 
 const MASS_MIN = 0.1;
 const MASS_MAX = 99.9;
@@ -73,16 +75,29 @@ function ensureTokyoTime_() {
   if (ss.getSpreadsheetTimeZone() !== 'Asia/Tokyo') ss.setSpreadsheetTimeZone('Asia/Tokyo');
 }
 
-// 書式シートと作成済みの成績表の見出しの文字サイズをそろえる（サイズを変えたときに1回だけ全シートに適用）
+// 見出しセルを「タイトル15pt・※の行11pt（どちらも太字）」にする
+function applyTitleStyle_(range) {
+  const text = String(range.getValue());
+  const cut = text.indexOf('※');
+  if (cut < 0) { range.setFontSize(TITLE_FONT_SIZE); return; }
+  const style = function(size) { return SpreadsheetApp.newTextStyle().setFontSize(size).setBold(true).build(); };
+  range.setRichTextValue(SpreadsheetApp.newRichTextValue().setText(text)
+    .setTextStyle(0, cut, style(TITLE_FONT_SIZE))
+    .setTextStyle(cut, text.length, style(NOTE_FONT_SIZE))
+    .build());
+}
+
+// 書式シートと作成済みの成績表の見出しをそろえる（サイズを変えたときに1回だけ全シートに適用）
 function ensureTitleFont_() {
   const props = PropertiesService.getScriptProperties();
   const key = 'TITLE_FONT_SIZE_APPLIED';
-  if (props.getProperty(key) === String(TITLE_FONT_SIZE)) return;
+  const want = TITLE_FONT_SIZE + '/' + NOTE_FONT_SIZE;
+  if (props.getProperty(key) === want) return;
   getSpreadsheet_().getSheets().forEach(function(sh) {
     const n = sh.getName();
-    if (n === SHEET_TEMPLATE || n.indexOf(REPORT_PREFIX) === 0) sh.getRange('A1').setFontSize(TITLE_FONT_SIZE);
+    if (n === SHEET_TEMPLATE || n.indexOf(REPORT_PREFIX) === 0) applyTitleStyle_(sh.getRange('A1'));
   });
-  props.setProperty(key, String(TITLE_FONT_SIZE));
+  props.setProperty(key, want);
 }
 
 // 後から増えた入力記録の列（備考など）の見出しを足す
@@ -335,7 +350,7 @@ function createReportSheet_(lot) {
 
   const width = lot.start.length;
   const endLabel = lot.prefix + lot.end;
-  sh.getRange('A1').setFontSize(TITLE_FONT_SIZE);
+  applyTitleStyle_(sh.getRange('A1'));
   sh.getRange('V2').setValue(lot.prefix + lot.start + ' ～ ' + endLabel);
   sh.getRange('H3').setValue(lot.prefix);
 
