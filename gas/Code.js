@@ -10,9 +10,15 @@ const REPORT_PREFIX = '成績表_';
 const LOT_HEADERS = ['ロットID', '登録日時', '記号', '開始番号', '終了番号', '容器区分', '状態',
   '成績表シート', '代表容器番号', '耐圧試験日', '全増加(cm3)', '恒久増加(cm3)', '恒久増加率(%)',
   'PDF', '登録者', '送信日時', '送信先', '仕様'];
-const LOG_HEADERS = ['記録ID', '入力日時', 'ロットID', '容器番号', '表示番号', '質量(kg)', '区分',
-  '一致結果', '入力番号(NG時)', '上書き前', 'Googleアカウント', '状態', '入力者', '端末', '取消日時', '備考',
-  'グループNo', '容器区分'];
+const LOG_HEADERS = ['記録ID', '入力日時', 'ロットID', 'グループNo', '容器番号', '容器区分', '表示番号', '質量(kg)', '区分',
+  '一致結果', '入力番号(NG時)', '上書き前', 'Googleアカウント', '状態', '入力者', '端末', '取消日時', '備考'];
+// 入力記録の列の位置（0始まり）。列の並びを変えても処理はこの表で追従する
+const LC = {};
+LOG_HEADERS.forEach(function(h, i) { LC[h] = i; });
+const LC_ID = LC['記録ID'], LC_TIME = LC['入力日時'], LC_LOT = LC['ロットID'], LC_GROUP = LC['グループNo'],
+  LC_SERIAL = LC['容器番号'], LC_KINDSIZE = LC['容器区分'], LC_DISP = LC['表示番号'], LC_MASS = LC['質量(kg)'],
+  LC_KIND = LC['区分'], LC_MATCH = LC['一致結果'], LC_NG = LC['入力番号(NG時)'], LC_PREV = LC['上書き前'],
+  LC_STATUS = LC['状態'], LC_WORKER = LC['入力者'], LC_UNDO = LC['取消日時'], LC_NOTE = LC['備考'];
 
 const STATUS_ACTIVE = '入力中';
 const STATUS_DONE = '完了';
@@ -160,8 +166,29 @@ function ensureTitleFont_() {
 
 // 入力記録の質量(kg)・上書き前を小数1桁で表示（35 → 35.0）
 function formatLogMass_(log, fromRow, rows) {
-  log.getRange(fromRow, 6, rows, 1).setNumberFormat('0.0');
-  log.getRange(fromRow, 10, rows, 1).setNumberFormat('0.0');
+  log.getRange(fromRow, LC_MASS + 1, rows, 1).setNumberFormat('0.0');
+  log.getRange(fromRow, LC_PREV + 1, rows, 1).setNumberFormat('0.0');
+}
+
+// v43までの並び（…容器番号, 表示番号, … 備考, グループNo, 容器区分）なら、
+// グループNoを容器番号の前、容器区分を容器番号の後ろへ列ごと移す（書式もそのまま動く）
+// held: 呼び出し元がすでにスクリプトロックを持っている（記録の書き込み中など）
+function moveLogColumns_(log, held) {
+  if (log.getRange(1, 4).getValue() !== '容器番号') return;
+  const lock = held ? null : LockService.getScriptLock();
+  if (lock) lock.waitLock(20000);
+  try {
+    // 同時に開いた端末と二重に動かさないよう、ロックを取ってから確かめ直す
+    const head = log.getRange(1, 1, 1, Math.max(log.getLastColumn(), 18)).getValues()[0];
+    if (head[3] !== '容器番号') return;
+    if (head[16] !== 'グループNo') log.getRange(1, 17).setValue('グループNo');
+    if (head[17] !== '容器区分') log.getRange(1, 18).setValue('容器区分');
+    log.moveColumns(log.getRange(1, 17), 4);   // グループNo → D列（容器番号は E列へ）
+    log.moveColumns(log.getRange(1, 18), 6);   // 容器区分 → F列（容器番号の後ろ）
+    SpreadsheetApp.flush();
+  } finally {
+    if (lock) lock.releaseLock();
+  }
 }
 
 // 入力記録の列見出しを最新にそろえる（列の追加・名前の変更。データの行はそのまま）
@@ -170,6 +197,7 @@ function ensureLogHeaders_() {
   const ss = getSpreadsheet_();
   const log = ss.getSheetByName(SHEET_LOG);
   if (log) {
+    moveLogColumns_(log);
     const cur = log.getRange(1, 1, 1, LOG_HEADERS.length).getValues()[0];
     LOG_HEADERS.forEach(function(h, i) { if (cur[i] !== h) log.getRange(1, i + 1).setValue(h); });
     // これまでの記録の質量も小数1桁表示に（1回だけ）
@@ -179,19 +207,22 @@ function ensureLogHeaders_() {
       props.setProperty('LOG_MASS_FORMAT', '0.0');
     }
     // これまでの記録にもグループNo・容器区分を入れる（1回だけ。v44で早見表のルールに合わせて入れ直し）
-    if (props.getProperty('LOG_GROUP_FILLED') !== '3' && log.getLastRow() > 1) {
+    if (props.getProperty('LOG_GROUP_FILLED') !== '4' && log.getLastRow() > 1) {
       const kinds = {};
       readLots_().forEach(function(l) { kinds[l.lotId] = l; });
       const n = log.getLastRow() - 1;
-      const ids = log.getRange(2, 3, n, 2).getDisplayValues();
-      const out = log.getRange(2, 17, n, 2).getValues();
-      ids.forEach(function(r, i) {
-        const l = kinds[r[0]];
+      const v = log.getRange(2, 1, n, LOG_HEADERS.length).getDisplayValues();
+      const grp = log.getRange(2, LC_GROUP + 1, n, 1).getValues();
+      const ks = log.getRange(2, LC_KINDSIZE + 1, n, 1).getValues();
+      v.forEach(function(r, i) {
+        const l = kinds[r[LC_LOT]];
         if (!l) return;
-        out[i] = [groupNoOf_(l.kind, String(r[1]).slice(l.prefix.length)), l.kind];
+        grp[i] = [groupNoOf_(l.kind, String(r[LC_SERIAL]).slice(l.prefix.length))];
+        ks[i] = [l.kind];
       });
-      log.getRange(2, 17, n, 2).setValues(out);
-      props.setProperty('LOG_GROUP_FILLED', '3');
+      log.getRange(2, LC_GROUP + 1, n, 1).setValues(grp);
+      log.getRange(2, LC_KINDSIZE + 1, n, 1).setValues(ks);
+      props.setProperty('LOG_GROUP_FILLED', '4');
     }
   }
   const lotsSh = ss.getSheetByName(SHEET_LOTS);
@@ -545,11 +576,16 @@ function recordEntry(payload) {
     if (mass === CIRCLE) kind = SPEC_SOKO;
     const note = payload.seal ? NOTE_SEAL : '';
     const logSh = getSheet_(SHEET_LOG);
-    logSh.appendRow([recordId, new Date(), lot.lotId, "'" + lot.prefix + serial,
-      "'" + displayNumber_(serial), typeof mass === 'number' ? mass : '', kind,
-      payload.ngInput ? 'NG' : 'OK', payload.ngInput ? "'" + payload.ngInput : '',
-      prev === null ? '' : prev, userEmail_(), '有効', String(payload.worker || ''), String(payload.device || ''), '', note,
-      groupNoOf_(lot.kind, serial), lot.kind || '']);
+    moveLogColumns_(logSh, true);   // 古い並びのまま新しい並びの行を書かないように
+    const row = {
+      '記録ID': recordId, '入力日時': new Date(), 'ロットID': lot.lotId, 'グループNo': groupNoOf_(lot.kind, serial),
+      '容器番号': "'" + lot.prefix + serial, '容器区分': lot.kind || '', '表示番号': "'" + displayNumber_(serial),
+      '質量(kg)': typeof mass === 'number' ? mass : '', '区分': kind,
+      '一致結果': payload.ngInput ? 'NG' : 'OK', '入力番号(NG時)': payload.ngInput ? "'" + payload.ngInput : '',
+      '上書き前': prev === null ? '' : prev, 'Googleアカウント': userEmail_(), '状態': '有効',
+      '入力者': String(payload.worker || ''), '端末': String(payload.device || ''), '取消日時': '', '備考': note
+    };
+    logSh.appendRow(LOG_HEADERS.map(function(h) { return row[h]; }));
     formatLogMass_(logSh, logSh.getLastRow(), 1);
     const result = { recordId: recordId, clientId: payload.clientId, serial: serial, mass: mass, prev: prev, kind: kind, note: note };
 
@@ -579,21 +615,22 @@ function undoEntry(recordId) {
   lock.waitLock(20000);
   try {
     const log = getSheet_(SHEET_LOG);
+    moveLogColumns_(log, true);
     const last = log.getLastRow();
     const from = Math.max(2, last - 500);
     if (last < 2) throw new Error('取り消す記録がありません');
     const values = log.getRange(from, 1, last - from + 1, LOG_HEADERS.length).getDisplayValues();
     for (let i = values.length - 1; i >= 0; i--) {
-      if (values[i][0] !== recordId) continue;
-      if (values[i][11] !== '有効') throw new Error('既に取り消し済みです');
-      const lot = findLot_(values[i][2]);
-      const serial = values[i][3].slice(lot.prefix.length);
-      const prevText = values[i][9];
+      if (values[i][LC_ID] !== recordId) continue;
+      if (values[i][LC_STATUS] !== '有効') throw new Error('既に取り消し済みです');
+      const lot = findLot_(values[i][LC_LOT]);
+      const serial = values[i][LC_SERIAL].slice(lot.prefix.length);
+      const prevText = values[i][LC_PREV];
       const prev = prevText === '' ? null : (prevText === MISSING || prevText === REPAIR || prevText === CIRCLE ? prevText : Number(prevText));
       const pos = slotPosition_(Number(serial) - Number(lot.start));
       getSheet_(lot.sheetName).getRange(pos.row, pos.numberCol + 1, 1, 5).setValues([massCells_(prev)]);
-      log.getRange(from + i, 12).setValue('取消');
-      log.getRange(from + i, 15).setValue(new Date());
+      log.getRange(from + i, LC_STATUS + 1).setValue('取消');
+      log.getRange(from + i, LC_UNDO + 1).setValue(new Date());
       return { lotId: lot.lotId, serial: serial, mass: prev };
     }
     throw new Error('記録が見つかりません: ' + recordId);
@@ -614,16 +651,17 @@ function clearEntry(input) {
     const pos = slotPosition_(idx);
     getSheet_(lot.sheetName).getRange(pos.row, pos.numberCol + 1, 1, 5).setValues([massCells_(null)]);
     const log = getSheet_(SHEET_LOG);
+    moveLogColumns_(log, true);
     const label = lot.prefix + serial;
     let marked = 0;
     if (log.getLastRow() >= 2) {
       const last = log.getLastRow(), from = Math.max(2, last - 5000);
-      const v = log.getRange(from, 1, last - from + 1, 12).getDisplayValues();
+      const v = log.getRange(from, 1, last - from + 1, LOG_HEADERS.length).getDisplayValues();
       const now = new Date();
       v.forEach(function(r, i) {
-        if (r[2] === lot.lotId && r[3] === label && r[11] === '有効') {
-          log.getRange(from + i, 12).setValue('取消');
-          log.getRange(from + i, 15).setValue(now);
+        if (r[LC_LOT] === lot.lotId && r[LC_SERIAL] === label && r[LC_STATUS] === '有効') {
+          log.getRange(from + i, LC_STATUS + 1).setValue('取消');
+          log.getRange(from + i, LC_UNDO + 1).setValue(now);
           marked++;
         }
       });
@@ -647,9 +685,9 @@ function readMarksAll_() {
     m[key][serial] = (m[key][serial] || 0) + 1;
   };
   log.getRange(from, 1, last - from + 1, width).getDisplayValues().forEach(function(r) {
-    if (r[11] !== '有効') return;
-    if (r[6] === KIND_DUP || (r[9] !== '' && r[6] === '通常')) bump(r[2], 'dups', r[3]);
-    if (r[15] === NOTE_SEAL) bump(r[2], 'seals', r[3]);
+    if (r[LC_STATUS] !== '有効') return;
+    if (r[LC_KIND] === KIND_DUP || (r[LC_PREV] !== '' && r[LC_KIND] === '通常')) bump(r[LC_LOT], 'dups', r[LC_SERIAL]);
+    if (r[LC_NOTE] === NOTE_SEAL) bump(r[LC_LOT], 'seals', r[LC_SERIAL]);
   });
   return out;
 }
@@ -732,11 +770,12 @@ function deleteLot(lotId) {
     getSheet_(SHEET_LOTS).deleteRow(lot.row);
     let marked = 0;
     const log = ss.getSheetByName(SHEET_LOG);
+    if (log) moveLogColumns_(log, true);
     if (log && log.getLastRow() >= 2) {
       const last = log.getLastRow(), from = Math.max(2, last - 5000);
-      const v = log.getRange(from, 1, last - from + 1, 12).getValues();
+      const v = log.getRange(from, 1, last - from + 1, LOG_HEADERS.length).getValues();
       v.forEach(function(r, i) {
-        if (r[2] === lot.lotId && r[11] === '有効') { log.getRange(from + i, 12).setValue('削除'); marked++; }
+        if (r[LC_LOT] === lot.lotId && r[LC_STATUS] === '有効') { log.getRange(from + i, LC_STATUS + 1).setValue('削除'); marked++; }
       });
     }
     return { lotId: lot.lotId, marked: marked };

@@ -104,7 +104,7 @@ function buildLotCsv_(lot) {
   const latest = {};
   if (log.getLastRow() >= 2) {
     log.getRange(2, 1, log.getLastRow() - 1, Math.min(log.getLastColumn(), LOG_HEADERS.length)).getDisplayValues().forEach(function(r) {
-      if (r[2] === lot.lotId && r[11] === '有効') latest[r[3]] = r;
+      if (r[LC_LOT] === lot.lotId && r[LC_STATUS] === '有効') latest[r[LC_SERIAL]] = r;
     });
   }
   const rows = [['容器番号', '表示番号', '質量(kg)', '区分', '一致結果', '入力日時', '入力者', '備考']];
@@ -112,7 +112,7 @@ function buildLotCsv_(lot) {
   for (let n = Number(lot.start); n <= Number(lot.end); n++) {
     const serial = lot.prefix + padSerial_(n, width);
     const r = latest[serial];
-    rows.push(r ? [serial, r[4], r[5], r[6], r[7], r[1], r[12], r[15] || ''] : [serial, displayNumber_(n), '', '未入力', '', '', '', '']);
+    rows.push(r ? [serial, r[LC_DISP], r[LC_MASS], r[LC_KIND], r[LC_MATCH], r[LC_TIME], r[LC_WORKER], r[LC_NOTE] || ''] : [serial, displayNumber_(n), '', '未入力', '', '', '', '']);
   }
   const csv = rows.map(function(r) {
     return r.map(function(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(',');

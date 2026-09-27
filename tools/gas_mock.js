@@ -13,6 +13,7 @@ class Sheet{constructor(ss,name){this.ss=ss;this.name=name;this.cells={};this.fo
  appendRow(vals){const r=this.getLastRow()+1;vals.forEach((v,i)=>{if(typeof v==='string'&&v[0]==="'")v=v.slice(1);this.set(r,i+1,v)})}
  copyTo(ss){const s=new Sheet(ss,'コピー '+this.name);s.cells=JSON.parse(JSON.stringify(this.cells));s.fonts=JSON.parse(JSON.stringify(this.fonts));s.rich=JSON.parse(JSON.stringify(this.rich));ss.sheets.push(s);return s}
  setFrozenRows(){}
+ moveColumns(range,dest){const src=[];for(let j=0;j<range.nc;j++)src.push(range.c+j);let maxC=Math.max(this.getLastColumn(),dest,...src);const rest=[];for(let c=1;c<=maxC;c++)if(src.indexOf(c)<0)rest.push(c);const at=rest.filter(c=>c<dest).length;const order=rest.slice(0,at).concat(src,rest.slice(at));const n={};for(const k in this.cells){const [rr,cc]=k.split(',').map(Number);const ni=order.indexOf(cc);n[rr+','+(ni<0?cc:ni+1)]=this.cells[k];}this.cells=n;return this}
  deleteRow(r){const n={};for(const k in this.cells){const [rr,cc]=k.split(',').map(Number);if(rr<r)n[k]=this.cells[k];else if(rr>r)n[(rr-1)+','+cc]=this.cells[k];}this.cells=n;return this}}
 class Range{constructor(sh,r,c,nr,nc){Object.assign(this,{sh,r,c,nr,nc})}
  getValues(){const o=[];for(let i=0;i<this.nr;i++){const row=[];for(let j=0;j<this.nc;j++)row.push(this.sh.get(this.r+i,this.c+j));o.push(row)}return o}

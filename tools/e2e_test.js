@@ -45,8 +45,8 @@ function check(name, ok, detail) {
   // ---- ロット登録
   check('スプレッドシートを日本時間にそろえる', ss.getSpreadsheetTimeZone() === 'Asia/Tokyo');
   check('旧「担当者」シートは「入力者」に名前が変わる', !!ss.getSheetByName('入力者') && !ss.getSheetByName('担当者') && ss.getSheetByName('入力者').getRange('A1').getValue() === '入力者名');
-  const lh = ss.getSheetByName('入力記録').getRange(1, 1, 1, 16).getValues()[0];
-  check('入力記録の見出し: Googleアカウント・入力者', lh[10] === 'Googleアカウント' && lh[12] === '入力者');
+  const lh = ss.getSheetByName('入力記録').getRange(1, 1, 1, 18).getValues()[0];
+  check('入力記録の見出し: Googleアカウント・入力者', lh[12] === 'Googleアカウント' && lh[14] === '入力者');
   check('ロット登録', (await create('HEP', '37001')).includes('登録しました'));
   await create('HEP', '36001');
   await page.fill('#fPrefix', ''); await page.fill('#fStart', '73301'); await page.selectOption('#fKind', '20kg');
@@ -145,14 +145,14 @@ function check(name, ok, detail) {
   check('保存メッセージにシール違い', (await page.textContent('#notice')).includes('【シール違い】'));
   check('シール違いは「シ」の印', (await page.textContent('#grid .cell[data-serial="37068"]')).includes('シ'));
   const logRows = () => { const lg = ss.getSheetByName('入力記録'); return lg.getRange(2, 1, lg.getLastRow() - 1, 18).getValues(); };
-  { const r = logRows().find(x => x[3] === 'HEP37024'); check('入力記録にグループNoと容器区分（HEP37024・50kg → 371）', r && r[16] === 371 && r[17] === '50kg', r && r.slice(16).join('|')); }
+  { const r = logRows().find(x => x[4] === 'HEP37024'); check('入力記録にグループNoと容器区分（HEP37024・50kg → 371）', r && r[3] === 371 && r[5] === '50kg', r && [r[3], r[5]].join('|')); }
   { const g = ctx.groupNoOf_; check('グループNoの計算（20kg 59701→195・3001→61・95001→901 ／ 50kg 59800→598）', g('20kg', '59701') === 195 && g('20kg', '62050') === 241 && g('8kg', '50051') === 2 && g('50kg S付', '59800') === 598 && g('20kg', '3001') === 61 && g('20kg', '48001') === 961 && g('20kg', '95001') === 901 && g('5kg', '1') === 1 && g('20kg', '49951') === 0 && g('20kg', '50000') === 0 && g('20kg', '99999') === 0); }
-  const r69 = logRows().filter(r => r[3] === 'HEP37069').pop();
-  check('入力記録: 修正の区分（質量なし）', r69[6] === '修正' && r69[5] === '');
-  const r24 = logRows().filter(r => r[3] === 'HEP37024').pop(), r23 = logRows().filter(r => r[3] === 'HEP37023').pop(), r68 = logRows().filter(r => r[3] === 'HEP37068').pop();
-  check('入力記録: 訂正の区分と上書き前', r24[6] === '訂正' && r24[9] === 34.8 && r24[5] === 35);
-  check('入力記録: ダブりの区分', r23[6] === 'ダブり');
-  check('入力記録: 備考にシール違い', r68[15] === 'シール違い' && r68[6] === '通常');
+  const r69 = logRows().filter(r => r[4] === 'HEP37069').pop();
+  check('入力記録: 修正の区分（質量なし）', r69[8] === '修正' && r69[7] === '');
+  const r24 = logRows().filter(r => r[4] === 'HEP37024').pop(), r23 = logRows().filter(r => r[4] === 'HEP37023').pop(), r68 = logRows().filter(r => r[4] === 'HEP37068').pop();
+  check('入力記録: 訂正の区分と上書き前', r24[8] === '訂正' && r24[11] === 34.8 && r24[7] === 35);
+  check('入力記録: ダブりの区分', r23[8] === 'ダブり');
+  check('入力記録: 備考にシール違い', r68[17] === 'シール違い' && r68[8] === '通常');
   check('欠番', (await keys('7031-E', 400)).includes('欠番'));
   check('成績表に「欠 番」', slot(30).join('|') === '031|false|欠|番||', slot(30).join('|'));
   check('範囲外の番号はエラー', (await keys('9999')).includes('どのロットの範囲にもありません'));
@@ -174,14 +174,14 @@ function check(name, ok, detail) {
   check('NGで入れたHEP37041は残る', slot(40)[1] === true, slot(40).join('|'));
 
   const log = ss.getSheetByName('入力記録');
-  const rows = log.getRange(2, 1, log.getLastRow() - 1, 15).getValues();
-  const ng = rows.find(r => r[3] === 'HEP37041');
-  check('入力記録にNGと最初の番号が残る', ng && ng[7] === 'NG' && ng[8] === 'HEP37040');
-  const undone = rows.find(r => r[3] === 'HEP37060');
-  check('取消した行は「取消」で残る', undone && undone[11] === '取消' && undone[14] !== '');
-  check('入力記録に入力者・端末', rows.every(r => r[12] === '山田' && r[13] === 'iPad-1'));
-  const over = rows.filter(r => r[3] === 'HEP37023');
-  check('上書き前の値を記録', over.length === 2 && over[1][9] === 34.8 && over[1][6] === 'ダブり');
+  const rows = log.getRange(2, 1, log.getLastRow() - 1, 18).getValues();
+  const ng = rows.find(r => r[4] === 'HEP37041');
+  check('入力記録にNGと最初の番号が残る', ng && ng[9] === 'NG' && ng[10] === 'HEP37040');
+  const undone = rows.find(r => r[4] === 'HEP37060');
+  check('取消した行は「取消」で残る', undone && undone[13] === '取消' && undone[16] !== '');
+  check('入力記録に入力者・端末', rows.every(r => r[14] === '山田' && r[15] === 'iPad-1'));
+  const over = rows.filter(r => r[4] === 'HEP37023');
+  check('上書き前の値を記録', over.length === 2 && over[1][11] === 34.8 && over[1][8] === 'ダブり');
 
   check('グループNoは100本ごとの組の番号（HEP37001〜37100 → 371）', (await page.textContent('#gridTitle')).startsWith('HEP371') || (await page.locator('#tabs button', { hasText: 'HEP371' }).count()) === 1);
   // ---- 表を左右スワイプ／‹ › でロット切替
@@ -214,8 +214,8 @@ function check(name, ok, detail) {
   check('消すとマスが空に戻る', ctx.getBootstrap().lots.find(l => l.lotId === 'HEP37001').entries['37090'] === undefined && !(await page.textContent('#grid .cell[data-serial="37090"]')).includes('W'));
   const hepSh = ss.getSheetByName('成績表_HEP37001-37100');
   check('消すと成績表の質量欄も空', hepSh.getRange(5 + 89 % 20, 2 + Math.floor(89 / 20) * 6, 1, 6).getValues()[0].slice(2).join('') === ',');
-  const cl = ss.getSheetByName('入力記録').getRange(2, 1, ss.getSheetByName('入力記録').getLastRow() - 1, 16).getValues().filter(r => r[3] === 'HEP37090');
-  check('消した記録は「取消」で残る', cl.length >= 1 && cl.every(r => r[11] === '取消'));
+  const cl = ss.getSheetByName('入力記録').getRange(2, 1, ss.getSheetByName('入力記録').getLastRow() - 1, 18).getValues().filter(r => r[4] === 'HEP37090');
+  check('消した記録は「取消」で残る', cl.length >= 1 && cl.every(r => r[13] === '取消'));
 
   await page.click('#grid .cell[data-serial="37069"]'); await page.waitForTimeout(150);
   await page.click('#btnDel'); await page.click('#btnDel'); await page.waitForTimeout(400);
@@ -313,8 +313,8 @@ function check(name, ok, detail) {
   const sokoSlot = sokoSh.getRange(5 + 22 % 20, 2 + Math.floor(22 / 20) * 6, 1, 6).getValues()[0].join('|');
   check('底黒: 成績表の質量欄に〇', sokoSlot === '023|true||〇||', sokoSlot);
   check('底黒: もう一度流れても二重に記録しない', (await keys('7023', 400)).includes('〇済み'));
-  const sokoRows = ss.getSheetByName('入力記録').getRange(2, 1, ss.getSheetByName('入力記録').getLastRow() - 1, 16).getValues().filter(r => r[2] === 'HEP37001-底黒');
-  check('底黒: 入力記録は区分「底黒」で1行', sokoRows.length === 1 && sokoRows[0][6] === '底黒' && sokoRows[0][5] === '');
+  const sokoRows = ss.getSheetByName('入力記録').getRange(2, 1, ss.getSheetByName('入力記録').getLastRow() - 1, 18).getValues().filter(r => r[2] === 'HEP37001-底黒');
+  check('底黒: 入力記録は区分「底黒」で1行', sokoRows.length === 1 && sokoRows[0][8] === '底黒' && sokoRows[0][7] === '');
   check('元の成績表の質量はそのまま', slot(22).join('|') === '023|true|3|4|,|9', slot(22).join('|'));
   await page.click('#btnHome'); await page.waitForTimeout(300);
 
@@ -340,6 +340,18 @@ function check(name, ok, detail) {
     await p2.waitForTimeout(1600);
     check('再起動: 最新に更新されると表示が消える', !(await p2.isVisible('#staleMsg')) && (await p2.locator('#activeLots .card').count()) === n1);
     await p2.close();
+  }
+  // ---- v43までの並びの入力記録を、グループNo→容器番号→容器区分の並びに移す
+  {
+    const m = load(), lg = m.ss.getSheetByName('入力記録') || m.ss.insertSheet('入力記録');
+    const old = ['記録ID','入力日時','ロットID','容器番号','表示番号','質量(kg)','区分','一致結果','入力番号(NG時)','上書き前','Googleアカウント','状態','入力者','端末','取消日時','備考','グループNo','容器区分'];
+    lg.getRange(1, 1, 1, 18).setValues([old]);
+    lg.getRange(2, 1, 1, 18).setValues([['R1', 't', 'HEP59701', 'HEP59723', '023', 34.8, '通常', 'OK', '', '', 'a@b', '有効', '山田', 'iPad', '', '', 598, '50kg']]);
+    m.ctx.ensureLogHeaders_();
+    const h = lg.getRange(1, 1, 1, 18).getValues()[0], d = lg.getRange(2, 1, 1, 18).getValues()[0];
+    check('入力記録の並び替え: グループNo・容器番号・容器区分', h.slice(2, 7).join('|') === 'ロットID|グループNo|容器番号|容器区分|表示番号' && d.slice(2, 8).join('|') === 'HEP59701|598|HEP59723|50kg|023|34.8', h.join('|') + ' / ' + d.join('|'));
+    m.ctx.ensureLogHeaders_();
+    check('並び替えは1回だけ', lg.getRange(1, 4).getValue() === 'グループNo' && lg.getRange(2, 5).getValue() === 'HEP59723');
   }
   await browser.close();
 
