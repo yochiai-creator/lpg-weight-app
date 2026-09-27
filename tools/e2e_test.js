@@ -237,6 +237,23 @@ function check(name, ok, detail) {
   const m2 = await page.textContent('#lotMsg');
   check('登録済みは飛ばして残りだけ作成', m2.includes('1ロット登録しました（HEP38401）') && m2.includes('HEP38201') && m2.includes('HEP38301'));
 
+  // ---- 底黒（再搬入）: 完了したロットから作り、流れた容器の質量欄に〇
+  const doneCard = page.locator('#doneLots .card', { hasText: 'HEP37001' });
+  await doneCard.locator('button:has-text("底黒")').click(); await page.waitForTimeout(800);
+  check('底黒ロットができる（入力中に【底黒】）', (await page.textContent('#activeLots')).includes('【底黒】HEP37001'));
+  const sokoSh = ss.getSheetByName('成績表_HEP37001-37100_底黒');
+  check('底黒の成績表は別シート（組容器番号に（底黒））', !!sokoSh && String(sokoSh.get(2, 22)).includes('（底黒）'));
+  await page.click('#btnStart'); await page.waitForTimeout(200);
+  check('底黒: 番号を入れるとその場で〇', (await keys('7023', 400)).includes('〇: HEP37023（底黒）'));
+  check('底黒: 質量の入力バーは出ない', !(await page.getAttribute('#massSheet', 'class') || '').includes('open'));
+  const sokoSlot = sokoSh.getRange(5 + 22 % 20, 2 + Math.floor(22 / 20) * 6, 1, 6).getValues()[0].join('|');
+  check('底黒: 成績表の質量欄に〇', sokoSlot === '023|true||〇||', sokoSlot);
+  check('底黒: もう一度流れても二重に記録しない', (await keys('7023', 400)).includes('〇済み'));
+  const sokoRows = ss.getSheetByName('入力記録').getRange(2, 1, ss.getSheetByName('入力記録').getLastRow() - 1, 16).getValues().filter(r => r[2] === 'HEP37001-底黒');
+  check('底黒: 入力記録は区分「底黒」で1行', sokoRows.length === 1 && sokoRows[0][6] === '底黒' && sokoRows[0][5] === '');
+  check('元の成績表の質量はそのまま', slot(22).join('|') === '023|true|3|4|,|9', slot(22).join('|'));
+  await page.click('#btnHome'); await page.waitForTimeout(300);
+
   fs.mkdirSync(path.join(__dirname, 'out'), { recursive: true });
   await page.screenshot({ path: path.join(__dirname, 'out', 'home.png'), fullPage: true });
   await browser.close();

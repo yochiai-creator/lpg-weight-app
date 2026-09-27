@@ -214,7 +214,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v24（入力者・Googleアカウント）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v25（底黒・再搬入）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -346,7 +346,7 @@
 
 <script>
 (function() {
-  const MASS_MIN = 0.1, MASS_MAX = 99.9, DEVIATION_KG = 0.5, MISSING = '欠番', REPAIR = '修正';
+  const MASS_MIN = 0.1, MASS_MAX = 99.9, DEVIATION_KG = 0.5, MISSING = '欠番', REPAIR = '修正', CIRCLE = '〇', SOKO = '底黒';
   function isMass(m) { return typeof m === 'number'; }
   const $ = function(id) { return document.getElementById(id); };
 
@@ -399,7 +399,7 @@
   function label(l, serial) { return l.prefix + serial; }
   function lotById(id) { return S.lots.filter(function(l) { return l.lotId === id; })[0]; }
   // 刻印の表記に合わせて「W34.8」で表示する
-  function fmtMass(m) { return m === MISSING || m === REPAIR ? m : 'W' + Number(m).toFixed(1); }
+  function fmtMass(m) { return m === MISSING || m === REPAIR || m === CIRCLE ? m : 'W' + Number(m).toFixed(1); }
 
   let audio = null;
   function beep(ok) {
@@ -468,7 +468,7 @@
     const div = document.createElement('div');
     div.className = 'card';
     div.innerHTML = '<h3></h3><div class="sub"></div><div class="bar"><div></div></div><div class="sub cnt"></div><div class="row" style="margin-top:10px"></div>';
-    div.querySelector('h3').textContent = l.prefix + l.start + ' ～ ' + l.prefix + l.end;
+    div.querySelector('h3').textContent = (l.spec === SOKO ? '【底黒】' : '') + l.prefix + l.start + ' ～ ' + l.prefix + l.end;
     div.querySelector('.sub').textContent = (l.kind || '') + '　' + l.sheetName;
     div.querySelector('.bar > div').style.width = Math.round((c.filled + c.missing) / c.size * 100) + '%';
     div.querySelector('.cnt').textContent = '入力 ' + c.filled + ' 本' + (c.missing ? '・欠番 ' + c.missing : '') + ' ／ ' + c.size + ' 本' +
@@ -514,6 +514,17 @@
       };
       row.appendChild(b);
       const r = document.createElement('button');
+      if (l.spec !== SOKO) {
+        const sk = document.createElement('button');
+        sk.className = 'btn'; sk.textContent = '底黒（再搬入）を始める';
+        sk.onclick = function() {
+          if (!confirm(l.prefix + l.start + '〜' + l.end + ' の底黒（再搬入）用のロットを作ります。流れた容器の質量欄に〇を付けます。よろしいですか？')) return;
+          sk.disabled = true;
+          call('createSokoguroLot', l.lotId).then(function() { return loadHome(); })
+            .catch(function(e) { alert(errText(e)); sk.disabled = false; });
+        };
+        row.appendChild(sk);
+      }
       r.className = 'btn sec'; r.textContent = l.sentAt ? '再送信' : 'メールで送信';
       r.onclick = function() {
         if (!confirm((S.mail.to || '（送付先未設定）') + ' に送信しますか？')) return;
@@ -868,6 +879,7 @@
 
   function goMass(hit) {
     const prev = hit.lot.entries[hit.serial];
+    if (hit.lot.spec === SOKO) return markCircle(hit, prev);
     if (prev !== undefined && !S.confirmDup) {
       S.confirmDup = true; S.target = hit;
       setNotice('⚠ ダブり: ' + label(hit.lot, hit.serial) + ' は入力済み（' + fmtMass(prev) + '）。上書きの理由を選んでください', 'dup');
@@ -880,6 +892,20 @@
     setNotice(S.overwrite === 'dup' ? 'ダブりとして記録: 質量を入力' : S.overwrite === 'fix' ? '訂正: 正しい質量を入力' : '質量を入力',
       S.overwrite ? 'warn' : 'info');
     render();
+  }
+
+  // 底黒（再搬入）: 番号が決まったらその場で質量欄に〇を付ける
+  function markCircle(hit, prev) {
+    S.viewLotId = hit.lot.lotId;
+    if (prev === CIRCLE) {
+      resetEntry('〇済み: ' + label(hit.lot, hit.serial) + ' はもう〇が付いています → 次の容器番号', 'warn');
+      beep(false); return;
+    }
+    enqueue({ lotId: hit.lot.lotId, serial: hit.serial, mass: null, worker: worker(), device: $('fDevice').value.trim() });
+    hit.lot.entries[hit.serial] = CIRCLE;
+    S.lastKey = hit.lot.lotId + '|' + hit.serial;
+    beep(true);
+    resetEntry('〇: ' + label(hit.lot, hit.serial) + '（底黒）→ 次の容器番号', 'ok');
   }
 
   function submitMass() {
@@ -930,7 +956,7 @@
     call('recordEntry', e).then(function(res) {
       S.queue.shift();
       S.pending[key]--; if (!S.pending[key]) delete S.pending[key];
-      S.saved.push({ recordId: res.recordId, lotId: e.lotId, serial: e.serial, mass: res.mass });
+      if (res.recordId) S.saved.push({ recordId: res.recordId, lotId: e.lotId, serial: e.serial, mass: res.mass });
       if (S.saved.length > 50) S.saved.shift();
       S.sending = false;
       const ml = lotById(e.lotId);
@@ -1157,7 +1183,7 @@
      g.lots.forEach(function(l) {
       const b = document.createElement('button');
       const c = countOf(l);
-      b.textContent = l.prefix + l.start + '〜 (' + (c.filled + c.missing) + '/' + c.size + ')';
+      b.textContent = (l.spec === SOKO ? '底黒 ' : '') + l.prefix + l.start + '〜 (' + (c.filled + c.missing) + '/' + c.size + ')';
       b.tabIndex = -1;
       b.className = (l.lotId === S.viewLotId ? 'on' : '') + (c.filled + c.missing >= c.size ? ' done' : '');
       if (l.lotId === S.viewLotId) active = b;

@@ -9,7 +9,7 @@ const REPORT_PREFIX = '成績表_';
 
 const LOT_HEADERS = ['ロットID', '登録日時', '記号', '開始番号', '終了番号', '容器区分', '状態',
   '成績表シート', '代表容器番号', '耐圧試験日', '全増加(cm3)', '恒久増加(cm3)', '恒久増加率(%)',
-  'PDF', '登録者', '送信日時', '送信先'];
+  'PDF', '登録者', '送信日時', '送信先', '仕様'];
 const LOG_HEADERS = ['記録ID', '入力日時', 'ロットID', '容器番号', '表示番号', '質量(kg)', '区分',
   '一致結果', '入力番号(NG時)', '上書き前', 'Googleアカウント', '状態', '入力者', '端末', '取消日時', '備考'];
 
@@ -20,6 +20,8 @@ const REPAIR = '修正';        // ラインで品質不良のため修正に回
 const KIND_FIX = '訂正';      // 入力ミスを直した上書き（印や件数は出さない）
 const KIND_DUP = 'ダブり';    // 同じ容器が2回流れてきた上書き
 const NOTE_SEAL = 'シール違い';
+const SPEC_SOKO = '底黒';      // 再搬入（底黒仕様）: 質量は入れず、流れた容器の質量欄に〇を付ける
+const CIRCLE = '〇';
 
 // 成績表の配置（元Excel様式）: 5ブロック × 20行、1ブロック6列
 // 容器番号 | ☑ | 質量10の位 | 1の位 | "," | 小数1位
@@ -109,6 +111,11 @@ function ensureLogHeaders_() {
     const cur = log.getRange(1, 1, 1, LOG_HEADERS.length).getValues()[0];
     LOG_HEADERS.forEach(function(h, i) { if (cur[i] !== h) log.getRange(1, i + 1).setValue(h); });
   }
+  const lotsSh = ss.getSheetByName(SHEET_LOTS);
+  if (lotsSh) {
+    const lc = lotsSh.getRange(1, 1, 1, LOT_HEADERS.length).getValues()[0];
+    LOT_HEADERS.forEach(function(h, i) { if (lc[i] !== h) lotsSh.getRange(1, i + 1).setValue(h); });
+  }
   const oldWorkers = ss.getSheetByName(SHEET_WORKERS_OLD);
   if (oldWorkers && !ss.getSheetByName(SHEET_WORKERS)) {
     oldWorkers.setName(SHEET_WORKERS);
@@ -152,6 +159,7 @@ function slotPosition_(index) {
 function massCells_(mass) {
   if (mass === MISSING) return [false, '欠', '番', '', ''];
   if (mass === REPAIR) return [false, '修', '正', '', ''];
+  if (mass === CIRCLE) return [true, '', CIRCLE, '', ''];
   if (mass === null || mass === '' || mass === undefined) return [false, '', '', ',', ''];
   const tenths = Math.round(Number(mass) * 10);
   const tens = Math.floor(tenths / 100);
@@ -164,6 +172,7 @@ function parseMassCells_(cells) {
   const d = cells[1], e = cells[2], g = cells[4];
   if (d === '欠' || e === '番') return MISSING;
   if (d === '修' || e === '正') return REPAIR;
+  if (e === CIRCLE) return CIRCLE;
   if (e === '' || e === null) return null;
   const tenths = (Number(d) || 0) * 100 + Number(e) * 10 + (Number(g) || 0);
   return Math.round(tenths) / 10;
@@ -206,6 +215,7 @@ function lotRowToObj_(r) {
       permRate: o['恒久増加率(%)']
     },
     pdf: String(o['PDF'] || ''),
+    spec: String(o['仕様'] || ''),
     sentAt: String(o['送信日時'] || ''),
     sentTo: String(o['送信先'] || '')
   };
@@ -327,20 +337,21 @@ function createLot(input) {
     if (size < 1 || size > LOT_MAX) throw new Error('1枚の成績表は最大100本です（開始〜終了を確認してください）');
     if (!/^[A-Z0-9]*$/.test(prefix)) throw new Error('記号は英数字で入力してください');
 
-    const lotId = prefix + start;
+    const spec = input.spec === SPEC_SOKO ? SPEC_SOKO : '';
+    const lotId = prefix + start + (spec ? '-' + SPEC_SOKO : '');
     const lots = readLots_();
     lots.forEach(function(l) {
       if (l.lotId === lotId) throw new Error('この組容器番号は登録済みです: ' + lotId);
     });
-    const sheetName = REPORT_PREFIX + lotId + '-' + end.slice(-Math.min(end.length, 5));
+    const sheetName = REPORT_PREFIX + prefix + start + '-' + end.slice(-Math.min(end.length, 5)) + (spec ? '_' + SPEC_SOKO : '');
     const lot = {
       lotId: lotId, prefix: prefix, start: start, end: end,
-      kind: String(input.kind || ''), status: STATUS_ACTIVE, sheetName: sheetName,
+      kind: String(input.kind || ''), status: STATUS_ACTIVE, sheetName: sheetName, spec: spec,
       pressure: { repNumber: start, testDate: '', totalExp: '', permExp: '', permRate: '' }, pdf: ''
     };
     createReportSheet_(lot);
     getSheet_(SHEET_LOTS).appendRow([lotId, new Date(), prefix, "'" + start, "'" + end, lot.kind,
-      STATUS_ACTIVE, sheetName, "'" + start, '', '', '', '', '', userEmail_()]);
+      STATUS_ACTIVE, sheetName, "'" + start, '', '', '', '', '', userEmail_(), '', '', spec]);
     return withProgress_(lot);
   } finally {
     lock.releaseLock();
@@ -359,7 +370,7 @@ function createReportSheet_(lot) {
   const width = lot.start.length;
   const endLabel = lot.prefix + lot.end;
   applyTitleStyle_(sh.getRange('A1'));
-  sh.getRange('V2').setValue(lot.prefix + lot.start + ' ～ ' + endLabel);
+  sh.getRange('V2').setValue(lot.prefix + lot.start + ' ～ ' + endLabel + (lot.spec ? '（' + lot.spec + '）' : ''));
   sh.getRange('H3').setValue(lot.prefix);
 
   const size = lotSize_(lot);
@@ -404,7 +415,9 @@ function recordEntry(payload) {
     if (!(index >= 0 && index < lotSize_(lot))) throw new Error('容器番号がロットの範囲外です: ' + serial);
 
     let mass;
-    if (payload.missing) {
+    if (lot.spec === SPEC_SOKO) {
+      mass = CIRCLE;
+    } else if (payload.missing) {
       mass = MISSING;
     } else if (payload.repair) {
       mass = REPAIR;
@@ -417,6 +430,8 @@ function recordEntry(payload) {
     const pos = slotPosition_(index);
     const range = sh.getRange(pos.row, pos.numberCol + 1, 1, 5);
     const prev = parseMassCells_(range.getValues()[0]);
+    // 底黒: 〇が付いている容器がもう一度流れても二重には記録しない
+    if (mass === CIRCLE && prev === CIRCLE) return { recordId: null, clientId: payload.clientId, serial: serial, mass: mass, prev: prev, already: true };
     range.setValues([massCells_(mass)]);
 
     const recordId = 'R' + Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyMMddHHmmss') +
@@ -427,6 +442,7 @@ function recordEntry(payload) {
     if (prev !== null) kind = payload.overwrite === 'fix' ? KIND_FIX : KIND_DUP;
     else if (mass === MISSING) kind = MISSING;
     else if (mass === REPAIR) kind = REPAIR;
+    if (mass === CIRCLE) kind = SPEC_SOKO;
     const note = payload.seal ? NOTE_SEAL : '';
     getSheet_(SHEET_LOG).appendRow([recordId, new Date(), lot.lotId, "'" + lot.prefix + serial,
       "'" + displayNumber_(serial), typeof mass === 'number' ? mass : '', kind,
@@ -470,7 +486,7 @@ function undoEntry(recordId) {
       const lot = findLot_(values[i][2]);
       const serial = values[i][3].slice(lot.prefix.length);
       const prevText = values[i][9];
-      const prev = prevText === '' ? null : (prevText === MISSING || prevText === REPAIR ? prevText : Number(prevText));
+      const prev = prevText === '' ? null : (prevText === MISSING || prevText === REPAIR || prevText === CIRCLE ? prevText : Number(prevText));
       const pos = slotPosition_(Number(serial) - Number(lot.start));
       getSheet_(lot.sheetName).getRange(pos.row, pos.numberCol + 1, 1, 5).setValues([massCells_(prev)]);
       log.getRange(from + i, 12).setValue('取消');
@@ -565,6 +581,14 @@ function changeLotKind(input) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// 完了したロットの再搬入（底黒仕様）用のロットを作る。同じ番号範囲・容器区分で、成績表は別シート（_底黒）
+function createSokoguroLot(lotId) {
+  const base = findLot_(lotId);
+  if (base.spec === SPEC_SOKO) throw new Error('底黒のロットからは作れません');
+  if (base.status !== STATUS_DONE) throw new Error('完了したロットから作ってください（入力中のロットと番号が重なるため）');
+  return createLot({ prefix: base.prefix, start: base.start, end: base.end, kind: base.kind, spec: SPEC_SOKO });
 }
 
 function reopenLot(lotId) {
