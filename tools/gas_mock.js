@@ -7,6 +7,7 @@ class Sheet{constructor(ss,name){this.ss=ss;this.name=name;this.cells={};this.fo
  getName(){return this.name} setName(n){this.name=n;return this} getSheetId(){return this.id}
  get(r,c){const v=this.cells[r+','+c];return v===undefined?'':v} set(r,c,v){this.cells[r+','+c]=v}
  getLastColumn(){let m=0;for(const k in this.cells){const c=+k.split(',')[1];if(this.cells[k]!==''&&c>m)m=c}return m}
+ getMaxRows(){return Math.max(1000,this.getLastRow())}
  getLastRow(){let m=0;for(const k in this.cells){const r=+k.split(',')[0];if(this.cells[k]!==''&&r>m)m=r}return m}
  getRange(a,b,c,d){if(typeof a==='string')return new Range(this,...a1(a));return new Range(this,a,b,c||1,d||1)}
  appendRow(vals){const r=this.getLastRow()+1;vals.forEach((v,i)=>{if(typeof v==='string'&&v[0]==="'")v=v.slice(1);this.set(r,i+1,v)})}

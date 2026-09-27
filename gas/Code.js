@@ -110,6 +110,12 @@ function ensureTitleFont_() {
   props.setProperty(key, want);
 }
 
+// 入力記録の質量(kg)・上書き前を小数1桁で表示（35 → 35.0）
+function formatLogMass_(log, fromRow, rows) {
+  log.getRange(fromRow, 6, rows, 1).setNumberFormat('0.0');
+  log.getRange(fromRow, 10, rows, 1).setNumberFormat('0.0');
+}
+
 // 入力記録の列見出しを最新にそろえる（列の追加・名前の変更。データの行はそのまま）
 // あわせて、旧名「担当者」シートを「入力者」に名前を変える
 function ensureLogHeaders_() {
@@ -118,6 +124,12 @@ function ensureLogHeaders_() {
   if (log) {
     const cur = log.getRange(1, 1, 1, LOG_HEADERS.length).getValues()[0];
     LOG_HEADERS.forEach(function(h, i) { if (cur[i] !== h) log.getRange(1, i + 1).setValue(h); });
+    // これまでの記録の質量も小数1桁表示に（1回だけ）
+    const props = PropertiesService.getScriptProperties();
+    if (props.getProperty('LOG_MASS_FORMAT') !== '0.0' && log.getMaxRows() > 1) {
+      formatLogMass_(log, 2, log.getMaxRows() - 1);
+      props.setProperty('LOG_MASS_FORMAT', '0.0');
+    }
   }
   const lotsSh = ss.getSheetByName(SHEET_LOTS);
   if (lotsSh) {
@@ -458,10 +470,12 @@ function recordEntry(payload) {
     else if (mass === REPAIR) kind = REPAIR;
     if (mass === CIRCLE) kind = SPEC_SOKO;
     const note = payload.seal ? NOTE_SEAL : '';
-    getSheet_(SHEET_LOG).appendRow([recordId, new Date(), lot.lotId, "'" + lot.prefix + serial,
+    const logSh = getSheet_(SHEET_LOG);
+    logSh.appendRow([recordId, new Date(), lot.lotId, "'" + lot.prefix + serial,
       "'" + displayNumber_(serial), typeof mass === 'number' ? mass : '', kind,
       payload.ngInput ? 'NG' : 'OK', payload.ngInput ? "'" + payload.ngInput : '',
       prev === null ? '' : prev, userEmail_(), '有効', String(payload.worker || ''), String(payload.device || ''), '', note]);
+    formatLogMass_(logSh, logSh.getLastRow(), 1);
     const result = { recordId: recordId, clientId: payload.clientId, serial: serial, mass: mass, prev: prev, kind: kind, note: note };
 
     // 全数（欠番を含む）そろったら自動で完了・PDF作成・送信する
