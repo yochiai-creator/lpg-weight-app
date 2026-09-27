@@ -41,14 +41,23 @@ function load(){
   ScriptApp:(()=>{const tr=[];global.TRIGGERS=tr;return {getOAuthToken:()=>'t',getProjectTriggers:()=>tr.slice(),deleteTrigger:(t)=>{tr.splice(tr.indexOf(t),1)},
    newTrigger:(fn)=>{const o={fn};const b={timeBased:()=>b,everyDays:(n)=>{o.days=n;return b},atHour:(h)=>{o.hour=h;return b},inTimezone:(z)=>{o.tz=z;return b},create:()=>{const t={getHandlerFunction:()=>fn,o};tr.push(t);return t}};return b}}})(),
   HtmlService:{createHtmlOutput:(h)=>({getAs:(t)=>({html:h,type:t,name:'',setName(n){this.name=n;return this}})})},
-  DriveApp:(()=>{const files={};let fid=1000000000;const mk=(name,path)=>{const kids={};const f={name,path,getId:()=>'F'+path,getName:()=>name,
-     createFile(b){const id='file'+(fid++);const fo={blob:b,path:path+'/'+b.name,trashed:false,setTrashed(x){this.trashed=x;global.PDFS=global.PDFS.filter(p=>p!==this.path)}};files[id]=fo;f.files.push(fo);global.PDFS.push(path+'/'+b.name);global.PDFBLOBS[path+'/'+b.name]=b;return {getUrl:()=>'https://drive.google.com/file/d/'+id+'/view',getId:()=>id}},
-     files:[],getFilesByName(n){const l=f.files.filter(x=>!x.trashed&&x.blob.name===n);let i=0;return {hasNext:()=>i<l.length,next:()=>l[i++]}},
-     getFoldersByName(n){let used=false;return {hasNext:()=>!used&&!!kids[n],next(){used=true;return kids[n]}}},
-     createFolder(n){return kids[n]=mk(n,path+'/'+n)}};return f};const root=mk('ROOT','');let base=null;
+  DriveApp:(()=>{const files={};let fid=1000000000,did=1;
+   const pathOf=f=>f.parent?pathOf(f.parent)+'/'+f.name:'';
+   const iter=l=>{let k=0;return {hasNext:()=>k<l.length,next:()=>l[k++]}};
+   const mk=(name,parent)=>{const f={name,parent,kids:[],files:[],id:'D'+(did++),getId(){return this.id},getName(){return this.name},setName(n){this.name=n;return this},
+     createFile(b){const id='file'+(fid++);const fo={blob:b,parent:f,trashed:false,getName:()=>b.name,get path(){return pathOf(this.parent)+'/'+b.name},
+       setTrashed(x){this.trashed=x},moveTo(d){this.parent.files=this.parent.files.filter(z=>z!==this);this.parent=d;d.files.push(this);return this}};
+       files[id]=fo;f.files.push(fo);global.PDFBLOBS[pathOf(f)+'/'+b.name]=b;return {getUrl:()=>'https://drive.google.com/file/d/'+id+'/view',getId:()=>id}},
+     getFiles(){return iter(f.files.filter(x=>!x.trashed))},getFolders(){return iter(f.kids.slice())},
+     getFilesByName(n){return iter(f.files.filter(x=>!x.trashed&&x.blob.name===n))},
+     getFoldersByName(n){return iter(f.kids.filter(k=>k.name===n))},
+     createFolder(n){const k=mk(n,f);f.kids.push(k);return k},
+     moveTo(d){f.parent.kids=f.parent.kids.filter(z=>z!==f);f.parent=d;d.kids.push(f);return f}};return f};
+   const root=mk('ROOT',null);let base=null;global.DRIVE_ROOT=root;
+   Object.defineProperty(global,'PDFS',{configurable:true,get:()=>Object.values(files).filter(x=>!x.trashed&&x.parent).map(x=>x.path),set:()=>{}});
    return {createFolder:(n)=>base=root.createFolder(n),getFolderById:()=>{if(!base)throw new Error('none');return base},
-     getFileById:(id)=>{if(SSS[id])return {moveTo(){}};if(!files[id])throw new Error('no file');return {getBlob:()=>({name:files[id].blob.name,setName(n){this.name=n;return this}})}}}})()};
- global.PDFS=[];global.ARCHIVES=[];global.PDFBLOBS={};
+     getFileById:(id)=>{if(SSS[id]){const x=SSS[id];return {moveTo(d){x.folder=d;return this},getName:()=>x.name}};if(!files[id])throw new Error('no file');const fo=files[id];return {getBlob:()=>({name:fo.blob.name,setName(n){this.name=n;return this}}),moveTo:(d)=>fo.moveTo(d)}}}})()};
+ global.ARCHIVES=[];global.PDFBLOBS={};
  global.MAILS=[];
  vm.createContext(ctx); vm.runInContext(fs.readFileSync(GAS+'/Code.js','utf8'),ctx);
  vm.runInContext(fs.readFileSync(GAS+'/Setup.js','utf8'),ctx);

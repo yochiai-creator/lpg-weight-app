@@ -10,6 +10,7 @@ const ARCHIVE_CHUNK = 8000;   // 1回に調べる行数（入力の待ち時間�
 // 入力画面の読み込み後に裏で呼ばれる（画面は待たない）
 function runMaintenance() {
   const out = { trimmed: false, archived: 0, archiveDone: true };
+  try { ensureFolderLayout_(); } catch (e) { console.error('フォルダの整理に失敗: ' + e.message); }
   try { out.trimmed = trimLogColumns_(); } catch (e) { console.error('列の削除に失敗: ' + e.message); }
   try { Object.assign(out, archiveLogStep_()); } catch (e) { console.error('入力記録の移動に失敗: ' + e.message); }
   try {
@@ -35,7 +36,7 @@ function archiveIds_() {
   try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('LOG_ARCHIVE_IDS') || '{}'); } catch (e) { return {}; }
 }
 
-// 移し先のスプレッドシート（年ごと）。PDFと同じ「LPG容器 検査成績表PDF」フォルダに作る
+// 移し先のスプレッドシート（年ごと）。「LPG容器 質量入力 / 入力記録（過去分）」に作る
 function archiveSheet_(year) {
   const props = PropertiesService.getScriptProperties();
   const ids = archiveIds_();
@@ -43,7 +44,7 @@ function archiveSheet_(year) {
     try { return SpreadsheetApp.openById(ids[year]).getSheets()[0]; } catch (e) { /* 消されていたら作り直す */ }
   }
   const ss = SpreadsheetApp.create(ARCHIVE_PREFIX + year);
-  try { DriveApp.getFileById(ss.getId()).moveTo(getPdfFolder_()); } catch (e) { /* 移せなくてもマイドライブに残る */ }
+  try { DriveApp.getFileById(ss.getId()).moveTo(childFolder_(getPdfFolder_(), ARCHIVE_FOLDER)); } catch (e) { /* 移せなくてもマイドライブに残る */ }
   const sh = ss.getSheets()[0].setName(SHEET_LOG);
   sh.getRange(1, 1, 1, LOG_HEADERS.length).setValues([LOG_HEADERS]).setFontWeight('bold');
   sh.setFrozenRows(1);

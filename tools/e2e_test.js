@@ -252,7 +252,7 @@ function check(name, ok, detail) {
   check('送信しない指定ではメールなし', global.MAILS.length === 0);
   check('完了してPDFを保存したら成績表シートを消す', !ss.getSheetByName('成績表_HEP37001-37100'));
   { const y = String(new Date().getFullYear()), mo = ('0' + (new Date().getMonth() + 1)).slice(-2);
-    check('PDFは年・月のフォルダに保存', global.PDFS.some(p => p === '/LPG容器 検査成績表PDF/' + y + '年/' + mo + '月/成績表_HEP37001-37100.pdf'), global.PDFS.join(',')); }
+    check('PDFは年・月のフォルダに保存', global.PDFS.some(p => p === '/LPG容器 質量入力/成績表PDF/' + y + '年/' + mo + '月/成績表_HEP37001-37100.pdf'), global.PDFS.join(',')); }
   check('シートを消した完了ロットも入力状況は入力記録から出る', Object.keys(ctx.getBootstrap().recentDone.find(l => l.lotId === 'HEP37001').entries).length >= 15);
 
   // ---- 全数そろったら自動完了・送信
@@ -417,7 +417,7 @@ function check(name, ok, detail) {
     check('採番表PDF: 1ページ200本・見出しに記号・作業者', (html.match(/class="page"/g) || []).length === 2 && html.includes('容器記号：<b>HXF・HEP</b>') && html.includes('作業者：<b>山崎・田中</b>') && html.includes('20・50kg容器　採番表'));
     check('採番表PDF: 修正に印・ダブりは載せない', html.includes('HXF' + freeS + '<span class="mk">修正</span>') && !html.includes('>W<'));
     const d = today.split('-');
-    check('採番表PDF: 保存先は 採番表/年/月', !!key && key.startsWith('/LPG容器 検査成績表PDF/採番表/' + d[0] + '年/' + d[1] + '月/'), key);
+    check('採番表PDF: 保存先は 採番表/年/月', !!key && key.startsWith('/LPG容器 質量入力/採番表/' + d[0] + '年/' + d[1] + '月/'), key);
     const sss = global.ARCHIVES.find(x => x.name === 'LPG容器 採番表_' + d[0]), ssh = sss && sss.getSheets()[0];
     const srows = ssh ? ssh.getRange(2, 1, ssh.getLastRow() - 1, 10).getValues() : [];
     check('採番表シート: 年ごとのスプレッドシートに1行1本で書き足す', ssh && ssh.getName() === '採番表' && srows.length === 252 && srows[0][0] === today && srows[0][1] === 1 && srows[0][2] === 'HXF' && srows[0][3] === order[0] && srows[250][2] === 'HEP' && srows[250][5] === 598 && srows[251][8] === '修正', JSON.stringify(srows[0]) + JSON.stringify(srows[250]));
@@ -426,9 +426,27 @@ function check(name, ok, detail) {
     check('採番表: 流れていない日は作らない', c.makeSaibanPdf({ date: '2000-01-01' }).count === 0);
     c.installNightlyTrigger(); c.installNightlyTrigger();
     check('毎晩の自動処理: 22時台の時間指定が1つだけ', global.TRIGGERS.length === 1 && global.TRIGGERS[0].o.hour === 22 && global.TRIGGERS[0].o.tz === 'Asia/Tokyo');
-    global.PDFS = global.PDFS.filter(p => !p.includes('採番表_'));
+    const beforeBlob = global.PDFBLOBS[key];
     c.nightlyJob();
-    check('毎晩の自動処理: その日の採番表PDFを作る', global.PDFS.some(p => p.endsWith('/採番表_' + today + '.pdf')) && c.PropertiesService.getScriptProperties().getProperty('SAIBAN_DONE_UNTIL') === today);
+    check('毎晩の自動処理: その日の採番表PDFを作る', global.PDFBLOBS[key] !== beforeBlob && global.PDFS.filter(p => p.endsWith('/採番表_' + today + '.pdf')).length === 1 && c.PropertiesService.getScriptProperties().getProperty('SAIBAN_DONE_UNTIL') === today);
+  }
+  // ---- ドライブのフォルダを「LPG容器 質量入力」に全部まとめる（v52までの並びからの整理）
+  {
+    const m = load(), c = m.ctx, P = c.PropertiesService.getScriptProperties();
+    const old = c.DriveApp.createFolder('LPG容器 検査成績表PDF');
+    P.setProperty('PDF_FOLDER_ID', old.getId());
+    old.createFolder('2026年').createFolder('09月').createFile({ name: '成績表_HEP59701-59800.pdf' });
+    old.createFile({ name: '成績表_HRH00001-00100.pdf' });
+    old.createFolder('採番表').createFolder('2026年').createFolder('09月').createFile({ name: '採番表_2026-09-27.pdf' });
+    const sa = c.SpreadsheetApp.create('LPG容器 採番表_2026'); c.DriveApp.getFileById(sa.getId());
+    c.ensureFolderLayout_();
+    const names = f => f.kids.map(k => k.name).sort().join(',');
+    check('フォルダ整理: 名前を「LPG容器 質量入力」に', old.getName() === 'LPG容器 質量入力' && names(old) === '入力記録（過去分）,成績表PDF,採番表', names(old));
+    const paths = global.PDFS.sort().join(' | ');
+    check('フォルダ整理: 成績表PDFは「成績表PDF/年/月」、採番表はそのまま', paths === '/LPG容器 質量入力/成績表PDF/2026年/09月/成績表_HEP59701-59800.pdf | /LPG容器 質量入力/成績表PDF/成績表_HRH00001-00100.pdf | /LPG容器 質量入力/採番表/2026年/09月/採番表_2026-09-27.pdf', paths);
+    check('フォルダ整理: 1回だけ', P.getProperty('FOLDER_LAYOUT') === '1' && c.ensureFolderLayout_() === false);
+    const r = c.getPdfMonthFolder_(new Date());
+    check('フォルダ整理のあと: 成績表PDFは 成績表PDF/年/月 に入る', r.parent.parent.name === '成績表PDF');
   }
   await browser.close();
 

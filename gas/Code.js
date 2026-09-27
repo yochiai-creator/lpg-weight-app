@@ -908,21 +908,73 @@ function exportLotPdf_(lot, sh) {
   return { url: file.getUrl(), blob: blob };
 }
 
+// ---------- ドライブのフォルダ（全部ここにまとめる） ----------
+// LPG容器 質量入力/
+//   LPG容器_質量入力（このスプレッドシート）
+//   成績表PDF/2026年/09月/   完了したロットの成績表PDF
+//   採番表/2026年/09月/      採番表PDF
+//   採番表/LPG容器 採番表_2026   採番表の一覧（スプレッドシート、年ごと）
+//   入力記録（過去分）/LPG容器 入力記録_2026   年替わりに移した入力記録
+const ROOT_FOLDER_NAME = 'LPG容器 質量入力';
+const REPORT_PDF_FOLDER = '成績表PDF';
+const ARCHIVE_FOLDER = '入力記録（過去分）';
+
+// まとめ先のフォルダ（プロパティ PDF_FOLDER_ID。v52までの「LPG容器 検査成績表PDF」をそのまま使う）
 function getPdfFolder_() {
   const props = PropertiesService.getScriptProperties();
   const id = props.getProperty('PDF_FOLDER_ID');
   if (id) {
     try { return DriveApp.getFolderById(id); } catch (e) { /* 削除されていたら作り直す */ }
   }
-  const folder = DriveApp.createFolder('LPG容器 検査成績表PDF');
+  const folder = DriveApp.createFolder(ROOT_FOLDER_NAME);
   props.setProperty('PDF_FOLDER_ID', folder.getId());
+  props.setProperty('FOLDER_LAYOUT', '1');
+  try { DriveApp.getFileById(getSpreadsheet_().getId()).moveTo(folder); } catch (e) { /* 移せなくても動く */ }
   return folder;
 }
 
-// 保存先: 「LPG容器 検査成績表PDF / 2026年 / 09月」のように年・月のフォルダを自動で作って入れる
+// v52までの並び（成績表PDFの年フォルダが直下）を、上の並びに1回だけ整理する
+function ensureFolderLayout_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('FOLDER_LAYOUT') === '1') return false;
+  if (!props.getProperty('PDF_FOLDER_ID')) { getPdfFolder_(); return true; }
+  const root = getPdfFolder_();
+  if (root.getName() !== ROOT_FOLDER_NAME) root.setName(ROOT_FOLDER_NAME);
+  const pdfRoot = childFolder_(root, REPORT_PDF_FOLDER);
+  const saiban = childFolder_(root, SAIBAN_FOLDER);
+  const archive = childFolder_(root, ARCHIVE_FOLDER);
+  const folders = root.getFolders();
+  const years = [];
+  while (folders.hasNext()) { const f = folders.next(); if (/^\d{4}年$/.test(f.getName())) years.push(f); }
+  years.forEach(function(f) {
+    const same = pdfRoot.getFoldersByName(f.getName());
+    if (!same.hasNext()) { f.moveTo(pdfRoot); return; }
+    // 同じ年のフォルダがもうあれば中身を移す
+    const dest = same.next(), subs = f.getFolders();
+    while (subs.hasNext()) {
+      const m = subs.next(), d2 = dest.getFoldersByName(m.getName());
+      if (!d2.hasNext()) { m.moveTo(dest); continue; }
+      const into = d2.next(), fs = m.getFiles();
+      while (fs.hasNext()) fs.next().moveTo(into);
+    }
+  });
+  const files = root.getFiles(), loose = [];
+  while (files.hasNext()) loose.push(files.next());
+  loose.forEach(function(f) {
+    const n = f.getName();
+    if (n.indexOf(ARCHIVE_PREFIX) === 0) f.moveTo(archive);
+    else if (n.indexOf(SAIBAN_SS_PREFIX) === 0) f.moveTo(saiban);
+    else if (/\.pdf$/i.test(n)) f.moveTo(pdfRoot);
+  });
+  try { DriveApp.getFileById(getSpreadsheet_().getId()).moveTo(root); } catch (e) { /* 移せなくても動く */ }
+  props.setProperty('FOLDER_LAYOUT', '1');
+  return true;
+}
+
+// 保存先: 「LPG容器 質量入力 / 成績表PDF / 2026年 / 09月」のように年・月のフォルダを自動で作って入れる
 function getPdfMonthFolder_(date) {
   const tz = 'Asia/Tokyo';
-  const year = childFolder_(getPdfFolder_(), Utilities.formatDate(date, tz, 'yyyy') + '年');
+  const year = childFolder_(childFolder_(getPdfFolder_(), REPORT_PDF_FOLDER), Utilities.formatDate(date, tz, 'yyyy') + '年');
   return childFolder_(year, Utilities.formatDate(date, tz, 'MM') + '月');
 }
 function childFolder_(parent, name) {

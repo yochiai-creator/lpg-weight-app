@@ -1,7 +1,7 @@
 // 採番表: その日に流れた容器を、入力記録の入力順に「流れた順番・容器番号」で並べる
 //  1日分を容器記号もまとめて1つの通し番号にして、
-//   ・スプレッドシート「LPG容器 採番表_2026」（年ごと、PDFフォルダ内）の「採番表」シートに書き足す
-//   ・PDF（紙の採番表と同じ形、1ページ200本＝50行×4列）を「LPG容器 検査成績表PDF / 採番表 / 2026年 / 07月」に保存
+//   ・スプレッドシート「LPG容器 質量入力 / 採番表 / LPG容器 採番表_2026」（年ごと）の「採番表」シートに書き足す
+//   ・PDF（紙の採番表と同じ形、1ページ200本＝50行×4列）を「LPG容器 質量入力 / 採番表 / 2026年 / 07月」に保存
 //  毎晩22時台に自動（nightlyJob）。取りこぼした日は入力画面を開いたときに裏で作る。ホームのボタンでいつでも作り直せる
 
 const SAIBAN_FOLDER = '採番表';
@@ -108,7 +108,7 @@ function saibanSheet_(year) {
   }
   const ss = SpreadsheetApp.create(SAIBAN_SS_PREFIX + year);
   try { ss.setSpreadsheetTimeZone('Asia/Tokyo'); } catch (e) { /* 無視 */ }
-  try { DriveApp.getFileById(ss.getId()).moveTo(getPdfFolder_()); } catch (e) { /* マイドライブに残る */ }
+  try { DriveApp.getFileById(ss.getId()).moveTo(childFolder_(getPdfFolder_(), SAIBAN_FOLDER)); } catch (e) { /* マイドライブに残る */ }
   const sh = ss.getSheets()[0].setName('採番表');
   sh.getRange(1, 1, 1, SAIBAN_HEADERS.length).setValues([SAIBAN_HEADERS]).setFontWeight('bold');
   sh.setFrozenRows(1);
