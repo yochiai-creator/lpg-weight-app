@@ -214,7 +214,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v29（ロット削除）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v30（ダブり表示W）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -1245,7 +1245,7 @@
       div.innerHTML = '<span></span><span class="m"></span>';
       div.firstChild.textContent = disp3(serial);
       const addBadge = function(cls, text) { const bd = document.createElement('span'); bd.className = 'badge ' + cls; bd.textContent = text; div.firstChild.appendChild(bd); };
-      if (dupN) addBadge('', '重' + (dupN > 1 ? dupN : ''));
+      if (dupN) addBadge('', 'W' + (dupN > 1 ? dupN : ''));
       if (l.seals && l.seals[label(l, serial)]) addBadge('seal', 'シ');
       div.lastChild.textContent = m === undefined ? '' : fmtMass(m);
       div.setAttribute('data-serial', serial);

@@ -119,7 +119,7 @@ function check(name, ok, detail) {
   check('入力済みは上書き確認', (await keys('7023')).includes('入力済み'));
   check('ダブりは赤い点滅表示', (await page.getAttribute('#notice', 'class')).includes('dup') && (await page.textContent('#notice')).includes('ダブり'));
   await keys('+.349', 400);
-  check('ダブったマスは赤枠＋「重」', (await page.getAttribute('#grid .cell[data-serial="37023"]', 'class')).includes('dup') && (await page.textContent('#grid .cell[data-serial="37023"]')).includes('重'));
+  check('ダブったマスは赤枠＋「W」', (await page.getAttribute('#grid .cell[data-serial="37023"]', 'class')).includes('dup') && (await page.textContent('#grid .cell[data-serial="37023"]')).includes('W'));
   check('表の見出しにダブり件数', (await page.textContent('#gridSub')).includes('ダブり 1件'));
   check('開き直してもダブりが残る（サーバー記録）', ctx.getBootstrap().lots.find(l => l.lotId === 'HEP37001').dups['HEP37023'] === 1);
   // 修正（入力ミスを直す）
