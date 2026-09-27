@@ -181,9 +181,13 @@ function check(name, ok, detail) {
   check('縦向きは表が上・入力が下', gridBox.y + gridBox.height <= numBox.y + 1);
   check('入力欄は横に並ぶ（番号欄の右にテンキー）', padBox.x > numBox.x + numBox.width && Math.abs(padBox.y - numBox.y) < 80);
   const sh1 = await page.evaluate(() => document.documentElement.scrollHeight); console.log('   scrollHeight', sh1);
+  const sheetBox = await page.locator('#massSheet').boundingBox(), inBox = await page.locator('#inPanel').boundingBox();
+  check('番号が決まると入力バーが出る', (await page.getAttribute('#massSheet', 'class')).includes('open'));
+  check('入力バーは入力欄に重ならない', sheetBox.y + sheetBox.height <= inBox.y + 2);
   check('縦向きでも1画面に収まる', sh1 <= 1180 + 40);
   await page.screenshot({ path: path.join(__dirname, 'out', 'portrait.png') });
   await page.keyboard.press('Escape');
+  check('番号入力中は入力バーを出さない', !(await page.getAttribute('#massSheet', 'class') || '').includes('open'));
   await page.setViewportSize({ width: 1180, height: 820 }); await page.waitForTimeout(200);
 
   // ---- 手動完了（送信なし）

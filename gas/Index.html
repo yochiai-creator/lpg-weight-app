@@ -75,12 +75,22 @@
   @media (orientation: portrait) and (min-width: 701px) {
     .input-layout { grid-template-columns: 1fr; gap: 8px; }
     .input-layout > .panel:last-child { order: -1; }
-    .input-layout #inPanel { display: grid; grid-template-columns: 1fr 1.15fr 1fr; column-gap: 10px; align-items: start;
-      grid-template-areas: "num steps pad" "match cands pad" "actual cands pad" "mass cands pad" "notice extra pad" "queue queue pad"; }
-    #dupChoice, #extraRow { grid-area: extra; } #candsNote { display: none; }
-    #fldNum { grid-area: num; } #matchRow { grid-area: match; } #fldActual { grid-area: actual; } #steps { grid-area: steps; }
-    #fldMass { grid-area: mass; } #notice { grid-area: notice; } #cands { grid-area: cands; } #candsNote { grid-area: note; }
-    #pad { grid-area: pad; } #opts { grid-area: opts; } #queue { grid-area: queue; }
+    .input-layout #inPanel { display: grid; grid-template-columns: 1fr 1.25fr; column-gap: 10px; align-items: start;
+      grid-template-areas: "num pad" "match pad" "actual pad" "notice pad" "dupc pad" "queue pad"; }
+    #dupChoice { grid-area: dupc; } #candsNote { display: none; }
+    /* 入力バー: 下の入力欄のすぐ上にせり上がって出る */
+    #massSheet { display: block; position: fixed; left: 8px; right: 8px; bottom: var(--sheetBottom, 340px); z-index: 20;
+      background: #fff; border: 2px solid var(--navy); border-radius: 14px; box-shadow: 0 -10px 28px rgba(20, 26, 60, .28);
+      padding: 10px 12px; transform: translateY(24px); opacity: 0; pointer-events: none; transition: transform .15s, opacity .15s;
+      display: grid; grid-template-columns: 1fr 1.7fr; column-gap: 10px; grid-template-areas: "title title" "mass steps" "cands cands" "extra extra"; }
+    #massSheet.open { transform: none; opacity: 1; pointer-events: auto; }
+    #massSheet .sheet-title { grid-area: title; }
+    #massSheet #fldMass { grid-area: mass; margin-bottom: 8px; }
+    #massSheet #steps { grid-area: steps; margin-bottom: 8px; }
+    #massSheet #cands { grid-area: cands; grid-template-columns: repeat(10, 1fr); margin-bottom: 8px; }
+    #massSheet #extraRow { grid-area: extra; margin-bottom: 0; }
+    #fldNum { grid-area: num; } #matchRow { grid-area: match; } #fldActual { grid-area: actual; }
+    #notice { grid-area: notice; } #pad { grid-area: pad; } #queue { grid-area: queue; }
     .input-layout .field { margin-bottom: 6px; padding: 4px 10px; }
     .input-layout .field .val { font-size: 30px; min-height: 38px; }
     .input-layout .field .val .cursor { height: 30px; }
@@ -122,6 +132,9 @@
   .dupchoice button { border: 0; border-radius: 10px; padding: 12px 6px; font-size: 16px; font-weight: 700; color: #fff; line-height: 1.2; }
   .dupchoice button span { display: block; font-size: 11px; font-weight: 400; opacity: .85; }
   .dupchoice .fix { background: #c77700; } .dupchoice .dup { background: var(--ng); }
+  #massSheet { display: none; }
+  #massSheet.open { display: block; }
+  .sheet-title { font-size: 15px; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
   .cell.repair { background: #fff1dc; color: #9a5a00; }
   .extra-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
   .repairbtn { border: 2px solid #c77700; background: #fff; color: #9a5a00; border-radius: 10px; padding: 8px; font-size: 15px; font-weight: 700; }
@@ -201,7 +214,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v20（修正=品質不良・表を大きく）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v21（番号のあと入力バー）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -262,26 +275,30 @@
         <div class="lbl"><span>実容器番号（刻印の番号）</span></div>
         <div class="val" id="valActual"></div>
       </div>
-      <div class="steps hidden" id="steps">
-        <button tabindex="-1" data-delta="-1"><b></b><span>前回 −0.1</span></button>
-        <button tabindex="-1" data-delta="0" class="same"><b></b><span>前回と同じ</span></button>
-        <button tabindex="-1" data-delta="1"><b></b><span>前回 ＋0.1</span></button>
-      </div>
-      <div class="field" id="fldMass">
-        <div class="lbl"><span>W（kg）</span><span id="massHint">「68」→6.8 と入力してもOK</span></div>
-        <div class="val" id="valMass"></div>
-      </div>
       <div class="notice info" id="notice">容器番号を入力</div>
       <div class="dupchoice hidden" id="dupChoice">
         <button class="fix" id="btnFix" tabindex="-1">訂正して上書き<span>入力ミスを直す（Enter・もう一度タップ）</span></button>
         <button class="dup" id="btnDup" tabindex="-1">ダブりとして記録<span>2回流れてきた（＋キー）</span></button>
       </div>
-      <div class="extra-row hidden" id="extraRow">
-        <button class="sealbtn" id="btnSeal" tabindex="-1">シール違い</button>
-        <button class="repairbtn" id="btnRepair" tabindex="-1">修正（品質不良）</button>
+      <!-- 質量の入力バー: 容器番号が決まると出る -->
+      <div id="massSheet">
+        <div class="sheet-title" id="sheetTitle"></div>
+        <div class="field" id="fldMass">
+        <div class="lbl"><span>W（kg）</span><span id="massHint">「68」→6.8 と入力してもOK</span></div>
+        <div class="val" id="valMass"></div>
+      </div>
+      <div class="steps hidden" id="steps">
+        <button tabindex="-1" data-delta="-1"><b></b><span>前回 −0.1</span></button>
+        <button tabindex="-1" data-delta="0" class="same"><b></b><span>前回と同じ</span></button>
+        <button tabindex="-1" data-delta="1"><b></b><span>前回 ＋0.1</span></button>
       </div>
       <div class="cands hidden" id="cands"></div>
       <div class="cands-note hidden" id="candsNote">タップで保存（濃い色ほどこのロットでよく出る値）</div>
+      <div class="extra-row" id="extraRow">
+        <button class="sealbtn" id="btnSeal" tabindex="-1">シール違い</button>
+        <button class="repairbtn" id="btnRepair" tabindex="-1">修正（品質不良）</button>
+      </div>
+      </div>
       <div class="pad" id="pad">
         <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button><button class="fn" data-k="Backspace">⌫ 1字消す</button>
         <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button><button class="fn" data-k="+">＋ 前回と同じ質量</button>
@@ -1029,12 +1046,24 @@
     const t = S.target;
     $('resolved').textContent = t ? '→ ' + label(t.lot, t.serial) + '（' + t.lot.sheetName + '）' : '';
     $('dupChoice').classList.toggle('hidden', !S.confirmDup || (S.stage !== 'num' && S.stage !== 'actual'));
-    $('extraRow').classList.toggle('hidden', S.stage !== 'mass');
+    const sheetOpen = S.stage === 'mass';
+    $('massSheet').classList.toggle('open', sheetOpen);
+    $('sheetTitle').textContent = sheetOpen && S.target ? label(S.target.lot, S.target.serial) + ' の W' +
+      (S.target.lot.entries[S.target.serial] !== undefined ? '（前は ' + fmtMass(S.target.lot.entries[S.target.serial]) + '）' : '') : '';
+    placeSheet();
     $('btnSeal').classList.toggle('on', S.seal);
     renderSteps(); renderCands(); renderTabs(); renderGrid();
   }
 
   function esc(s) { return String(s).replace(/[&<>]/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
+
+  // 入力バーを下の入力欄のすぐ上に置く（縦向きのとき）
+  function placeSheet() {
+    const top = $('inPanel').getBoundingClientRect().top;
+    document.documentElement.style.setProperty('--sheetBottom', Math.max(0, window.innerHeight - top + 6) + 'px');
+  }
+  window.addEventListener('resize', placeSheet);
+  window.addEventListener('scroll', placeSheet, { passive: true });
 
   // 前回±0.1・前回と同じ のボタン。「前回」はそのロットで最後に入れた値（なければ標準値）
   function stepBase(lot) {
