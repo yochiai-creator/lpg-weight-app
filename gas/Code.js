@@ -179,7 +179,7 @@ function ensureLogHeaders_() {
       props.setProperty('LOG_MASS_FORMAT', '0.0');
     }
     // これまでの記録にもグループNo・容器区分を入れる（1回だけ。v44で早見表のルールに合わせて入れ直し）
-    if (props.getProperty('LOG_GROUP_FILLED') !== '2' && log.getLastRow() > 1) {
+    if (props.getProperty('LOG_GROUP_FILLED') !== '3' && log.getLastRow() > 1) {
       const kinds = {};
       readLots_().forEach(function(l) { kinds[l.lotId] = l; });
       const n = log.getLastRow() - 1;
@@ -191,7 +191,7 @@ function ensureLogHeaders_() {
         out[i] = [groupNoOf_(l.kind, String(r[1]).slice(l.prefix.length)), l.kind];
       });
       log.getRange(2, 17, n, 2).setValues(out);
-      props.setProperty('LOG_GROUP_FILLED', '2');
+      props.setProperty('LOG_GROUP_FILLED', '3');
     }
   }
   const lotsSh = ss.getSheetByName(SHEET_LOTS);
@@ -218,13 +218,13 @@ function userEmail_() {
 
 // ---------- 純粋ロジック（テスト可能） ----------
 
-// グループNo（容器1本ごと）: 5kg・8kg・20kg は50本ごと（番号取り早見表: 1〜50 → 1 … 49951〜50000 → 1000、50001〜50050 → 1）
+// グループNo（容器1本ごと）: 5kg・8kg・20kg は50本ごと（番号取り早見表: 1〜50 → 1 … 49951〜50000 → 0、50001〜50050 → 1）
 // 30kg・50kg系は100本ごと（59701〜59800 → 598）
 function groupNoOf_(kind, serial) {
   const k = String(kind || '').trim(), n = Number(serial);
   if (!(n > 0)) return '';
   if (/^(30kg|50kg)/.test(k)) return Math.floor((n - 1) / 100) + 1;
-  if (/^(5kg|8kg|20kg)/.test(k)) return Math.floor((n - 1) / 50) % 1000 + 1;
+  if (/^(5kg|8kg|20kg)/.test(k)) return (Math.floor((n - 1) / 50) + 1) % 1000;
   return '';
 }
 
