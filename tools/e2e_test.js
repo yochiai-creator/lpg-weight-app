@@ -250,6 +250,10 @@ function check(name, ok, detail) {
   const lots = () => ss.getSheetByName('ロット').getRange(2, 1, 2, 17).getDisplayValues();
   check('手動完了で状態=完了・PDF保存', lots()[0][6] === '完了' && lots()[0][13] !== '');
   check('送信しない指定ではメールなし', global.MAILS.length === 0);
+  check('完了してPDFを保存したら成績表シートを消す', !ss.getSheetByName('成績表_HEP37001-37100'));
+  { const y = String(new Date().getFullYear()), mo = ('0' + (new Date().getMonth() + 1)).slice(-2);
+    check('PDFは年・月のフォルダに保存', global.PDFS.some(p => p === '/LPG容器 検査成績表PDF/' + y + '年/' + mo + '月/成績表_HEP37001-37100.pdf'), global.PDFS.join(',')); }
+  check('シートを消した完了ロットも入力状況は入力記録から出る', Object.keys(ctx.getBootstrap().recentDone.find(l => l.lotId === 'HEP37001').entries).length >= 15);
 
   // ---- 全数そろったら自動完了・送信
   await page.click('#btnStart'); await page.waitForTimeout(100);
@@ -315,7 +319,11 @@ function check(name, ok, detail) {
   check('底黒: もう一度流れても二重に記録しない', (await keys('7023', 400)).includes('〇済み'));
   const sokoRows = ss.getSheetByName('入力記録').getRange(2, 1, ss.getSheetByName('入力記録').getLastRow() - 1, 18).getValues().filter(r => r[2] === 'HEP37001-底黒');
   check('底黒: 入力記録は区分「底黒」で1行', sokoRows.length === 1 && sokoRows[0][8] === '底黒' && sokoRows[0][7] === '');
-  check('元の成績表の質量はそのまま', slot(22).join('|') === '023|true|3|4|,|9', slot(22).join('|'));
+  ctx.reopenLot('HEP37001');
+  check('再開すると成績表シートを入力記録から作り直す', !!sh() && slot(22).join('|') === '023|true|3|4|,|9' && slot(30).join('|') === '031|false|欠|番||', slot(22).join('|') + ' / ' + (sh() ? slot(30).join('|') : ''));
+  { const before = global.MAILS.length; const r = ctx.resendLot('HEP36001');
+    check('シートを消したロットの再送信は保存済みPDFを送る', global.MAILS.length === before + 1 && r.pdfUrl.includes('drive.google.com') && !ss.getSheetByName('成績表_HEP36001-36100') && global.MAILS[before].att[0] === '成績表_HEP36001-36100.pdf'); }
+  { const t = ss.getSheetByName('書式_成績表'); check('書式シートの余った行・列を削る', t.getMaxRows() <= 34 && t.getMaxColumns() <= 34, t.getMaxRows() + 'x' + t.getMaxColumns()); }
   await page.click('#btnHome'); await page.waitForTimeout(300);
 
   fs.mkdirSync(path.join(__dirname, 'out'), { recursive: true });

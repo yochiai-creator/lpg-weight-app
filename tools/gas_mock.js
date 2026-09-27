@@ -7,11 +7,12 @@ class Sheet{constructor(ss,name){this.ss=ss;this.name=name;this.cells={};this.fo
  getName(){return this.name} setName(n){this.name=n;return this} getSheetId(){return this.id}
  get(r,c){const v=this.cells[r+','+c];return v===undefined?'':v} set(r,c,v){this.cells[r+','+c]=v}
  getLastColumn(){let m=0;for(const k in this.cells){const c=+k.split(',')[1];if(this.cells[k]!==''&&c>m)m=c}return m}
- getMaxRows(){return Math.max(1000,this.getLastRow())}
+ getMaxRows(){return Math.max(this.maxR||1000,this.getLastRow())} getMaxColumns(){return Math.max(this.maxC||26,this.getLastColumn())}
+ deleteRows(st,n){this.maxR=this.getMaxRows()-n;for(const k in this.cells){const r=+k.split(',')[0];if(r>=st&&r<st+n)delete this.cells[k]}return this} deleteColumns(st,n){this.maxC=this.getMaxColumns()-n;for(const k in this.cells){const c=+k.split(',')[1];if(c>=st&&c<st+n)delete this.cells[k]}return this}
  getLastRow(){let m=0;for(const k in this.cells){const r=+k.split(',')[0];if(this.cells[k]!==''&&r>m)m=r}return m}
  getRange(a,b,c,d){if(typeof a==='string')return new Range(this,...a1(a));return new Range(this,a,b,c||1,d||1)}
  appendRow(vals){const r=this.getLastRow()+1;vals.forEach((v,i)=>{if(typeof v==='string'&&v[0]==="'")v=v.slice(1);this.set(r,i+1,v)})}
- copyTo(ss){const s=new Sheet(ss,'コピー '+this.name);s.cells=JSON.parse(JSON.stringify(this.cells));s.fonts=JSON.parse(JSON.stringify(this.fonts));s.rich=JSON.parse(JSON.stringify(this.rich));ss.sheets.push(s);return s}
+ copyTo(ss){const s=new Sheet(ss,'コピー '+this.name);s.cells=JSON.parse(JSON.stringify(this.cells));s.fonts=JSON.parse(JSON.stringify(this.fonts));s.rich=JSON.parse(JSON.stringify(this.rich));s.maxR=this.maxR;s.maxC=this.maxC;ss.sheets.push(s);return s}
  setFrozenRows(){}
  moveColumns(range,dest){const src=[];for(let j=0;j<range.nc;j++)src.push(range.c+j);let maxC=Math.max(this.getLastColumn(),dest,...src);const rest=[];for(let c=1;c<=maxC;c++)if(src.indexOf(c)<0)rest.push(c);const at=rest.filter(c=>c<dest).length;const order=rest.slice(0,at).concat(src,rest.slice(at));const n={};for(const k in this.cells){const [rr,cc]=k.split(',').map(Number);const ni=order.indexOf(cc);n[rr+','+(ni<0?cc:ni+1)]=this.cells[k];}this.cells=n;return this}
  deleteRow(r){const n={};for(const k in this.cells){const [rr,cc]=k.split(',').map(Number);if(rr<r)n[k]=this.cells[k];else if(rr>r)n[(rr-1)+','+cc]=this.cells[k];}this.cells=n;return this}}
@@ -34,11 +35,17 @@ function load(){
   PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k]||null,setProperty:(k,v)=>props[k]=v})},
   LockService:{getScriptLock:()=>({waitLock(){},releaseLock(){}})},
   Session:{getActiveUser:()=>({getEmail:()=>'tester@example.com'})},
-  Utilities:{formatDate:(d)=>d.toISOString().replace(/\D/g,'').slice(2,14),newBlob:(c,t,n)=>({name:n,type:t,content:c,getName(){return n}})},
+  Utilities:{formatDate:(d,tz,f)=>f==='yyyy'?String(d.getFullYear()):f==='MM'?('0'+(d.getMonth()+1)).slice(-2):d.toISOString().replace(/\D/g,'').slice(2,14),newBlob:(c,t,n)=>({name:n,type:t,content:c,getName(){return n}})},
   MailApp:{sendEmail:(to,sub,body,opt)=>{global.MAILS.push({to,sub,body,cc:opt.cc,name:opt.name,att:opt.attachments.map(a=>a.name)})}},
   UrlFetchApp:{fetch:()=>({getBlob:()=>({setName(n){this.name=n;return this}})})},
   ScriptApp:{getOAuthToken:()=>'t'},
-  DriveApp:{createFolder:()=>({getId:()=>'F',createFile:(b)=>({getUrl:()=>'https://drive/'+b.name})}),getFolderById:()=>({createFile:(b)=>({getUrl:()=>'https://drive/'+b.name})})}};
+  DriveApp:(()=>{const files={};let fid=1000000000;const mk=(name,path)=>{const kids={};const f={name,path,getId:()=>'F'+path,getName:()=>name,
+     createFile(b){const id='file'+(fid++);files[id]={blob:b,path:path+'/'+b.name};global.PDFS.push(path+'/'+b.name);return {getUrl:()=>'https://drive.google.com/file/d/'+id+'/view',getId:()=>id}},
+     getFoldersByName(n){let used=false;return {hasNext:()=>!used&&!!kids[n],next(){used=true;return kids[n]}}},
+     createFolder(n){return kids[n]=mk(n,path+'/'+n)}};return f};const root=mk('ROOT','');let base=null;
+   return {createFolder:(n)=>base=root.createFolder(n),getFolderById:()=>{if(!base)throw new Error('none');return base},
+     getFileById:(id)=>{if(!files[id])throw new Error('no file');return {getBlob:()=>({name:files[id].blob.name,setName(n){this.name=n;return this}})}}}})()};
+ global.PDFS=[];
  global.MAILS=[];
  vm.createContext(ctx); vm.runInContext(fs.readFileSync(GAS+'/Code.js','utf8'),ctx);
  vm.runInContext(fs.readFileSync(GAS+'/Setup.js','utf8'),ctx);

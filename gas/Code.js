@@ -57,7 +57,7 @@ function doGet() {
 
 // シートの整備（タイムゾーン・列見出し・シート名・見出しの文字サイズ）。1つが失敗しても残りは必ず行う
 function ensureSheets_() {
-  [ensureTokyoTime_, ensureLogHeaders_, ensureTitleFont_, ensureSettingRows_, ensureVolumes_].forEach(function(fn) {
+  [ensureTokyoTime_, ensureLogHeaders_, ensureTitleFont_, ensureSettingRows_, ensureVolumes_, ensureTrim_, cleanDoneSheets_].forEach(function(fn) {
     try { fn(); } catch (e) { console.error('シートの整備に失敗: ' + (fn.name || '') + ' ' + e.message); }
   });
 }
@@ -68,6 +68,38 @@ function ensureSettingRows_() {
   if (!sh) return;
   const have = sh.getLastRow() >= 2 ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().map(function(r) { return String(r[0]).trim(); }) : [];
   SETTING_ROWS.forEach(function(r) { if (have.indexOf(r[0]) < 0) sh.appendRow(r); });
+}
+
+// ---------- シートを小さく保つ ----------
+// 成績表は A1:AF32 に収まる。外側の空の行・列を削ってセル数（1ファイル1000万セルまで）を節約する
+const TRIM_ROWS = 34, TRIM_COLS = 34;
+function trimSheet_(sh) {
+  const keepR = Math.max(sh.getLastRow(), TRIM_ROWS), keepC = Math.max(sh.getLastColumn(), TRIM_COLS);
+  if (sh.getMaxRows() > keepR) sh.deleteRows(keepR + 1, sh.getMaxRows() - keepR);
+  if (sh.getMaxColumns() > keepC) sh.deleteColumns(keepC + 1, sh.getMaxColumns() - keepC);
+}
+// 書式シートと今ある成績表シートを1度だけ小さくする
+function ensureTrim_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('SHEETS_TRIMMED') === '1') return;
+  getSpreadsheet_().getSheets().forEach(function(sh) {
+    const n = sh.getName();
+    if (n === SHEET_TEMPLATE || n.indexOf(REPORT_PREFIX) === 0) trimSheet_(sh);
+  });
+  props.setProperty('SHEETS_TRIMMED', '1');
+}
+// 完了済み（PDF保存済み）のロットに残っている成績表シートを消す。1回に30枚まで（多いときは次に開いたときに続き）
+function cleanDoneSheets_() {
+  if (!readSettings_().removeDoneSheet) return;
+  const ss = getSpreadsheet_();
+  const names = {};
+  ss.getSheets().forEach(function(sh) { names[sh.getName()] = sh; });
+  let n = 0;
+  readLots_().forEach(function(lot) {
+    if (n >= 30 || lot.status !== STATUS_DONE || !lot.pdf || !names[lot.sheetName]) return;
+    ss.deleteSheet(names[lot.sheetName]);
+    n++;
+  });
 }
 
 // 成績表の内容積（N3、「内容積：」と「lit」の間）
@@ -402,7 +434,7 @@ function withProgress_(lot, marksMap) {
 // 成績表シートから現在の入力状況を読む: { "052023": 6.8, ... }
 function readProgress_(lot) {
   const sh = getSpreadsheet_().getSheetByName(lot.sheetName);
-  if (!sh) return {};
+  if (!sh) return progressFromLog_(lot);
   const values = sh.getRange(GRID_FIRST_ROW, GRID_FIRST_COL, GRID_ROWS, BLOCK_WIDTH * BLOCKS).getValues();
   const result = {};
   const size = lotSize_(lot);
@@ -414,6 +446,45 @@ function readProgress_(lot) {
     if (mass !== null) result[padSerial_(Number(lot.start) + i, width)] = mass;
   }
   return result;
+}
+
+// 成績表シートがない（完了して消した）ロットの入力状況を、入力記録の有効な行から組み立てる
+// full: 入力記録を全部読む（再開・再送信）。省略時は直近3万行を1回の実行で使い回す（一覧表示用）
+let LOG_TAIL_CACHE_ = null;
+function progressFromLog_(lot, full) {
+  const out = {};
+  const log = getSpreadsheet_().getSheetByName(SHEET_LOG);
+  if (!log || log.getLastRow() < 2) return out;
+  let v;
+  if (full) v = log.getRange(2, 1, log.getLastRow() - 1, LOG_HEADERS.length).getValues();
+  else {
+    if (!LOG_TAIL_CACHE_) {
+      const last = log.getLastRow(), from = Math.max(2, last - 30000);
+      LOG_TAIL_CACHE_ = log.getRange(from, 1, last - from + 1, LOG_HEADERS.length).getValues();
+    }
+    v = LOG_TAIL_CACHE_;
+  }
+  v.forEach(function(r) {
+    if (String(r[LC_LOT]) !== lot.lotId || r[LC_STATUS] !== '有効') return;
+    const serial = String(r[LC_SERIAL]).slice(lot.prefix.length);
+    const kind = r[LC_KIND];
+    if (kind === MISSING) out[serial] = MISSING;
+    else if (kind === REPAIR) out[serial] = REPAIR;
+    else if (kind === SPEC_SOKO) out[serial] = CIRCLE;
+    else if (r[LC_MASS] !== '') out[serial] = Number(r[LC_MASS]);
+  });
+  return out;
+}
+
+// 消した成績表シートを、書式シートから作り直して入力記録の値を書き戻す（再開・再送信用）
+function rebuildReportSheet_(lot) {
+  const entries = progressFromLog_(lot, true);
+  const sh = createReportSheet_(lot);
+  Object.keys(entries).forEach(function(serial) {
+    const pos = slotPosition_(Number(serial) - Number(lot.start));
+    sh.getRange(pos.row, pos.numberCol + 1, 1, 5).setValues([massCells_(entries[serial])]);
+  });
+  return sh;
 }
 
 // 範囲をまとめて登録: 開始〜終了を 001〜100 区切り（紙の成績表と同じ100本単位）に分けてロットを作る
@@ -719,9 +790,9 @@ function finishLot_(lot, send) {
   const lots = getSheet_(SHEET_LOTS);
   lots.getRange(lot.row, 7).setValue(STATUS_DONE);
   lot.status = STATUS_DONE;
-  const sh = getSheet_(lot.sheetName);
+  const sh = getSpreadsheet_().getSheetByName(lot.sheetName) || rebuildReportSheet_(lot);
   const pdf = exportLotPdf_(lot, sh);
-  const result = { lotId: lot.lotId, pdfUrl: pdf.url, sentTo: '', mailError: '' };
+  const result = { lotId: lot.lotId, pdfUrl: pdf.url, sentTo: '', mailError: '', sheetRemoved: false };
   if (send) {
     try {
       result.sentTo = sendLotMail_(lot, pdf.blob);
@@ -730,15 +801,35 @@ function finishLot_(lot, send) {
       lots.getRange(lot.row, 17).setValue('送信失敗: ' + e.message);
     }
   }
+  // PDFをドライブに保存できたら成績表シートは消す（再開すると入力記録から作り直す）
+  if (pdf.url && readSettings_().removeDoneSheet) {
+    getSpreadsheet_().deleteSheet(sh);
+    result.sheetRemoved = true;
+  }
   return result;
 }
 
 // 完了済みロットをもう一度送る
 function resendLot(lotId) {
   const lot = findLot_(lotId);
-  const sh = getSheet_(lot.sheetName);
-  const pdf = exportLotPdf_(lot, sh);
+  const sh = getSpreadsheet_().getSheetByName(lot.sheetName);
+  if (sh) {
+    const pdf = exportLotPdf_(lot, sh);
+    return { lotId: lot.lotId, pdfUrl: pdf.url, sentTo: sendLotMail_(lot, pdf.blob) };
+  }
+  // 成績表シートを消したロットは、保存済みのPDFをそのまま送る（なければ作り直してPDFにし、また消す）
+  const saved = savedPdfBlob_(lot);
+  if (saved) return { lotId: lot.lotId, pdfUrl: lot.pdf, sentTo: sendLotMail_(lot, saved) };
+  const tmp = rebuildReportSheet_(lot);
+  const pdf = exportLotPdf_(lot, tmp);
+  if (readSettings_().removeDoneSheet) getSpreadsheet_().deleteSheet(tmp);
   return { lotId: lot.lotId, pdfUrl: pdf.url, sentTo: sendLotMail_(lot, pdf.blob) };
+}
+
+function savedPdfBlob_(lot) {
+  const m = String(lot.pdf || '').match(/\/d\/([\w-]{10,})/) || String(lot.pdf || '').match(/[?&]id=([\w-]{10,})/);
+  if (!m) return null;
+  try { return DriveApp.getFileById(m[1]).getBlob().setName(lot.sheetName + '.pdf'); } catch (e) { return null; }
 }
 
 // ロットの容器区分（機種）を変える
@@ -788,6 +879,7 @@ function reopenLot(lotId) {
   const lot = findLot_(lotId);
   getSheet_(SHEET_LOTS).getRange(lot.row, 7).setValue(STATUS_ACTIVE);
   lot.status = STATUS_ACTIVE;
+  if (!getSpreadsheet_().getSheetByName(lot.sheetName)) rebuildReportSheet_(lot);
   return withProgress_(lot);
 }
 
@@ -804,7 +896,7 @@ function exportLotPdf_(lot, sh) {
     '&r1=0&c1=0&r2=30&c2=31';
   const res = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } });
   const blob = res.getBlob().setName(lot.sheetName + '.pdf');
-  const file = getPdfFolder_().createFile(blob);
+  const file = getPdfMonthFolder_(new Date()).createFile(blob);
   if (lot.row) getSheet_(SHEET_LOTS).getRange(lot.row, 14).setValue(file.getUrl());
   return { url: file.getUrl(), blob: blob };
 }
@@ -818,6 +910,17 @@ function getPdfFolder_() {
   const folder = DriveApp.createFolder('LPG容器 検査成績表PDF');
   props.setProperty('PDF_FOLDER_ID', folder.getId());
   return folder;
+}
+
+// 保存先: 「LPG容器 検査成績表PDF / 2026年 / 09月」のように年・月のフォルダを自動で作って入れる
+function getPdfMonthFolder_(date) {
+  const tz = 'Asia/Tokyo';
+  const year = childFolder_(getPdfFolder_(), Utilities.formatDate(date, tz, 'yyyy') + '年');
+  return childFolder_(year, Utilities.formatDate(date, tz, 'MM') + '月');
+}
+function childFolder_(parent, name) {
+  const it = parent.getFoldersByName(name);
+  return it.hasNext() ? it.next() : parent.createFolder(name);
 }
 
 function exportActiveSheetPdf() {
