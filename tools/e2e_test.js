@@ -56,6 +56,7 @@ function check(name, ok, detail) {
   check('すべてのときは機種ごとの見出し', (await page.locator('#activeLots .kind-head').count()) === 2);
   await page.click('#kindFilter button:has-text("20kg")');
   check('20kgを選ぶと20kgのロットだけ', (await page.locator('#activeLots .card').count()) === 1);
+  check('20kgのグループNoは50本ごと（73301〜73400 → 467・468）', (await page.textContent('#activeLots .card .ln-grp')) === '467・468');
   await page.click('#kindFilter button:has-text("すべて")');
   const c73 = page.locator('#activeLots .card', { hasText: '73301' });
   await c73.locator('button:has-text("機種を変更")').click();

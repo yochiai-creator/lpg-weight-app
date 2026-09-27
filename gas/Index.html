@@ -239,7 +239,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v39（グループNo表示）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v40（20kgのグループNo）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -1307,12 +1307,22 @@
     const st = String(l.start), w = Math.max(1, st.length - 2);
     return pad(Math.floor((Number(st) - 1) / 100) + 1, w);
   }
-  // グループNoで呼ぶ機種（30kg・50kg・50kg S付）。それ以外は開始番号をそのまま出す
-  function usesGroupNo(l) { return /^(30kg|50kg)/.test(String(l.kind || '')); }
+  // 20kg: 50本ごとのグループNo（50001〜50050 が 1、50051〜50100 が 2 …）。1ロット100本なので2つ入る
+  const G20_BASE = 50001, G20_SIZE = 50;
+  function group20(n) { return Math.floor((Number(n) - G20_BASE) / G20_SIZE) + 1; }
+  function lotLabel(l) {
+    const kind = String(l.kind || '');
+    if (/^(30kg|50kg)/.test(kind)) return groupNo(l);
+    if (/^20kg/.test(kind) && Number(l.start) >= G20_BASE) {
+      const a = group20(l.start), b = group20(l.end);
+      return a === b ? String(a) : a + '・' + b;
+    }
+    return String(l.start);
+  }
   // ロット番号の表示: 記号は小さく、グループNo（または開始番号）を太く大きくして見分けやすくする
   function lotNumHtml(l) {
     return (l.prefix ? '<span class="ln-pre">' + esc(l.prefix) + '</span>' : '') +
-      '<span class="ln-grp">' + esc(usesGroupNo(l) ? groupNo(l) : l.start) + '</span>';
+      '<span class="ln-grp">' + esc(lotLabel(l)) + '</span>';
   }
 
   // 表を左右にスワイプ（または ‹ › ボタン）で、タブの並び順に前後のロットへ切り替える
