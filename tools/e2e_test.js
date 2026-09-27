@@ -44,6 +44,9 @@ function check(name, ok, detail) {
 
   // ---- ロット登録
   check('スプレッドシートを日本時間にそろえる', ss.getSpreadsheetTimeZone() === 'Asia/Tokyo');
+  check('旧「担当者」シートは「入力者」に名前が変わる', !!ss.getSheetByName('入力者') && !ss.getSheetByName('担当者') && ss.getSheetByName('入力者').getRange('A1').getValue() === '入力者名');
+  const lh = ss.getSheetByName('入力記録').getRange(1, 1, 1, 16).getValues()[0];
+  check('入力記録の見出し: Googleアカウント・入力者', lh[10] === 'Googleアカウント' && lh[12] === '入力者');
   check('ロット登録', (await create('HEP', '37001')).includes('登録しました'));
   await create('HEP', '36001');
   await page.fill('#fPrefix', ''); await page.fill('#fStart', '73301'); await page.selectOption('#fKind', '20kg');
@@ -61,7 +64,7 @@ function check(name, ok, detail) {
   check('機種を変更できる', (await page.textContent('#kindFilter')).includes('30kg（1）') && (await page.textContent('#kindFilter')).includes('20kg（0）'));
   check('ロットシートの容器区分も変わる', ss.getSheetByName('ロット').getRange(2, 1, 3, 6).getValues().some(r => r[0] === '73301' && r[5] === '30kg'));
   check('同じ組容器番号は登録できない', (await create('HEP', '37001')).includes('登録済み'));
-  check('担当者を選ぶまで入力開始できない', await page.isDisabled('#btnStart'));
+  check('入力者を選ぶまで入力開始できない', await page.isDisabled('#btnStart'));
   await page.selectOption('#fWorker', '山田'); await page.fill('#fDevice', 'iPad-1');
   await page.click('#btnStart'); await page.waitForTimeout(100);
 
@@ -170,7 +173,7 @@ function check(name, ok, detail) {
   check('入力記録にNGと最初の番号が残る', ng && ng[7] === 'NG' && ng[8] === 'HEP37040');
   const undone = rows.find(r => r[3] === 'HEP37060');
   check('取消した行は「取消」で残る', undone && undone[11] === '取消' && undone[14] !== '');
-  check('入力記録に担当者・端末', rows.every(r => r[12] === '山田' && r[13] === 'iPad-1'));
+  check('入力記録に入力者・端末', rows.every(r => r[12] === '山田' && r[13] === 'iPad-1'));
   const over = rows.filter(r => r[3] === 'HEP37023');
   check('上書き前の値を記録', over.length === 2 && over[1][9] === 34.8 && over[1][6] === 'ダブり');
 

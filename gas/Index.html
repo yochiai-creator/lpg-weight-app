@@ -214,17 +214,17 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v23（見出し: タイトル15pt・※の行11pt）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v24（入力者・Googleアカウント）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
 </header>
 
 <main id="home">
-  <h2>担当者（この端末で入力する人）</h2>
+  <h2>入力者（この端末で入力する人）</h2>
   <div class="card">
     <div class="row" style="align-items:flex-end">
-      <div style="flex:1;min-width:200px"><label>担当者</label><select id="fWorker"></select></div>
+      <div style="flex:1;min-width:200px"><label>入力者</label><select id="fWorker"></select></div>
       <div style="flex:1;min-width:160px"><label>端末名（例: iPad-1）</label><input id="fDevice" autocomplete="off"></div>
     </div>
     <div class="msg" id="workerMsg"></div>
@@ -376,7 +376,7 @@
     short: true,       // 質量を1桁（小数第1位）で入力
     fullMass: false    // 「.」を押して3桁入力に切り替えた状態
   };
-  // 担当者・端末名はこの端末に記憶する（保存できない環境でも画面を開いている間は保持）
+  // 入力者・端末名はこの端末に記憶する（保存できない環境でも画面を開いている間は保持）
   const memo = {};
   const store = {
     get: function(k) {
@@ -434,12 +434,12 @@
     }
     sel.value = S.workers.indexOf(saved) >= 0 || !S.workers.length ? saved : '';
     $('fDevice').value = store.get('lpg.device');
-    $('workerMsg').textContent = S.workers.length ? '' : '「担当者」シートにスタッフ名を登録すると、ここで選べるようになります。';
+    $('workerMsg').textContent = S.workers.length ? '' : '「入力者」シートにスタッフ名を登録すると、ここで選べるようになります。';
     updateWorkerBadge();
   }
   function worker() { return $('fWorker').value; }
   function updateWorkerBadge() {
-    $('workerBadge').textContent = worker() ? '担当: ' + worker() + ($('fDevice').value ? '（' + $('fDevice').value + '）' : '') : '';
+    $('workerBadge').textContent = worker() ? '入力者: ' + worker() + ($('fDevice').value ? '（' + $('fDevice').value + '）' : '') : '';
   }
   S.auto = store.get('lpg.auto') !== '0';
   $('autoMode').checked = S.auto;
@@ -576,7 +576,7 @@
     if (!S.done.length) dn.innerHTML = '<div class="sub">まだありません</div>';
     S.done.forEach(function(l) { dn.appendChild(lotCard(l, true)); });
     $('btnStart').disabled = !S.lots.length || (S.workers.length > 0 && !worker());
-    $('btnStart').textContent = S.workers.length && !worker() ? '担当者を選ぶと入力できます' : '入力を始める';
+    $('btnStart').textContent = S.workers.length && !worker() ? '入力者を選ぶと入力できます' : '入力を始める';
   }
 
   // 開始〜終了を 001〜100 区切りの100本単位に分けた各ロットの開始番号

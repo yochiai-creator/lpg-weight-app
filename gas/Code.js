@@ -11,7 +11,7 @@ const LOT_HEADERS = ['ロットID', '登録日時', '記号', '開始番号', '�
   '成績表シート', '代表容器番号', '耐圧試験日', '全増加(cm3)', '恒久増加(cm3)', '恒久増加率(%)',
   'PDF', '登録者', '送信日時', '送信先'];
 const LOG_HEADERS = ['記録ID', '入力日時', 'ロットID', '容器番号', '表示番号', '質量(kg)', '区分',
-  '一致結果', '入力番号(NG時)', '上書き前', '入力者', '状態', '担当者', '端末', '取消日時', '備考'];
+  '一致結果', '入力番号(NG時)', '上書き前', 'Googleアカウント', '状態', '入力者', '端末', '取消日時', '備考'];
 
 const STATUS_ACTIVE = '入力中';
 const STATUS_DONE = '完了';
@@ -100,12 +100,20 @@ function ensureTitleFont_() {
   props.setProperty(key, want);
 }
 
-// 後から増えた入力記録の列（備考など）の見出しを足す
+// 入力記録の列見出しを最新にそろえる（列の追加・名前の変更。データの行はそのまま）
+// あわせて、旧名「担当者」シートを「入力者」に名前を変える
 function ensureLogHeaders_() {
-  const log = getSpreadsheet_().getSheetByName(SHEET_LOG);
-  if (!log) return;
-  const cur = log.getRange(1, 1, 1, LOG_HEADERS.length).getValues()[0];
-  LOG_HEADERS.forEach(function(h, i) { if (cur[i] === '') log.getRange(1, i + 1).setValue(h); });
+  const ss = getSpreadsheet_();
+  const log = ss.getSheetByName(SHEET_LOG);
+  if (log) {
+    const cur = log.getRange(1, 1, 1, LOG_HEADERS.length).getValues()[0];
+    LOG_HEADERS.forEach(function(h, i) { if (cur[i] !== h) log.getRange(1, i + 1).setValue(h); });
+  }
+  const oldWorkers = ss.getSheetByName(SHEET_WORKERS_OLD);
+  if (oldWorkers && !ss.getSheetByName(SHEET_WORKERS)) {
+    oldWorkers.setName(SHEET_WORKERS);
+    if (oldWorkers.getRange('A1').getValue() === '担当者名') oldWorkers.getRange('A1').setValue('入力者名');
+  }
 }
 
 function getSheet_(name) {

@@ -1,7 +1,8 @@
-// 納品メール（全数そろったら検査成績表PDF＋入力データCSVを自動送信）と、設定・担当者シートの読み込み
+// 納品メール（全数そろったら検査成績表PDF＋入力データCSVを自動送信）と、設定・入力者シートの読み込み
 
 const SHEET_SETTINGS = '設定';
-const SHEET_WORKERS = '担当者';
+const SHEET_WORKERS = '入力者';
+const SHEET_WORKERS_OLD = '担当者';   // 以前の名前（画面を開いたときに「入力者」へ名前を変える）
 
 // 設定シート: A列=項目 / B列=値 / C列=説明
 const SETTING_ROWS = [
@@ -52,7 +53,8 @@ function readSettings_() {
 }
 
 function readWorkers_() {
-  const sh = getSpreadsheet_().getSheetByName(SHEET_WORKERS);
+  const ss = getSpreadsheet_();
+  const sh = ss.getSheetByName(SHEET_WORKERS) || ss.getSheetByName(SHEET_WORKERS_OLD);
   if (!sh || sh.getLastRow() < 2) return [];
   return sh.getRange(2, 1, sh.getLastRow() - 1, 1).getDisplayValues()
     .map(function(r) { return r[0].trim(); })
@@ -102,7 +104,7 @@ function buildLotCsv_(lot) {
       if (r[2] === lot.lotId && r[11] === '有効') latest[r[3]] = r;
     });
   }
-  const rows = [['容器番号', '表示番号', '質量(kg)', '区分', '一致結果', '入力日時', '担当者', '備考']];
+  const rows = [['容器番号', '表示番号', '質量(kg)', '区分', '一致結果', '入力日時', '入力者', '備考']];
   const width = lot.start.length;
   for (let n = Number(lot.start); n <= Number(lot.end); n++) {
     const serial = lot.prefix + padSerial_(n, width);

@@ -23,7 +23,8 @@ function setup() {
   // 後から増えた設定項目（標準質量など）を既存の設定シートに足す
   const have = settings.getLastRow() >= 2 ? settings.getRange(2, 1, settings.getLastRow() - 1, 1).getValues().map(function(r) { return String(r[0]); }) : [];
   SETTING_ROWS.forEach(function(r) { if (have.indexOf(r[0]) < 0) settings.appendRow(r); });
-  const workers = ss.getSheetByName(SHEET_WORKERS) || ensureSheet_(ss, SHEET_WORKERS, ['担当者名']);
+  ensureLogHeaders_();
+  const workers = ss.getSheetByName(SHEET_WORKERS) || ensureSheet_(ss, SHEET_WORKERS, ['入力者名']);
   if (workers.getLastRow() < 2) workers.getRange('B1').setValue('← A2から下に検査スタッフの名前を1行1人で入力（入力画面で選べるようになります）');
 
   const msg = [];
@@ -41,7 +42,7 @@ function setup() {
     msg.push('「' + SHEET_TEMPLATE + '」は作成済みです。');
   }
   msg.push('セットアップが完了しました。');
-  msg.push('「設定」シートの送付先と、「担当者」シートのスタッフ名を入力してください。');
+  msg.push('「設定」シートの送付先と、「入力者」シートのスタッフ名を入力してください。');
   // エディタから実行したときは画面にダイアログを出せないので、実行ログに出す
   try { SpreadsheetApp.getUi().alert(msg.join('\n')); } catch (e) { console.log(msg.join('\n')); }
 }

@@ -43,7 +43,7 @@ function load(){
  ensure=vm.runInContext('ensureSheet_',ctx); ensure(ss,'ロット',vm.runInContext('LOT_HEADERS',ctx)); ensure(ss,'入力記録',vm.runInContext('LOG_HEADERS',ctx));
  const st=ensure(ss,'設定',['項目','値','説明']); vm.runInContext('SETTING_ROWS',ctx).forEach((r,i)=>{st.set(i+2,1,r[0]);st.set(i+2,2,r[1]);});
  st.set(2,2,'nouhin@example.com');
- const w=ensure(ss,'担当者',['担当者名']); w.set(2,1,'山田'); w.set(3,1,'佐藤');
+ const w=ensure(ss,'担当者',['担当者名']); ctx.__oldWorkers=w; w.set(2,1,'山田'); w.set(3,1,'佐藤');
  return {ctx,ss};
 }
 module.exports={load};
