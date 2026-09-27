@@ -272,6 +272,27 @@ function check(name, ok, detail) {
 
   fs.mkdirSync(path.join(__dirname, 'out'), { recursive: true });
   await page.screenshot({ path: path.join(__dirname, 'out', 'home.png'), fullPage: true });
+  // ---- 起動高速化: 2回目の起動は前回の一覧をすぐ出し、裏で最新に更新する
+  {
+    const p2 = await browser.newPage({ viewport: { width: 1180, height: 820 } });
+    p2.on('pageerror', e => check('ページでJSエラーなし(再起動)', false, e.message));
+    let slow = 0;
+    await p2.exposeFunction('__gas', async (fn, arg) => {
+      if (fn === 'getBootstrap' && slow) await new Promise(r => setTimeout(r, slow));
+      try { const v = ctx[fn](JSON.parse(arg)); return JSON.stringify({ v: JSON.parse(JSON.stringify(v === undefined ? null : v)) }); }
+      catch (e) { return JSON.stringify({ err: e.message }); }
+    });
+    await p2.route('http://lpg.test/', r => r.fulfill({ contentType: 'text/html', body: html }));
+    await p2.goto('http://lpg.test/'); await p2.waitForTimeout(400);
+    const n1 = await p2.locator('#activeLots .card').count();
+    slow = 1500;
+    await p2.reload(); await p2.waitForTimeout(300);
+    check('再起動: 前回の一覧がすぐ出る', n1 > 0 && (await p2.locator('#activeLots .card').count()) === n1);
+    check('再起動: 更新中の表示が出る', await p2.isVisible('#staleMsg'));
+    await p2.waitForTimeout(1600);
+    check('再起動: 最新に更新されると表示が消える', !(await p2.isVisible('#staleMsg')) && (await p2.locator('#activeLots .card').count()) === n1);
+    await p2.close();
+  }
   await browser.close();
 
   const failed = results.filter(r => !r.ok).length;

@@ -134,6 +134,7 @@
   .dupchoice .fix { background: #c77700; } .dupchoice .dup { background: var(--ng); }
   #massSheet { display: none; }
   #massSheet.open { display: block; }
+  .stale { background: #fff6d6; color: #7a5a00; font-size: 13px; text-align: center; padding: 4px 8px; }
   .sheet-head { display: flex; align-items: flex-start; gap: 8px; }
   .sheet-head .sheet-title { flex: 1; }
   .sheet-close { flex: none; width: 40px; height: 40px; margin: -4px -4px 4px 0; border: 0; border-radius: 50%; background: #e8eaf2; color: var(--navy); font-size: 24px; font-weight: 700; line-height: 1; }
@@ -217,11 +218,12 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v31（質量バーに×）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v32（起動を高速化）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
 </header>
+<div id="staleMsg" class="stale hidden">前回の一覧を表示中・最新に更新しています…</div>
 
 <main id="home">
   <h2>入力者（この端末で入力する人）</h2>
@@ -382,6 +384,8 @@
     auto: true,        // Enterなしで自動確定
     numDigits: 3,      // 容器番号の入力桁数（入力中ロットの中で重ならない最小の下桁数）
     short: true,       // 質量を1桁（小数第1位）で入力
+    localOps: [],      // 最新の読み込みより後にこの画面で入れた分（一覧の更新時に重ねる）
+    stale: false,      // 前回保存した一覧を表示中
     fullMass: false    // 「.」を押して3桁入力に切り替えた状態
   };
   // 入力者・端末名はこの端末に記憶する（保存できない環境でも画面を開いている間は保持）
@@ -422,13 +426,52 @@
   }
 
   // ---------- ホーム ----------
+  // 起動を速くするため、前回の一覧をこの端末に保存しておき、まずそれを表示してから最新に更新する
+  const BOOT_KEY = 'lpg.boot';
+  function applyBoot(b) {
+    $('user').textContent = b.user;
+    S.done = b.recentDone; S.workers = b.workers; S.mail = b.mail; S.typical = b.typical || {};
+    // 既存のロットは同じ物を使い回して中身を最新にする（入力中の画面が参照しているため）
+    const old = {};
+    (S.lots || []).forEach(function(l) { old[l.lotId] = l; });
+    S.lots = b.lots.map(function(l) {
+      const cur = old[l.lotId];
+      if (!cur) return l;
+      Object.keys(cur).forEach(function(k) { delete cur[k]; });
+      return Object.assign(cur, l);
+    });
+    // 最新の読み込みより後にこの画面で入れた分を上に重ねる
+    S.localOps.forEach(function(op) { const l = lotById(op.lotId); if (l) l.entries[op.serial] = op.mass; });
+  }
   function loadHome() {
+    const t0 = Date.now();
     return call('getBootstrap').then(function(b) {
-      $('user').textContent = b.user;
-      S.lots = b.lots; S.done = b.recentDone; S.workers = b.workers; S.mail = b.mail; S.typical = b.typical || {};
+      try { localStorage.setItem(BOOT_KEY, JSON.stringify(b)); } catch (e) { /* 保存できなくても動く */ }
+      // 読み込み開始より前に保存済みの分は最新の一覧に入っている
+      S.localOps = S.localOps.filter(function(op) { return op.t >= t0 || S.pending[op.lotId + '|' + op.serial]; });
+      applyBoot(b);
+      S.stale = false; $('staleMsg').classList.add('hidden');
       renderWorkers();
       renderHome();
-    }).catch(function(e) { $('lotMsg').className = 'msg err'; $('lotMsg').textContent = errText(e); });
+      if (!$('entry').classList.contains('hidden')) {
+        if (!lotById(S.viewLotId)) S.viewLotId = S.lots.length ? S.lots[0].lotId : null;
+        if (S.target && !lotById(S.target.lot.lotId)) resetEntry('ロットが更新されました。容器番号を入力', 'info');
+        S.numDigits = Math.max(S.numDigits, computeNumDigits());
+        render();
+      }
+    }).catch(function(e) {
+      $('staleMsg').classList.add('hidden');
+      $('lotMsg').className = 'msg err'; $('lotMsg').textContent = errText(e);
+    });
+  }
+  function loadCachedBoot() {
+    let b = null;
+    try { b = JSON.parse(localStorage.getItem(BOOT_KEY) || 'null'); } catch (e) { b = null; }
+    if (!b || !b.lots) return;
+    applyBoot(b);
+    S.stale = true; $('staleMsg').classList.remove('hidden');
+    renderWorkers();
+    renderHome();
   }
 
   function renderWorkers() {
@@ -921,6 +964,7 @@
     }
     enqueue({ lotId: hit.lot.lotId, serial: hit.serial, mass: null, worker: worker(), device: $('fDevice').value.trim() });
     hit.lot.entries[hit.serial] = CIRCLE;
+    S.localOps.push({ lotId: hit.lot.lotId, serial: hit.serial, mass: CIRCLE, t: Date.now() });
     S.lastKey = hit.lot.lotId + '|' + hit.serial;
     beep(true);
     resetEntry('〇: ' + label(hit.lot, hit.serial) + '（底黒）→ 次の容器番号', 'ok');
@@ -947,6 +991,7 @@
       missing: mass === MISSING, repair: mass === REPAIR, ngInput: t.ngInput || '', worker: worker(), device: $('fDevice').value.trim(),
       overwrite: S.overwrite, seal: S.seal });
     t.lot.entries[t.serial] = mass;
+    S.localOps.push({ lotId: t.lot.lotId, serial: t.serial, mass: mass, t: Date.now() });
     if (isMass(mass)) { S.lastMass = mass; S.lastByLot[t.lot.lotId] = mass; }
     S.lastKey = t.lot.lotId + '|' + t.serial;
     beep(true);
@@ -1056,6 +1101,7 @@
       call('undoEntry', last.recordId).then(function(r) {
         const l = lotById(r.lotId);
         if (l) { if (r.mass === null) delete l.entries[r.serial]; else l.entries[r.serial] = r.mass; }
+        S.localOps = S.localOps.filter(function(op) { return !(op.lotId === r.lotId && String(op.serial) === String(r.serial)); });
         call('getLot', r.lotId).then(function(fresh) { const cur = lotById(fresh.lotId); if (cur) { cur.entries = fresh.entries; cur.dups = fresh.dups; cur.seals = fresh.seals; render(); } });
         S.lastKey = null;
         resetEntry('取り消しました: ' + (l ? label(l, r.serial) : r.serial) + '。容器番号を入力', 'ok');
@@ -1290,6 +1336,7 @@
     if (S.queue.length) { e.preventDefault(); e.returnValue = ''; }
   });
 
+  loadCachedBoot();
   loadHome();
 })();
 </script>
