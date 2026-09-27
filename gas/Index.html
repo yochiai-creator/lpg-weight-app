@@ -137,6 +137,10 @@
   .stale { background: #fff6d6; color: #7a5a00; font-size: 13px; text-align: center; padding: 4px 8px; }
   .sheet-head { display: flex; align-items: flex-start; gap: 8px; }
   .sheet-head .sheet-title { flex: 1; }
+  .sheet-title .st-num { font-size: 30px; font-weight: 800; letter-spacing: .03em; font-variant-numeric: tabular-nums; }
+  .sheet-title .st-pre { font-size: 18px; font-weight: 700; margin-right: 3px; opacity: .75; }
+  .sheet-title .st-last { font-size: 38px; }
+  .sheet-title .st-w { margin-left: 10px; font-size: 16px; font-weight: 700; }
   .sheet-close { flex: none; width: 40px; height: 40px; margin: -4px -4px 4px 0; border: 0; border-radius: 50%; background: #e8eaf2; color: var(--navy); font-size: 24px; font-weight: 700; line-height: 1; }
   .sheet-title { font-size: 15px; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
   .cell.repair { background: #fff1dc; color: #9a5a00; }
@@ -239,7 +243,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v41（5kg・8kgもグループNo）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v42（入力バーの容器番号を大きく）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -1173,8 +1177,13 @@
     $('dupChoice').classList.toggle('hidden', !S.confirmDup || (S.stage !== 'num' && S.stage !== 'actual'));
     const sheetOpen = S.stage === 'mass';
     $('massSheet').classList.toggle('open', sheetOpen);
-    $('sheetTitle').textContent = sheetOpen && S.target ? label(S.target.lot, S.target.serial) + ' の W' +
-      (S.target.lot.entries[S.target.serial] !== undefined ? '（前は ' + fmtMass(S.target.lot.entries[S.target.serial]) + '）' : '') : '';
+    // 容器番号は大きく: 記号は小さめ、下3桁（表のマスの番号）を特に大きく
+    if (sheetOpen && S.target) {
+      const tl = S.target.lot, sn = String(S.target.serial), cut = Math.max(0, sn.length - 3);
+      $('sheetTitle').innerHTML = '<span class="st-num">' + (tl.prefix ? '<span class="st-pre">' + esc(tl.prefix) + '</span>' : '') +
+        esc(sn.slice(0, cut)) + '<span class="st-last">' + esc(sn.slice(cut)) + '</span></span>' +
+        '<span class="st-w">の W' + (tl.entries[S.target.serial] !== undefined ? '（前は ' + esc(fmtMass(tl.entries[S.target.serial])) + '）' : '') + '</span>';
+    } else $('sheetTitle').textContent = '';
     placeSheet();
     $('btnSeal').classList.toggle('on', S.seal);
     const canClear = sheetOpen && S.target && S.target.lot.entries[S.target.serial] !== undefined;
