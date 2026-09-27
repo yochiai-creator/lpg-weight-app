@@ -30,6 +30,8 @@ const BLOCK_WIDTH = 6;
 const BLOCKS = 5;
 const LOT_MAX = GRID_ROWS * BLOCKS; // 100本
 
+const TITLE_FONT_SIZE = 11;   // 成績表の見出し（A1: 高圧ガス容器検査成績表／※容器の製造年月を…）の文字サイズ
+
 const MASS_MIN = 0.1;
 const MASS_MAX = 99.9;
 
@@ -69,6 +71,18 @@ function getSpreadsheet_() {
 function ensureTokyoTime_() {
   const ss = getSpreadsheet_();
   if (ss.getSpreadsheetTimeZone() !== 'Asia/Tokyo') ss.setSpreadsheetTimeZone('Asia/Tokyo');
+}
+
+// 書式シートと作成済みの成績表の見出しの文字サイズをそろえる（サイズを変えたときに1回だけ全シートに適用）
+function ensureTitleFont_() {
+  const props = PropertiesService.getScriptProperties();
+  const key = 'TITLE_FONT_SIZE_APPLIED';
+  if (props.getProperty(key) === String(TITLE_FONT_SIZE)) return;
+  getSpreadsheet_().getSheets().forEach(function(sh) {
+    const n = sh.getName();
+    if (n === SHEET_TEMPLATE || n.indexOf(REPORT_PREFIX) === 0) sh.getRange('A1').setFontSize(TITLE_FONT_SIZE);
+  });
+  props.setProperty(key, String(TITLE_FONT_SIZE));
 }
 
 // 後から増えた入力記録の列（備考など）の見出しを足す
@@ -204,7 +218,7 @@ function lotSize_(lot) {
 }
 
 function getBootstrap() {
-  try { ensureTokyoTime_(); ensureLogHeaders_(); } catch (e) { /* 権限がない場合も画面は開く */ }
+  try { ensureTokyoTime_(); ensureLogHeaders_(); ensureTitleFont_(); } catch (e) { /* 権限がない場合も画面は開く */ }
   const lots = readLots_().filter(function(l) { return l.status === STATUS_ACTIVE; });
   const settings = readSettings_();
   const marks = readMarksAll_();
@@ -321,6 +335,7 @@ function createReportSheet_(lot) {
 
   const width = lot.start.length;
   const endLabel = lot.prefix + lot.end;
+  sh.getRange('A1').setFontSize(TITLE_FONT_SIZE);
   sh.getRange('V2').setValue(lot.prefix + lot.start + ' ～ ' + endLabel);
   sh.getRange('H3').setValue(lot.prefix);
 

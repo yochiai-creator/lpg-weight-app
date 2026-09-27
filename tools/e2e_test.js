@@ -223,6 +223,7 @@ function check(name, ok, detail) {
   check('まとめ登録のプレビュー', (await page.textContent('#lotMsg')).includes('HEP38001〜HEP38400') && (await page.textContent('#btnCreate')) === '4ロット登録');
   await page.click('#btnCreate'); await page.waitForTimeout(1500);
   check('入力中ロット一覧は枠の中でスクロール', await page.evaluate(() => getComputedStyle(document.getElementById('activeLots')).overflowY === 'auto'));
+  check('成績表の見出しは文字サイズ11', ss.getSheetByName('成績表_HEP38001-38100').getRange('A1').getFontSize() === 11 && ss.getSheetByName('書式_成績表').getRange('A1').getFontSize() === 11);
   check('100本ずつ4ロット作成', (await page.textContent('#lotMsg')).includes('4ロット登録しました'));
   check('成績表シートが4枚できる', ['38001-38100', '38101-38200', '38201-38300', '38301-38400'].every(r => ss.getSheetByName('成績表_HEP' + r)));
   await page.fill('#fPrefix', 'HEP'); await page.fill('#fStart', '38201'); await page.fill('#fEnd', '38500');

@@ -3,14 +3,14 @@ const path=require('path'); const GAS=path.join(__dirname,'..','gas');
 function colNum(l){let n=0;for(const c of l)n=n*26+c.charCodeAt(0)-64;return n;}
 function a1(s){const m=s.match(/^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/);const r=+m[2],c=colNum(m[1]);const r2=m[4]?+m[4]:r,c2=m[3]?colNum(m[3]):c;return [r,c,r2-r+1,c2-c+1];}
 let sid=1;
-class Sheet{constructor(ss,name){this.ss=ss;this.name=name;this.cells={};this.id=sid++;}
+class Sheet{constructor(ss,name){this.ss=ss;this.name=name;this.cells={};this.fonts={};this.id=sid++;}
  getName(){return this.name} setName(n){this.name=n;return this} getSheetId(){return this.id}
  get(r,c){const v=this.cells[r+','+c];return v===undefined?'':v} set(r,c,v){this.cells[r+','+c]=v}
  getLastColumn(){let m=0;for(const k in this.cells){const c=+k.split(',')[1];if(this.cells[k]!==''&&c>m)m=c}return m}
  getLastRow(){let m=0;for(const k in this.cells){const r=+k.split(',')[0];if(this.cells[k]!==''&&r>m)m=r}return m}
  getRange(a,b,c,d){if(typeof a==='string')return new Range(this,...a1(a));return new Range(this,a,b,c||1,d||1)}
  appendRow(vals){const r=this.getLastRow()+1;vals.forEach((v,i)=>{if(typeof v==='string'&&v[0]==="'")v=v.slice(1);this.set(r,i+1,v)})}
- copyTo(ss){const s=new Sheet(ss,'コピー '+this.name);s.cells=JSON.parse(JSON.stringify(this.cells));ss.sheets.push(s);return s}
+ copyTo(ss){const s=new Sheet(ss,'コピー '+this.name);s.cells=JSON.parse(JSON.stringify(this.cells));s.fonts=JSON.parse(JSON.stringify(this.fonts));ss.sheets.push(s);return s}
  setFrozenRows(){}}
 class Range{constructor(sh,r,c,nr,nc){Object.assign(this,{sh,r,c,nr,nc})}
  getValues(){const o=[];for(let i=0;i<this.nr;i++){const row=[];for(let j=0;j<this.nc;j++)row.push(this.sh.get(this.r+i,this.c+j));o.push(row)}return o}
@@ -18,9 +18,9 @@ class Range{constructor(sh,r,c,nr,nc){Object.assign(this,{sh,r,c,nr,nc})}
  setValues(v){v.forEach((row,i)=>row.forEach((x,j)=>{if(typeof x==='string'&&x[0]==="'")x=x.slice(1);this.sh.set(this.r+i,this.c+j,x)}));return this}
  setValue(x){return this.setValues([[x]])} clearContent(){for(let i=0;i<this.nr;i++)for(let j=0;j<this.nc;j++)this.sh.set(this.r+i,this.c+j,'');return this}
  setNumberFormat(){return this} insertCheckboxes(){return this} clearDataValidations(){return this}
- setFontWeight(){return this} setBackground(){return this} setFontColor(){return this}}
+ setFontWeight(){return this} setFontSize(n){for(let i=0;i<this.nr;i++)for(let j=0;j<this.nc;j++)this.sh.fonts[(this.r+i)+','+(this.c+j)]=n;return this} getFontSize(){return this.sh.fonts[this.r+','+this.c]||10} setBackground(){return this} setFontColor(){return this}}
 class SS{constructor(){this.sheets=[];this.tz='America/Los_Angeles'} getSpreadsheetTimeZone(){return this.tz} setSpreadsheetTimeZone(z){this.tz=z} getId(){return 'SSID'} getSheetByName(n){return this.sheets.find(s=>s.name===n)||null}
- insertSheet(n){const s=new Sheet(this,n);this.sheets.push(s);return s} setActiveSheet(){} moveActiveSheet(){} getNumSheets(){return this.sheets.length}}
+ insertSheet(n){const s=new Sheet(this,n);this.sheets.push(s);return s} setActiveSheet(){} moveActiveSheet(){} getNumSheets(){return this.sheets.length} getSheets(){return this.sheets.slice()}}
 function load(){
  const ss=new SS(); const props={};
  const tpl=ss.insertSheet('書式_成績表'); tpl.set(5,2,'001'); tpl.set(5,4,3); tpl.set(5,6,',');
