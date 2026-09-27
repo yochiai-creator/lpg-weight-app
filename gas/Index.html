@@ -198,6 +198,12 @@
   .tabs button.on { background: var(--navy); color: #fff; }
   .gridhead { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
   .gridhead .count { font-size: 22px; font-weight: 700; }
+  .lotnav { border: 0; background: #e8eaf2; color: var(--navy); border-radius: 50%; width: 34px; height: 34px; font-size: 22px; font-weight: 700; line-height: 1; margin: 0 6px; vertical-align: middle; }
+  .lotnav:disabled { opacity: .3; }
+  #grid { touch-action: pan-y; }
+  #grid.slide-l { animation: slideL .18s ease-out; } #grid.slide-r { animation: slideR .18s ease-out; }
+  @keyframes slideL { from { transform: translateX(40px); opacity: .3; } to { transform: none; opacity: 1; } }
+  @keyframes slideR { from { transform: translateX(-40px); opacity: .3; } to { transform: none; opacity: 1; } }
   .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px 10px; grid-auto-flow: column; grid-template-rows: repeat(20, auto); }
   .cell { display: flex; justify-content: space-between; border-radius: 6px; padding: 5px 8px; font-size: 15px; cursor: pointer; user-select: none;
     background: #f5f7fb; color: #a3abc0; font-variant-numeric: tabular-nums; border: 1px solid transparent; }
@@ -220,7 +226,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v36（入力を消すは2回押し）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v37（表をスワイプでロット切替）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -334,11 +340,11 @@
       <div class="queue" id="queue"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="gridPanel">
       <div class="tabs" id="tabs"></div>
       <div class="gridhead">
         <div><b id="gridTitle"></b> <span class="sub" id="gridSub"></span></div>
-        <div class="count" id="gridCount"></div>
+        <div class="count"><button class="lotnav" id="lotPrev" tabindex="-1" aria-label="前のロット">‹</button><span id="gridCount"></span><button class="lotnav" id="lotNext" tabindex="-1" aria-label="次のロット">›</button></div>
       </div>
       <div class="grid" id="grid"></div>
     </div>
@@ -1282,6 +1288,43 @@
     goMass({ lot: lot, serial: serial });
   }
 
+  // 表を左右にスワイプ（または ‹ › ボタン）で、タブの並び順に前後のロットへ切り替える
+  function lotOrder() {
+    const out = [];
+    groupByKind(S.lots).forEach(function(g) { Array.prototype.push.apply(out, g.lots); });
+    return out;
+  }
+  function stepLot(dir) {
+    const order = lotOrder();
+    const i = order.findIndex(function(l) { return l.lotId === S.viewLotId; });
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= order.length) return false;
+    S.viewLotId = order[j].lotId;
+    render();
+    const g = $('grid');
+    g.classList.remove('slide-l', 'slide-r'); void g.offsetWidth;
+    g.classList.add(dir > 0 ? 'slide-l' : 'slide-r');
+    return true;
+  }
+  $('lotPrev').onclick = function() { this.blur(); stepLot(-1); };
+  $('lotNext').onclick = function() { this.blur(); stepLot(1); };
+  (function() {
+    let sx = null, sy = 0, st = 0;
+    const g = $('grid');
+    g.addEventListener('touchstart', function(e) {
+      if (e.touches.length !== 1) { sx = null; return; }
+      sx = e.touches[0].clientX; sy = e.touches[0].clientY; st = Date.now();
+    }, { passive: true });
+    g.addEventListener('touchend', function(e) {
+      if (sx === null) return;
+      const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+      sx = null;
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - st < 800) {
+        if (stepLot(dx < 0 ? 1 : -1)) e.preventDefault();
+      }
+    });
+  })();
+
   let lastTabLot = null;
   function renderTabs() {
     const tabs = $('tabs');
@@ -1329,6 +1372,9 @@
     const rep = Object.keys(l.entries).filter(function(k) { return l.entries[k] === REPAIR; }).length;
     if (rep) { const rs = document.createElement('b'); rs.style.color = '#c77700'; rs.textContent = '　修正 ' + rep + '本'; $('gridSub').appendChild(rs); }
     $('gridCount').textContent = (c.filled + c.missing) + ' / ' + c.size;
+    const order = lotOrder(), oi = order.findIndex(function(x) { return x.lotId === S.viewLotId; });
+    $('lotPrev').classList.toggle('hidden', order.length < 2); $('lotNext').classList.toggle('hidden', order.length < 2);
+    $('lotPrev').disabled = oi <= 0; $('lotNext').disabled = oi < 0 || oi >= order.length - 1;
     const frag = document.createDocumentFragment();
     for (let i = 0; i < 100; i++) {
       const div = document.createElement('div');

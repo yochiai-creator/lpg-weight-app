@@ -180,6 +180,22 @@ function check(name, ok, detail) {
   const over = rows.filter(r => r[3] === 'HEP37023');
   check('上書き前の値を記録', over.length === 2 && over[1][9] === 34.8 && over[1][6] === 'ダブり');
 
+  // ---- 表を左右スワイプ／‹ › でロット切替
+  const title0 = await page.textContent('#gridTitle');
+  await page.click('#lotNext'); await page.waitForTimeout(150);
+  const title1 = await page.textContent('#gridTitle');
+  check('› で次のロットの表に切り替わる', title1 !== title0);
+  await page.click('#lotPrev'); await page.waitForTimeout(150);
+  check('‹ で前のロットに戻る', (await page.textContent('#gridTitle')) === title0);
+  await page.evaluate(() => {
+    const g = document.getElementById('grid');
+    const mk = (type, x) => { const t = new Touch({ identifier: 1, target: g, clientX: x, clientY: 300 }); g.dispatchEvent(new TouchEvent(type, { touches: type === 'touchend' ? [] : [t], changedTouches: [t], bubbles: true, cancelable: true })); };
+    mk('touchstart', 700); mk('touchend', 500);
+  });
+  await page.waitForTimeout(150);
+  check('表を左にスワイプすると次のロット', (await page.textContent('#gridTitle')) === title1);
+  await page.click('#lotPrev'); await page.waitForTimeout(150);
+
   // ---- 入力ミスを消す
   await page.click('#grid .cell[data-serial="37090"]'); await page.waitForTimeout(150);
   check('空のマスには「この入力を消す」を出さない', !(await page.isVisible('#btnClear')));
