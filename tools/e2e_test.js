@@ -189,6 +189,10 @@ function check(name, ok, detail) {
   check('入力バーは入力欄に重ならない', sheetBox.y + sheetBox.height <= inBox.y + 2);
   check('縦向きでも1画面に収まる', sh1 <= 1180 + 40);
   await page.screenshot({ path: path.join(__dirname, 'out', 'portrait.png') });
+  const xBox = await page.locator('#btnSheetClose').boundingBox();
+  check('入力バーの右上に×がある', xBox && xBox.x + xBox.width > sheetBox.x + sheetBox.width - 60 && xBox.y < sheetBox.y + 50);
+  await page.click('#btnSheetClose'); await page.waitForTimeout(100);
+  check('×で入力バーが閉じる', !(await page.getAttribute('#massSheet', 'class') || '').includes('open'));
   await page.keyboard.press('Escape');
   check('番号入力中は入力バーを出さない', !(await page.getAttribute('#massSheet', 'class') || '').includes('open'));
   await page.setViewportSize({ width: 1180, height: 820 }); await page.waitForTimeout(200);

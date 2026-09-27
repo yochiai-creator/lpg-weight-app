@@ -84,7 +84,7 @@
       padding: 10px 12px; transform: translateY(24px); opacity: 0; pointer-events: none; transition: transform .15s, opacity .15s;
       display: grid; grid-template-columns: 1fr 1.7fr; column-gap: 10px; grid-template-areas: "title title" "mass steps" "cands cands" "extra extra"; }
     #massSheet.open { transform: none; opacity: 1; pointer-events: auto; }
-    #massSheet .sheet-title { grid-area: title; }
+    #massSheet .sheet-head { grid-area: title; }
     #massSheet #fldMass { grid-area: mass; margin-bottom: 8px; }
     #massSheet #steps { grid-area: steps; margin-bottom: 8px; }
     #massSheet #cands { grid-area: cands; grid-template-columns: repeat(10, 1fr); margin-bottom: 8px; }
@@ -134,6 +134,9 @@
   .dupchoice .fix { background: #c77700; } .dupchoice .dup { background: var(--ng); }
   #massSheet { display: none; }
   #massSheet.open { display: block; }
+  .sheet-head { display: flex; align-items: flex-start; gap: 8px; }
+  .sheet-head .sheet-title { flex: 1; }
+  .sheet-close { flex: none; width: 40px; height: 40px; margin: -4px -4px 4px 0; border: 0; border-radius: 50%; background: #e8eaf2; color: var(--navy); font-size: 24px; font-weight: 700; line-height: 1; }
   .sheet-title { font-size: 15px; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
   .cell.repair { background: #fff1dc; color: #9a5a00; }
   .extra-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
@@ -214,7 +217,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v30（ダブり表示W）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v31（質量バーに×）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -287,7 +290,7 @@
       </div>
       <!-- 質量の入力バー: 容器番号が決まると出る -->
       <div id="massSheet">
-        <div class="sheet-title" id="sheetTitle"></div>
+        <div class="sheet-head"><div class="sheet-title" id="sheetTitle"></div><button type="button" class="sheet-close" id="btnSheetClose" aria-label="閉じる">×</button></div>
         <div class="field" id="fldMass">
         <div class="lbl"><span>W（kg）</span><span id="massHint">「68」→6.8 と入力してもOK</span></div>
         <div class="val" id="valMass"></div>
@@ -853,6 +856,9 @@
       render(); return;
     }
   }
+
+  // 質量バーの×: 質量を入れずに閉じて容器番号の入力に戻る
+  document.getElementById('btnSheetClose').onclick = function() { resetEntry('閉じました。容器番号を入力', 'info'); };
 
   function backToNum() {
     S.stage = 'num'; S.target = null; S.ng = false; S.bufActual = ''; S.confirmDup = false;
