@@ -180,6 +180,7 @@ function check(name, ok, detail) {
   const over = rows.filter(r => r[3] === 'HEP37023');
   check('上書き前の値を記録', over.length === 2 && over[1][9] === 34.8 && over[1][6] === 'ダブり');
 
+  check('グループNoは100本ごとの組の番号（HEP37001〜37100 → 371）', (await page.textContent('#gridTitle')).startsWith('HEP371') || (await page.locator('#tabs button', { hasText: 'HEP371' }).count()) === 1);
   // ---- 表を左右スワイプ／‹ › でロット切替
   const title0 = await page.textContent('#gridTitle');
   await page.click('#lotNext'); await page.waitForTimeout(150);
@@ -300,7 +301,7 @@ function check(name, ok, detail) {
   await page.fill('#fPrefix', 'HEP'); await page.fill('#fStart', '37001'); await page.fill('#fEnd', ''); await page.selectOption('#fSpec', '底黒');
   await page.click('#btnCreate'); await page.waitForTimeout(800);
   await page.selectOption('#fSpec', '');
-  check('底黒ロットができる（入力中に【底黒】）', (await page.textContent('#activeLots')).includes('【底黒】HEP37001'));
+  check('底黒ロットができる（入力中に【底黒】）', (await page.locator('#activeLots .card', { hasText: 'HEP37001-底黒' }).count() + await page.locator('#activeLots .card:has(.ln-soko)', { hasText: 'HEP37001' }).count()) >= 1);
   const sokoSh = ss.getSheetByName('成績表_HEP37001-37100_底黒');
   check('底黒の成績表は別シート（組容器番号に（底黒））', !!sokoSh && String(sokoSh.get(2, 22)).includes('（底黒）'));
   await page.click('#btnStart'); await page.waitForTimeout(200);

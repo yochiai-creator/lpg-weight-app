@@ -101,8 +101,8 @@
     .input-layout .pad button { padding: 9px 0; }
     .input-layout #opts .keys.opt { font-size: 11px; }
     /* 上の表は大きめに */
-    .input-layout .grid .cell { padding: 4px 8px; font-size: 16px; }
-    .input-layout .grid .cell .m { font-size: 17px; }
+    .input-layout .grid .cell { padding: 2px 8px; font-size: 16px; line-height: 1.25; }
+    .input-layout .grid .cell .m { font-size: 18px; }
     .input-layout .grid { gap: 3px 6px; }
     .input-layout .gridhead { margin-bottom: 6px; }
     .input-layout .tabs { margin-bottom: 6px; }
@@ -203,10 +203,12 @@
   .tabs button.on .ln-cnt { background: rgba(255,255,255,.22); }
   .ln-soko { display: inline-block; margin-right: 4px; padding: 0 5px; border-radius: 4px; background: #333; color: #fff; font-size: .72em; font-weight: 700; vertical-align: 2px; }
   #gridTitle { font-size: 22px; color: var(--navy); }
-  #gridTitle .ln-sep { margin: 0 6px; font-weight: 400; opacity: .6; }
-  #gridTitle .ln-end { font-weight: 700; }
-  .gridhead { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
-  .gridhead .count { font-size: 22px; font-weight: 700; }
+  #gridTitle .ln-grp { font-size: 1.45em; }
+  .ln-range { margin-left: 8px; font-size: .75em; font-weight: 600; color: var(--muted); }
+  #gridTitle .ln-range { margin-left: 10px; font-size: .68em; font-weight: 600; color: var(--muted); }
+  .gridhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .gridhead .count { font-size: 22px; font-weight: 700; white-space: nowrap; display: flex; align-items: center; flex: none; }
+  .gridhead > div:first-child { min-width: 0; }
   .lotnav { border: 0; background: #e8eaf2; color: var(--navy); border-radius: 50%; width: 34px; height: 34px; font-size: 22px; font-weight: 700; line-height: 1; margin: 0 6px; vertical-align: middle; }
   .lotnav:disabled { opacity: .3; }
   #grid { touch-action: pan-y; }
@@ -217,7 +219,7 @@
   .cell { display: flex; justify-content: space-between; border-radius: 6px; padding: 5px 8px; font-size: 15px; cursor: pointer; user-select: none;
     background: #f5f7fb; color: #7d86a0; font-weight: 600; font-variant-numeric: tabular-nums; border: 1px solid transparent; }
   .cell .m { font-weight: 700; }
-  .cell > span:first-child { font-size: 1.08em; letter-spacing: .03em; }
+  .cell > span:first-child { font-size: 1.25em; letter-spacing: .03em; color: #5d6683; }
   .cell.filled > span:first-child { font-weight: 700; color: var(--navy); }
   .cell.filled { background: var(--okbg); color: var(--text); }
   .cell.missing { background: #eee; color: var(--muted); }
@@ -237,7 +239,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v38（組番号を見やすく）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v39（グループNo表示）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -549,7 +551,8 @@
     const div = document.createElement('div');
     div.className = 'card';
     div.innerHTML = '<h3></h3><div class="sub"></div><div class="bar"><div></div></div><div class="sub cnt"></div><div class="row" style="margin-top:10px"></div>';
-    div.querySelector('h3').textContent = (l.spec === SOKO ? '【底黒】' : '') + l.prefix + l.start + ' ～ ' + l.prefix + l.end;
+    div.querySelector('h3').innerHTML = (l.spec === SOKO ? '<span class="ln-soko">底黒</span>' : '') + lotNumHtml(l) +
+      '<span class="ln-range">' + esc(l.prefix + l.start) + ' ～ ' + esc(l.prefix + l.end) + '</span>';
     div.querySelector('.sub').textContent = (l.kind || '') + '　' + l.sheetName;
     div.querySelector('.bar > div').style.width = Math.round((c.filled + c.missing) / c.size * 100) + '%';
     div.querySelector('.cnt').textContent = '入力 ' + c.filled + ' 本' + (c.missing ? '・欠番 ' + c.missing : '') + ' ／ ' + c.size + ' 本' +
@@ -1299,11 +1302,17 @@
     goMass({ lot: lot, serial: serial });
   }
 
-  // ロット番号の表示: 記号は小さく、組（下2桁を除いた部分）を太く大きくして見分けやすくする
+  // グループNo: 59701〜59800 → 598（100本ごとの組の番号 = 終わりの番号の下2桁を除いた部分）
+  function groupNo(l) {
+    const st = String(l.start), w = Math.max(1, st.length - 2);
+    return pad(Math.floor((Number(st) - 1) / 100) + 1, w);
+  }
+  // グループNoで呼ぶ機種（30kg・50kg・50kg S付）。それ以外は開始番号をそのまま出す
+  function usesGroupNo(l) { return /^(30kg|50kg)/.test(String(l.kind || '')); }
+  // ロット番号の表示: 記号は小さく、グループNo（または開始番号）を太く大きくして見分けやすくする
   function lotNumHtml(l) {
-    const st = String(l.start), cut = Math.max(0, st.length - 2);
     return (l.prefix ? '<span class="ln-pre">' + esc(l.prefix) + '</span>' : '') +
-      '<span class="ln-grp">' + esc(st.slice(0, cut)) + '</span><span class="ln-tail">' + esc(st.slice(cut)) + '</span>';
+      '<span class="ln-grp">' + esc(usesGroupNo(l) ? groupNo(l) : l.start) + '</span>';
   }
 
   // 表を左右にスワイプ（または ‹ › ボタン）で、タブの並び順に前後のロットへ切り替える
@@ -1359,7 +1368,7 @@
      g.lots.forEach(function(l) {
       const b = document.createElement('button');
       const c = countOf(l);
-      b.innerHTML = (l.spec === SOKO ? '<span class="ln-soko">底黒</span>' : '') + lotNumHtml(l) + '<span class="ln-tail">〜</span>' +
+      b.innerHTML = (l.spec === SOKO ? '<span class="ln-soko">底黒</span>' : '') + lotNumHtml(l) +
         '<span class="ln-cnt">' + (c.filled + c.missing) + '/' + c.size + '</span>';
       b.tabIndex = -1;
       b.className = (l.lotId === S.viewLotId ? 'on' : '') + (c.filled + c.missing >= c.size ? ' done' : '');
@@ -1380,7 +1389,7 @@
     if (!l) return;
     const c = countOf(l);
     $('gridTitle').innerHTML = (l.spec === SOKO ? '<span class="ln-soko">底黒</span>' : '') + lotNumHtml(l) +
-      '<span class="ln-sep">～</span><span class="ln-end">' + esc(l.end) + '</span>';
+      '<span class="ln-range">' + esc(l.prefix + l.start) + ' ～ ' + esc(l.prefix + l.end) + '</span>';
     $('gridSub').innerHTML = '';
     $('gridSub').appendChild(document.createTextNode((l.kind || '') + (median(l) !== null ? '　標準 ' + fmtMass(median(l)) : '')));
     const markText = function(obj, name, color) {
