@@ -214,7 +214,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v28（質量を小数1桁表示）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v29（ロット削除）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -483,6 +483,23 @@
       (done ? (l.sentAt ? '　送信済 ' + l.sentAt : (l.sentTo ? '　' + l.sentTo : '　未送信')) : '') +
       '';
     const row = div.querySelector('.row');
+    // 登録間違いの削除（最後に付ける）
+    const addDelete = function() {
+      const del = document.createElement('button');
+      del.className = 'btn sec'; del.textContent = '削除'; del.style.color = 'var(--ng)'; del.style.marginLeft = 'auto';
+      del.onclick = function() {
+        const n = c.filled + c.missing;
+        const name = (l.spec === SOKO ? '【底黒】' : '') + l.prefix + l.start + '〜' + l.prefix + l.end;
+        const msg = name + ' を削除します。成績表シートも消えます。' +
+          (n ? '\n\n入力済みが ' + n + ' 本あります。入力記録は消さずに「削除」として残ります。' : '') + '\n\nよろしいですか？';
+        if (!confirm(msg)) return;
+        del.disabled = true;
+        call('deleteLot', l.lotId).then(function() { return loadHome(); })
+          .catch(function(e) { alert(errText(e)); del.disabled = false; });
+      };
+      row.appendChild(del);
+    };
+    setTimeout(addDelete, 0);
     if (!done) {
       const b = document.createElement('button');
       b.className = 'btn sec'; b.textContent = '完了にする';

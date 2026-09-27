@@ -12,7 +12,8 @@ class Sheet{constructor(ss,name){this.ss=ss;this.name=name;this.cells={};this.fo
  getRange(a,b,c,d){if(typeof a==='string')return new Range(this,...a1(a));return new Range(this,a,b,c||1,d||1)}
  appendRow(vals){const r=this.getLastRow()+1;vals.forEach((v,i)=>{if(typeof v==='string'&&v[0]==="'")v=v.slice(1);this.set(r,i+1,v)})}
  copyTo(ss){const s=new Sheet(ss,'コピー '+this.name);s.cells=JSON.parse(JSON.stringify(this.cells));s.fonts=JSON.parse(JSON.stringify(this.fonts));s.rich=JSON.parse(JSON.stringify(this.rich));ss.sheets.push(s);return s}
- setFrozenRows(){}}
+ setFrozenRows(){}
+ deleteRow(r){const n={};for(const k in this.cells){const [rr,cc]=k.split(',').map(Number);if(rr<r)n[k]=this.cells[k];else if(rr>r)n[(rr-1)+','+cc]=this.cells[k];}this.cells=n;return this}}
 class Range{constructor(sh,r,c,nr,nc){Object.assign(this,{sh,r,c,nr,nc})}
  getValues(){const o=[];for(let i=0;i<this.nr;i++){const row=[];for(let j=0;j<this.nc;j++)row.push(this.sh.get(this.r+i,this.c+j));o.push(row)}return o}
  getDisplayValues(){return this.getValues().map(r=>r.map(v=>v instanceof Date?v.toISOString().slice(0,10).replace(/-/g,'/'):String(v)))}
@@ -21,7 +22,7 @@ class Range{constructor(sh,r,c,nr,nc){Object.assign(this,{sh,r,c,nr,nc})}
  setNumberFormat(){return this} insertCheckboxes(){return this} clearDataValidations(){return this}
  setFontWeight(){return this} setFontSize(n){for(let i=0;i<this.nr;i++)for(let j=0;j<this.nc;j++)this.sh.fonts[(this.r+i)+','+(this.c+j)]=n;return this} setRichTextValue(rv){this.sh.rich[this.r+','+this.c]=rv;return this} getRichText(){return this.sh.rich[this.r+','+this.c]} getFontSize(){return this.sh.fonts[this.r+','+this.c]||10} setBackground(){return this} setFontColor(){return this}}
 class SS{constructor(){this.sheets=[];this.tz='America/Los_Angeles'} getSpreadsheetTimeZone(){return this.tz} setSpreadsheetTimeZone(z){this.tz=z} getId(){return 'SSID'} getSheetByName(n){return this.sheets.find(s=>s.name===n)||null}
- insertSheet(n){const s=new Sheet(this,n);this.sheets.push(s);return s} setActiveSheet(){} moveActiveSheet(){} getNumSheets(){return this.sheets.length} getSheets(){return this.sheets.slice()}}
+ insertSheet(n){const s=new Sheet(this,n);this.sheets.push(s);return s} setActiveSheet(){} moveActiveSheet(){} getNumSheets(){return this.sheets.length} deleteSheet(sh){this.sheets=this.sheets.filter(x=>x!==sh)} getSheets(){return this.sheets.slice()}}
 function load(){
  const ss=new SS(); const props={};
  const tpl=ss.insertSheet('書式_成績表'); tpl.set(1,1,'高圧ガス容器検査成績表\n\n※容器の製造年月を目視確認の上、容器番号前にチェックを入れる'); tpl.set(5,2,'001'); tpl.set(5,4,3); tpl.set(5,6,',');

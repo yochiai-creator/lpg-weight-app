@@ -611,6 +611,31 @@ function changeLotKind(input) {
   }
 }
 
+// 登録間違いのロットを削除: ロットの行と成績表シートを消す。入力記録は消さずに状態を「削除」にして残す
+function deleteLot(lotId) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const lot = findLot_(lotId);
+    const ss = getSpreadsheet_();
+    const sh = ss.getSheetByName(lot.sheetName);
+    if (sh) ss.deleteSheet(sh);
+    getSheet_(SHEET_LOTS).deleteRow(lot.row);
+    let marked = 0;
+    const log = ss.getSheetByName(SHEET_LOG);
+    if (log && log.getLastRow() >= 2) {
+      const last = log.getLastRow(), from = Math.max(2, last - 5000);
+      const v = log.getRange(from, 1, last - from + 1, 12).getValues();
+      v.forEach(function(r, i) {
+        if (r[2] === lot.lotId && r[11] === '有効') { log.getRange(from + i, 12).setValue('削除'); marked++; }
+      });
+    }
+    return { lotId: lot.lotId, marked: marked };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function reopenLot(lotId) {
   const lot = findLot_(lotId);
   getSheet_(SHEET_LOTS).getRange(lot.row, 7).setValue(STATUS_ACTIVE);

@@ -237,6 +237,14 @@ function check(name, ok, detail) {
   const m2 = await page.textContent('#lotMsg');
   check('登録済みは飛ばして残りだけ作成', m2.includes('1ロット登録しました（HEP38401）') && m2.includes('HEP38201') && m2.includes('HEP38301'));
 
+  // ---- 登録間違いの削除
+  await page.fill('#fPrefix', 'ZZ'); await page.fill('#fStart', '99901'); await page.fill('#fEnd', ''); await page.selectOption('#fSpec', '');
+  await page.click('#btnCreate'); await page.waitForTimeout(500);
+  const lotsBefore = ss.getSheetByName('ロット').getLastRow();
+  await page.locator('#activeLots .card', { hasText: 'ZZ99901' }).locator('button:has-text("削除")').click(); await page.waitForTimeout(500);
+  check('削除でロットが一覧から消える', !(await page.textContent('#activeLots')).includes('ZZ99901'));
+  check('削除でロットの行と成績表シートが消える', ss.getSheetByName('ロット').getLastRow() === lotsBefore - 1 && !ss.getSheetByName('成績表_ZZ99901-99999'));
+
   // ---- 底黒（再搬入）: 登録欄で「底黒」を選んで登録し、流れた容器の質量欄に〇
   await page.fill('#fPrefix', 'HEP'); await page.fill('#fStart', '38101'); await page.fill('#fEnd', ''); await page.selectOption('#fSpec', '底黒');
   await page.click('#btnCreate'); await page.waitForTimeout(500);
