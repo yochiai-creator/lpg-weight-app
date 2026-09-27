@@ -22,7 +22,7 @@ function check(name, ok, detail) {
   const browser = await chromium.launch(fs.existsSync(exe) ? { executablePath: exe } : {});
   const page = await browser.newPage({ viewport: { width: 1180, height: 820 } });
   page.on('pageerror', e => check('ページでJSエラーなし', false, e.message));
-  page.on('dialog', d => d.accept());
+  page.on('dialog', d => { check('ダイアログを使わない', false, d.message()); d.accept(); });
   await page.exposeFunction('__gas', (fn, arg) => {
     try { const v = ctx[fn](JSON.parse(arg)); return JSON.stringify({ v: JSON.parse(JSON.stringify(v === undefined ? null : v)) }); }
     catch (e) { return JSON.stringify({ err: e.message }); }
@@ -188,6 +188,8 @@ function check(name, ok, detail) {
   await page.click('#grid .cell[data-serial="37090"]'); await page.waitForTimeout(150);
   await page.screenshot({ path: path.join(__dirname, 'out', 'clear.png') });
   check('入力済みのマスをタップすると「入力を消す」が出る', hasBefore && await page.isVisible('#btnDel'));
+  await page.click('#btnDel'); await page.waitForTimeout(150);
+  check('1回目は確認メッセージだけ（まだ消さない）', (await page.textContent('#notice')).includes('もう一度') && ctx.getBootstrap().lots.find(l => l.lotId === 'HEP37001').entries['37090'] !== undefined);
   await page.click('#btnDel'); await page.waitForTimeout(400);
   check('消すとマスが空に戻る', ctx.getBootstrap().lots.find(l => l.lotId === 'HEP37001').entries['37090'] === undefined && !(await page.textContent('#grid .cell[data-serial="37090"]')).includes('W'));
   const hepSh = ss.getSheetByName('成績表_HEP37001-37100');
@@ -195,6 +197,9 @@ function check(name, ok, detail) {
   const cl = ss.getSheetByName('入力記録').getRange(2, 1, ss.getSheetByName('入力記録').getLastRow() - 1, 16).getValues().filter(r => r[3] === 'HEP37090');
   check('消した記録は「取消」で残る', cl.length >= 1 && cl.every(r => r[11] === '取消'));
 
+  await page.click('#grid .cell[data-serial="37069"]'); await page.waitForTimeout(150);
+  await page.click('#btnDel'); await page.click('#btnDel'); await page.waitForTimeout(400);
+  check('修正（品質不良）も消せる', ctx.getBootstrap().lots.find(l => l.lotId === 'HEP37001').entries['37069'] === undefined);
   // ---- タブレット縦向き: 上に表・下に入力
   await page.setViewportSize({ width: 820, height: 1180 }); await page.waitForTimeout(200);
   await keys('7070');
@@ -219,7 +224,9 @@ function check(name, ok, detail) {
   await page.click('#btnHome'); await page.waitForTimeout(300);
   await page.locator('#activeLots .card', { hasText: 'HEP37001' }).locator('button:has-text("完了にする")').click();
   check('完了ダイアログに未入力本数', (await page.textContent('#dlgMissing')).includes('未入力'));
-  await page.uncheck('#dSend'); await page.click('#dSave'); await page.waitForTimeout(400);
+  await page.uncheck('#dSend'); await page.click('#dSave'); await page.waitForTimeout(150);
+  check('未入力があると完了は2回押し', (await page.textContent('#dlgMsg')).includes('もう一度押して'));
+  await page.click('#dSave'); await page.waitForTimeout(400);
   const lots = () => ss.getSheetByName('ロット').getRange(2, 1, 2, 17).getDisplayValues();
   check('手動完了で状態=完了・PDF保存', lots()[0][6] === '完了' && lots()[0][13] !== '');
   check('送信しない指定ではメールなし', global.MAILS.length === 0);
@@ -263,7 +270,10 @@ function check(name, ok, detail) {
   await page.fill('#fPrefix', 'ZZ'); await page.fill('#fStart', '99901'); await page.fill('#fEnd', ''); await page.selectOption('#fSpec', '');
   await page.click('#btnCreate'); await page.waitForTimeout(500);
   const lotsBefore = ss.getSheetByName('ロット').getLastRow();
-  await page.locator('#activeLots .card', { hasText: 'ZZ99901' }).locator('button:has-text("削除")').click(); await page.waitForTimeout(500);
+  const zz = page.locator('#activeLots .card', { hasText: 'ZZ99901' });
+  await zz.locator('button:has-text("削除")').click(); await page.waitForTimeout(200);
+  check('ロット削除: 1回目はボタンが「もう一度押すと削除」になるだけ', (await page.textContent('#activeLots')).includes('ZZ99901') && (await zz.locator('button:has-text("もう一度押すと削除")').count()) === 1);
+  await zz.locator('button:has-text("もう一度押すと削除")').click(); await page.waitForTimeout(500);
   check('削除でロットが一覧から消える', !(await page.textContent('#activeLots')).includes('ZZ99901'));
   check('削除でロットの行と成績表シートが消える', ss.getSheetByName('ロット').getLastRow() === lotsBefore - 1 && !ss.getSheetByName('成績表_ZZ99901-99999'));
 

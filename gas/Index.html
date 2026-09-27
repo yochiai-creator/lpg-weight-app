@@ -220,7 +220,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v35（内容積の値を反映）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v36（入力を消すは2回押し）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -408,6 +408,15 @@
       google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](arg);
     });
   }
+  // 確認は同じボタンの2回押しで行う（iPadの入力画面では confirm/alert のダイアログが出ないことがある）
+  function armed(btn, text) {
+    if (btn._armT && Date.now() - btn._armT < 5000) { btn._armT = 0; btn.innerHTML = btn._orig; return true; }
+    if (!btn._armT) btn._orig = btn.innerHTML;
+    btn._armT = Date.now(); btn.textContent = text;
+    setTimeout(function() { if (btn._armT && Date.now() - btn._armT >= 4900) { btn._armT = 0; btn.innerHTML = btn._orig; } }, 5000);
+    return false;
+  }
+  function homeMsg(text, kind) { $('lotMsg').className = 'msg' + (kind ? ' ' + kind : ''); $('lotMsg').textContent = text; }
   function errText(e) { return (e && e.message) ? e.message : String(e); }
   function pad(n, w) { let s = String(n); while (s.length < w) s = '0' + s; return s; }
   function disp3(serial) { return ('00' + (Number(serial) % 1000)).slice(-3); }
@@ -540,12 +549,14 @@
       del.onclick = function() {
         const n = c.filled + c.missing;
         const name = (l.spec === SOKO ? '【底黒】' : '') + l.prefix + l.start + '〜' + l.prefix + l.end;
-        const msg = name + ' を削除します。成績表シートも消えます。' +
-          (n ? '\n\n入力済みが ' + n + ' 本あります。入力記録は消さずに「削除」として残ります。' : '') + '\n\nよろしいですか？';
-        if (!confirm(msg)) return;
+        if (!armed(del, 'もう一度押すと削除')) {
+          homeMsg(name + ' を削除するには、もう一度「もう一度押すと削除」を押してください。成績表シートも消えます。' +
+            (n ? '入力済みが ' + n + ' 本あります（入力記録は「削除」として残ります）。' : ''), 'err');
+          return;
+        }
         del.disabled = true;
-        call('deleteLot', l.lotId).then(function() { return loadHome(); })
-          .catch(function(e) { alert(errText(e)); del.disabled = false; });
+        call('deleteLot', l.lotId).then(function() { homeMsg('削除しました: ' + name, 'ok'); return loadHome(); })
+          .catch(function(e) { homeMsg(errText(e), 'err'); del.disabled = false; });
       };
       row.appendChild(del);
     };
@@ -573,7 +584,7 @@
         ok.onclick = function() {
           ok.disabled = true;
           call('changeLotKind', { lotId: l.lotId, kind: sel.value }).then(loadHome)
-            .catch(function(e) { alert(errText(e)); ok.disabled = false; });
+            .catch(function(e) { homeMsg(errText(e), 'err'); ok.disabled = false; });
         };
       };
       row.appendChild(kb);
@@ -582,16 +593,16 @@
       b.className = 'btn sec'; b.textContent = '入力を再開';
       b.onclick = function() {
         b.disabled = true;
-        call('reopenLot', l.lotId).then(loadHome).catch(function(e) { alert(errText(e)); b.disabled = false; });
+        call('reopenLot', l.lotId).then(loadHome).catch(function(e) { homeMsg(errText(e), 'err'); b.disabled = false; });
       };
       row.appendChild(b);
       const r = document.createElement('button');
       r.className = 'btn sec'; r.textContent = l.sentAt ? '再送信' : 'メールで送信';
       r.onclick = function() {
-        if (!confirm((S.mail.to || '（送付先未設定）') + ' に送信しますか？')) return;
+        if (!armed(r, 'もう一度押すと送信')) { homeMsg((S.mail.to || '（送付先未設定）') + ' に送信します。もう一度押すと送信します', 'err'); return; }
         r.disabled = true;
-        call('resendLot', l.lotId).then(function(x) { alert('送信しました: ' + x.sentTo); return loadHome(); })
-          .catch(function(e) { alert(errText(e)); r.disabled = false; });
+        call('resendLot', l.lotId).then(function(x) { homeMsg('送信しました: ' + x.sentTo, 'ok'); return loadHome(); })
+          .catch(function(e) { homeMsg(errText(e), 'err'); r.disabled = false; });
       };
       row.appendChild(r);
       if (l.pdf) {
@@ -693,7 +704,7 @@
 
   $('btnStart').onclick = function() { showEntry(); };
   $('btnHome').onclick = function() {
-    if (S.queue.length && !confirm('まだ送信中の入力があります。一覧に戻っても送信は続きます。戻りますか？')) return;
+    if (S.queue.length && !armed(this, 'もう一度押すと戻る')) { setNotice('まだ送信中の入力があります。一覧に戻っても送信は続きます', 'warn'); return; }
     $('entry').classList.add('hidden'); $('home').classList.remove('hidden'); $('btnHome').classList.add('hidden');
     loadHome();
   };
@@ -722,11 +733,11 @@
   }
   $('dSave').onclick = function() {
     const miss = $('dlgMissing').textContent;
-    if (miss && !confirm(miss.split(':')[0] + ' あります。このまま完了にしますか？')) return;
+    if (miss && !armed($('dSave'), 'もう一度押すと完了')) { $('dlgMsg').className = 'msg err'; $('dlgMsg').textContent = miss.split(':')[0] + ' あります。このまま完了にするなら、もう一度押してください'; return; }
     const btn = $('dSave'); btn.disabled = true;
     $('dlgMsg').className = 'msg'; $('dlgMsg').textContent = 'PDFを作成中…' + ($('dSend').checked ? '（メール送信します）' : '');
     call('completeLot', { lotId: doneLot.lotId, send: $('dSend').checked }).then(function(r) {
-      $('dlgDone').close(); alert(doneResultText(r));
+      $('dlgDone').close(); homeMsg(doneResultText(r), r.mailError ? 'err' : 'ok');
       return loadHome();
     }).catch(function(e) {
       $('dlgMsg').className = 'msg err'; $('dlgMsg').textContent = errText(e);
@@ -1193,7 +1204,13 @@
   function clearEntryOf(lot, serial) {
     const key = lot.lotId + '|' + serial;
     if (S.pending[key]) { setNotice('保存中です。少し待ってからもう一度押してください', 'warn'); beep(false); render(); return; }
-    if (!confirm(label(lot, serial) + '（' + fmtMass(lot.entries[serial]) + '）の入力を消して、空に戻します。よろしいですか？')) return;
+    // 確認ダイアログはiPadの入力画面で出ないことがあるので、同じボタンをもう一度押して確定する
+    if (!S.clearArm || S.clearArm.key !== key || Date.now() - S.clearArm.t > 5000) {
+      S.clearArm = { key: key, t: Date.now() };
+      setNotice('もう一度「入力を消す」を押すと ' + label(lot, serial) + '（' + fmtMass(lot.entries[serial]) + '）を消して空に戻します', 'warn');
+      beep(false); render(); return;
+    }
+    S.clearArm = null;
     setNotice('消しています…', 'info'); render();
     call('clearEntry', { lotId: lot.lotId, serial: serial }).then(function() {
       delete lot.entries[serial];
@@ -1256,7 +1273,7 @@
   function tapCell(lot, serial) {
     if (S.stage === 'undo') return;
     // 底黒の〇済みのマスは質量バーが出ないので、タップで消せるようにする
-    if (lot.spec === SOKO && lot.entries[serial] === CIRCLE) { clearEntryOf(lot, serial); return; }
+    if (lot.spec === SOKO && lot.entries[serial] === CIRCLE) { S.viewLotId = lot.lotId; clearEntryOf(lot, serial); return; }
     const same = S.target && S.target.lot.lotId === lot.lotId && S.target.serial === serial;
     if (!same) { S.confirmDup = false; S.ng = false; S.bufActual = ''; S.ngFrom = ''; }
     S.stage = 'num';
