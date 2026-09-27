@@ -237,9 +237,13 @@ function check(name, ok, detail) {
   const m2 = await page.textContent('#lotMsg');
   check('登録済みは飛ばして残りだけ作成', m2.includes('1ロット登録しました（HEP38401）') && m2.includes('HEP38201') && m2.includes('HEP38301'));
 
-  // ---- 底黒（再搬入）: 完了したロットから作り、流れた容器の質量欄に〇
-  const doneCard = page.locator('#doneLots .card', { hasText: 'HEP37001' });
-  await doneCard.locator('button:has-text("底黒")').click(); await page.waitForTimeout(800);
+  // ---- 底黒（再搬入）: 登録欄で「底黒」を選んで登録し、流れた容器の質量欄に〇
+  await page.fill('#fPrefix', 'HEP'); await page.fill('#fStart', '38101'); await page.fill('#fEnd', ''); await page.selectOption('#fSpec', '底黒');
+  await page.click('#btnCreate'); await page.waitForTimeout(500);
+  check('入力中の通常ロットと番号が重なる底黒は登録できない', (await page.textContent('#lotMsg')).includes('番号が重なります'));
+  await page.fill('#fPrefix', 'HEP'); await page.fill('#fStart', '37001'); await page.fill('#fEnd', ''); await page.selectOption('#fSpec', '底黒');
+  await page.click('#btnCreate'); await page.waitForTimeout(800);
+  await page.selectOption('#fSpec', '');
   check('底黒ロットができる（入力中に【底黒】）', (await page.textContent('#activeLots')).includes('【底黒】HEP37001'));
   const sokoSh = ss.getSheetByName('成績表_HEP37001-37100_底黒');
   check('底黒の成績表は別シート（組容器番号に（底黒））', !!sokoSh && String(sokoSh.get(2, 22)).includes('（底黒）'));

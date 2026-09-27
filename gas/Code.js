@@ -315,7 +315,7 @@ function createLots(input) {
   const created = [], skipped = [];
   blocks.forEach(function(b) {
     try {
-      created.push(createLot({ prefix: prefix, start: padSerial_(b, width), end: padSerial_(b + LOT_MAX - 1, width), kind: input.kind }).lotId);
+      created.push(createLot({ prefix: prefix, start: padSerial_(b, width), end: padSerial_(b + LOT_MAX - 1, width), kind: input.kind, spec: input.spec }).lotId);
     } catch (err) {
       if (/登録済み/.test(err.message)) skipped.push(prefix + padSerial_(b, width));
       else throw new Error(err.message + '（' + created.length + 'ロット作成済み）');
@@ -350,6 +350,12 @@ function createLot(input) {
     const lots = readLots_();
     lots.forEach(function(l) {
       if (l.lotId === lotId) throw new Error('この組容器番号は登録済みです: ' + lotId);
+    });
+    // 入力中のロットと番号が重なると、番号から記録先を決められない（通常と底黒で同じ番号など）
+    lots.filter(function(l) { return l.status === STATUS_ACTIVE && l.prefix === prefix; }).forEach(function(l) {
+      if (Number(start) <= Number(l.end) && Number(l.start) <= Number(end)) {
+        throw new Error('入力中の「' + (l.spec ? l.spec + ' ' : '') + l.prefix + l.start + '〜' + l.end + '」と番号が重なります。先にそちらを完了してください');
+      }
     });
     const sheetName = REPORT_PREFIX + prefix + start + '-' + end.slice(-Math.min(end.length, 5)) + (spec ? '_' + SPEC_SOKO : '');
     const lot = {
@@ -589,14 +595,6 @@ function changeLotKind(input) {
   } finally {
     lock.releaseLock();
   }
-}
-
-// 完了したロットの再搬入（底黒仕様）用のロットを作る。同じ番号範囲・容器区分で、成績表は別シート（_底黒）
-function createSokoguroLot(lotId) {
-  const base = findLot_(lotId);
-  if (base.spec === SPEC_SOKO) throw new Error('底黒のロットからは作れません');
-  if (base.status !== STATUS_DONE) throw new Error('完了したロットから作ってください（入力中のロットと番号が重なるため）');
-  return createLot({ prefix: base.prefix, start: base.start, end: base.end, kind: base.kind, spec: SPEC_SOKO });
 }
 
 function reopenLot(lotId) {

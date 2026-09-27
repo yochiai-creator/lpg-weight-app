@@ -214,7 +214,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v26（シート整備の修正）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v27（底黒は登録欄で選ぶ）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -248,6 +248,11 @@
         <select id="fKind">
           <option>5kg</option><option>8kg</option><option>10kg</option><option>20kg</option>
           <option>30kg</option><option selected>50kg</option><option>50kg S付</option><option>その他</option>
+        </select>
+      </div>
+      <div><label>仕様</label>
+        <select id="fSpec">
+          <option value="">通常（質量を入力）</option><option value="底黒">底黒（再搬入・質量欄に〇）</option>
         </select>
       </div>
       <div><button class="btn" id="btnCreate" type="button" style="width:100%;padding:12px">登録</button></div>
@@ -514,17 +519,6 @@
       };
       row.appendChild(b);
       const r = document.createElement('button');
-      if (l.spec !== SOKO) {
-        const sk = document.createElement('button');
-        sk.className = 'btn'; sk.textContent = '底黒（再搬入）を始める';
-        sk.onclick = function() {
-          if (!confirm(l.prefix + l.start + '〜' + l.end + ' の底黒（再搬入）用のロットを作ります。流れた容器の質量欄に〇を付けます。よろしいですか？')) return;
-          sk.disabled = true;
-          call('createSokoguroLot', l.lotId).then(function() { return loadHome(); })
-            .catch(function(e) { alert(errText(e)); sk.disabled = false; });
-        };
-        row.appendChild(sk);
-      }
       r.className = 'btn sec'; r.textContent = l.sentAt ? '再送信' : 'メールで送信';
       r.onclick = function() {
         if (!confirm((S.mail.to || '（送付先未設定）') + ' に送信しますか？')) return;
@@ -604,16 +598,17 @@
       const b = lotBlocks(Number(st), Number(en)), w = Math.max(st.length, en.length), pre = $('fPrefix').value.trim().toUpperCase();
       btn.textContent = b.length + 'ロット登録';
       $('lotMsg').className = 'msg';
-      $('lotMsg').textContent = pre + pad(b[0], w) + '〜' + pre + pad(b[b.length - 1] + 99, w) + ' を100本ずつ ' + b.length + 'ロットに分けて作ります';
+      $('lotMsg').textContent = pre + pad(b[0], w) + '〜' + pre + pad(b[b.length - 1] + 99, w) + ' を100本ずつ ' + b.length + 'ロットに分けて作ります' + ($('fSpec').value ? '（' + $('fSpec').value + '）' : '');
     } else {
       btn.textContent = '登録';
     }
   }
   ['fStart', 'fEnd', 'fPrefix'].forEach(function(id) { $(id).addEventListener('input', updateLotPreview); });
+  $('fSpec').addEventListener('change', updateLotPreview);
 
   $('btnCreate').onclick = function() {
     const btn = $('btnCreate'); btn.disabled = true;
-    const input = { prefix: $('fPrefix').value, start: $('fStart').value, end: $('fEnd').value, kind: $('fKind').value };
+    const input = { prefix: $('fPrefix').value, start: $('fStart').value, end: $('fEnd').value, kind: $('fKind').value, spec: $('fSpec').value };
     const bulk = input.end.trim() !== '';
     $('lotMsg').className = 'msg';
     $('lotMsg').textContent = '登録中…（成績表シートを作成しています' + (bulk ? '。ロット数が多いと1〜2分かかります' : '') + '）';
