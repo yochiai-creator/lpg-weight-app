@@ -415,6 +415,11 @@ function check(name, ok, detail) {
     c.makeSaibanPdf({ date: today });
     check('採番表: 作り直すと古いPDFはゴミ箱へ（1つだけ残る）', global.PDFS.filter(p => p.endsWith('採番表_HXF_' + today + '.pdf')).length === 1);
     check('採番表: 流れていない日は作らない', c.makeSaibanPdf({ date: '2000-01-01' }).files.length === 0);
+    c.installNightlyTrigger(); c.installNightlyTrigger();
+    check('毎晩の自動処理: 22時台の時間指定が1つだけ', global.TRIGGERS.length === 1 && global.TRIGGERS[0].o.hour === 22 && global.TRIGGERS[0].o.tz === 'Asia/Tokyo');
+    global.PDFS = global.PDFS.filter(p => !p.includes('採番表_'));
+    c.nightlyJob();
+    check('毎晩の自動処理: その日の採番表PDFを作る', global.PDFS.some(p => p.endsWith('採番表_HXF_' + today + '.pdf')) && c.PropertiesService.getScriptProperties().getProperty('SAIBAN_DONE_UNTIL') === today);
   }
   await browser.close();
 

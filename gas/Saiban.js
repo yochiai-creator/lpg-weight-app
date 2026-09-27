@@ -130,3 +130,29 @@ function saibanStep_() {
   }
   return made;
 }
+
+// ---------- 毎晩の自動処理（夜は作業しないので、その日の分を夜にまとめて作る） ----------
+const NIGHTLY_HOUR = 22;   // 22時台に動く
+
+// 時間指定の自動処理から呼ばれる: 今日の採番表PDF、入力記録の整理、完了済みシートの片付け
+function nightlyJob() {
+  const today = tokyoDate_(new Date());
+  saibanStep_();                                   // 取りこぼした前日までの分
+  makeSaibanPdf({ date: today });
+  PropertiesService.getScriptProperties().setProperty('SAIBAN_DONE_UNTIL', today);
+  const until = Date.now() + 4 * 60 * 1000;        // 実行時間の上限（6分）に余裕を持たせる
+  let r;
+  do { r = runMaintenance(); } while (r.archiveDone === false && Date.now() < until);
+  try { cleanDoneSheets_(); } catch (e) { console.error('完了済みシートの片付けに失敗: ' + e.message); }
+}
+
+// メニュー「毎晩の自動処理を設定」: 毎日22時台に nightlyJob を動かす（何度押しても1つだけ）
+function installNightlyTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'nightlyJob') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('nightlyJob').timeBased().everyDays(1).atHour(NIGHTLY_HOUR).inTimezone('Asia/Tokyo').create();
+  const msg = '毎晩 ' + NIGHTLY_HOUR + '時台に、その日の採番表PDFを作ります（入力記録の整理・完了済みシートの片付けも一緒に行います）。';
+  try { SpreadsheetApp.getUi().alert(msg); } catch (e) { console.log(msg); }
+  return msg;
+}

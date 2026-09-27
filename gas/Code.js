@@ -148,6 +148,8 @@ function onOpen() {
     .addItem('入力画面のURLを表示', 'showWebAppUrl')
     .addSeparator()
     .addItem('表示中の成績表をPDF保存', 'exportActiveSheetPdf')
+    .addSeparator()
+    .addItem('毎晩の自動処理を設定（採番表PDFなど）', 'installNightlyTrigger')
     .addToUi();
 }
 
