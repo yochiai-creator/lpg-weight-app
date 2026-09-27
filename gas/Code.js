@@ -67,24 +67,39 @@ function ensureSettingRows_() {
 const VOLUME_CELL = 'N3';
 function volumeFor_(kind, settings) {
   const v = (settings || readSettings_()).volume[String(kind || '').trim()];
-  return v ? v.toFixed(1) : '';
+  return v ? String(v) : '';
 }
 function setVolume_(sh, kind, settings) {
   const v = volumeFor_(kind, settings);
   const cell = sh.getRange(VOLUME_CELL);
   cell.setNumberFormat('@').setValue(v);
 }
-// 入力中ロットで内容積が空の成績表に1度だけ入れる（v34より前に作ったロット用）
+// v34の仮の初期値（設定シートに入っていたら正式な値に置き換える）
+const VOLUME_OLD_DEFAULT = '5kg=11.8, 8kg=18.8, 20kg=47.0, 30kg=70.5, 50kg=117.5, 50kg S付=117.5';
+// 入力中ロットの成績表に内容積を1度だけ入れ直す（v34より前に作ったロット・仮の値が入ったロット用）
 function ensureVolumes_() {
   const props = PropertiesService.getScriptProperties();
-  if (props.getProperty('VOLUME_FILLED') === '1') return;
-  const ss = getSpreadsheet_(), settings = readSettings_();
+  if (props.getProperty('VOLUME_FILLED') === '2') return;
+  const ss = getSpreadsheet_();
+  const conf = ss.getSheetByName(SHEET_SETTINGS);
+  if (conf && conf.getLastRow() >= 2) {
+    conf.getRange(2, 1, conf.getLastRow() - 1, 2).getValues().forEach(function(r, i) {
+      if (String(r[0]).trim() === '内容積' && String(r[1]).trim() === VOLUME_OLD_DEFAULT) {
+        conf.getRange(2 + i, 2).setValue(SETTING_ROWS.filter(function(x) { return x[0] === '内容積'; })[0][1]);
+      }
+    });
+  }
+  const settings = readSettings_();
+  const old = parseTypical_(VOLUME_OLD_DEFAULT);
   readLots_().forEach(function(lot) {
     if (lot.status !== STATUS_ACTIVE) return;
     const sh = ss.getSheetByName(lot.sheetName);
-    if (sh && String(sh.getRange(VOLUME_CELL).getValue()) === '') setVolume_(sh, lot.kind, settings);
+    if (!sh) return;
+    const cur = String(sh.getRange(VOLUME_CELL).getValue());
+    const wasOld = Object.keys(old).some(function(k) { return old[k].toFixed(1) === cur; });
+    if (cur === '' || wasOld) setVolume_(sh, lot.kind, settings);
   });
-  props.setProperty('VOLUME_FILLED', '1');
+  props.setProperty('VOLUME_FILLED', '2');
 }
 
 function onOpen() {

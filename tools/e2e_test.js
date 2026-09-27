@@ -61,9 +61,9 @@ function check(name, ok, detail) {
   await c73.locator('button:has-text("機種を変更")').click();
   await c73.locator('select').selectOption('30kg');
   await c73.locator('button:has-text("変更")').first().click(); await page.waitForTimeout(400);
-  check('内容積が成績表に自動で入る（50kg=117.5）', String(ss.getSheetByName('成績表_HEP37001-37100').getRange('N3').getValue()) === '117.5');
+  check('内容積が成績表に自動で入る（50kg=118）', String(ss.getSheetByName('成績表_HEP37001-37100').getRange('N3').getValue()) === '118');
   const sh73 = ss.getSheets().find(x => x.getName().startsWith('成績表_73301'));
-  check('機種を変更すると内容積も変わる（30kg=70.5）', sh73 && String(sh73.getRange('N3').getValue()) === '70.5');
+  check('機種を変更すると内容積も変わる（30kg=71）', sh73 && String(sh73.getRange('N3').getValue()) === '71');
   check('機種を変更できる', (await page.textContent('#kindFilter')).includes('30kg（1）') && (await page.textContent('#kindFilter')).includes('20kg（0）'));
   check('ロットシートの容器区分も変わる', ss.getSheetByName('ロット').getRange(2, 1, 3, 6).getValues().some(r => r[0] === '73301' && r[5] === '30kg'));
   check('同じ組容器番号は登録できない', (await create('HEP', '37001')).includes('登録済み'));
