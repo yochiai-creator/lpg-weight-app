@@ -8,7 +8,7 @@ const SAIBAN_PER_PAGE = 200, SAIBAN_ROWS = 50;
 
 function tokyoDate_(d) { return Utilities.formatDate(d, 'Asia/Tokyo', 'yyyy-MM-dd'); }
 
-// その日に流れた容器（入力順）。欠番（流れていない）・訂正（同じ容器の打ち直し）・取消した入力は入れない
+// その日に流れた容器（入力順）。欠番（流れていない）・訂正（同じ容器の打ち直し）・ダブり・取消した入力は入れない
 function saibanRows_(date) {
   const log = getSpreadsheet_().getSheetByName(SHEET_LOG);
   if (!log || log.getLastRow() < 2) return [];
@@ -18,7 +18,7 @@ function saibanRows_(date) {
   return log.getRange(from, 1, last - from + 1, LOG_HEADERS.length).getValues().filter(function(r) {
     const t = r[LC_TIME];
     return t instanceof Date && tokyoDate_(t) === date && r[LC_STATUS] !== '取消' &&
-      r[LC_KIND] !== MISSING && r[LC_KIND] !== KIND_FIX;
+      r[LC_KIND] !== MISSING && r[LC_KIND] !== KIND_FIX && r[LC_KIND] !== KIND_DUP;
   }).sort(function(a, b) { return a[LC_TIME] - b[LC_TIME]; }).map(function(r) {
     const lot = lots[String(r[LC_LOT])];
     const prefix = lot ? lot.prefix : '';
@@ -28,7 +28,7 @@ function saibanRows_(date) {
       prefix: prefix,
       number: full.indexOf(prefix) === 0 ? full.slice(prefix.length) : full,
       kind: String(r[LC_KINDSIZE] || (lot && lot.kind) || ''),
-      mark: r[LC_KIND] === KIND_DUP ? 'W' : r[LC_KIND] === REPAIR ? '修正' : '',
+      mark: r[LC_KIND] === REPAIR ? '修正' : '',
       worker: String(r[LC_WORKER] || '')
     };
   });

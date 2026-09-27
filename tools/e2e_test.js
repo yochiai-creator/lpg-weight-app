@@ -400,16 +400,16 @@ function check(name, ok, detail) {
     order.forEach((n, i) => c.recordEntry({ lotId: c.readLots_().find(l => Number(l.start) <= +n && +n <= Number(l.end)).lotId, serial: n, mass: 16.7, worker: i < 100 ? '山崎' : '田中' }));
     const lot1 = c.readLots_()[0].lotId;
     c.recordEntry({ lotId: lot1, serial: '74102', mass: 16.8, overwrite: 'fix', worker: '山崎' });   // 訂正（数えない）
-    c.recordEntry({ lotId: lot1, serial: '74103', mass: 16.6, overwrite: 'dup', worker: '山崎' });   // ダブり（流れたので数える）
+    c.recordEntry({ lotId: lot1, serial: '74103', mass: 16.6, overwrite: 'dup', worker: '山崎' });   // ダブり（数えない）
     const today = c.tokyoDate_(new Date());
     const r = c.makeSaibanPdf({ date: today });
     const f = r.files[0], key = Object.keys(global.PDFBLOBS).find(k => k.endsWith('採番表_HXF_' + today + '.pdf'));
     const html = key ? global.PDFBLOBS[key].html : '';
-    check('採番表: 容器記号ごとに1つのPDF（訂正は数えずダブりは数える）', r.files.length === 1 && f.group === 'HXF' && f.count === 251, JSON.stringify(r.files));
+    check('採番表: 容器記号ごとに1つのPDF（訂正・ダブりは数えない）', r.files.length === 1 && f.group === 'HXF' && f.count === 250, JSON.stringify(r.files));
     const nums = [...html.matchAll(/<td class="no">(\d+)<\/td><td class="num">(\d*)/g)].map(x => [Number(x[1]), x[2]]).filter(x => x[1]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
-    check('採番表: 入力した順に番号が並ぶ（5桁・記号なし）', nums.length === 251 && nums.slice(0, 250).join(',') === order.join(','), nums.slice(0, 5).join(','));
+    check('採番表: 入力した順に番号が並ぶ（5桁・記号なし）', nums.length === 250 && nums.join(',') === order.join(','), nums.slice(0, 5).join(','));
     check('採番表: 1ページ200本で2ページ・見出しに作業日と作業者', (html.match(/class="page"/g) || []).length === 2 && html.includes('作業者：<b>山崎・田中</b>') && html.includes('20kg容器　採番表'));
-    check('採番表: ダブりに印', html.includes('74103<span class="mk">W</span>'));
+    check('採番表: ダブりは載せない', !html.includes('<span class="mk">W</span>'));
     const d = today.split('-');
     check('採番表: 保存先は 採番表/年/月', !!key && key.startsWith('/LPG容器 検査成績表PDF/採番表/' + d[0] + '年/' + d[1] + '月/'), key);
     c.makeSaibanPdf({ date: today });
