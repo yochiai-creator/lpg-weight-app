@@ -243,7 +243,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v48（入力記録を年ごとに整理）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v49（採番表PDF）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -292,6 +292,15 @@
 
   <h2>最近完了したロット</h2>
   <div class="cards" id="doneLots"></div>
+
+  <h2>採番表（その日に流れた順番）</h2>
+  <div class="panel">
+    <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="date" id="saibanDate" style="font-size:16px;padding:8px">
+      <button class="btn" id="btnSaiban" type="button">採番表PDFを作る</button>
+    </div>
+    <div class="msg" id="saibanMsg">前日までの分は毎日自動で作ってドライブの「採番表」フォルダに保存します。今日の分や作り直しはここから。</div>
+  </div>
 </main>
 
 <main id="entry" class="hidden">
@@ -735,6 +744,26 @@
   };
 
   $('btnStart').onclick = function() { showEntry(); };
+  (function() {
+    const d = new Date(), p2 = function(n) { return ('0' + n).slice(-2); };
+    $('saibanDate').value = d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+  })();
+  $('btnSaiban').onclick = function() {
+    const b = this; b.disabled = true;
+    $('saibanMsg').className = 'msg'; $('saibanMsg').textContent = '作成中…';
+    call('makeSaibanPdf', { date: $('saibanDate').value }).then(function(r) {
+      b.disabled = false;
+      const m = $('saibanMsg'); m.innerHTML = '';
+      if (!r.files.length) { m.textContent = r.date + ' に流れた容器はありません'; return; }
+      m.className = 'msg ok';
+      m.appendChild(document.createTextNode(r.date + ' の採番表を保存しました: '));
+      r.files.forEach(function(f) {
+        const a = document.createElement('a'); a.href = f.url; a.target = '_blank';
+        a.textContent = (f.group || '記号なし') + '（' + f.count + '本）'; a.style.marginRight = '12px';
+        m.appendChild(a);
+      });
+    }).catch(function(e) { b.disabled = false; $('saibanMsg').className = 'msg err'; $('saibanMsg').textContent = errText(e); });
+  };
   $('btnHome').onclick = function() {
     if (S.queue.length && !armed(this, 'もう一度押すと戻る')) { setNotice('まだ送信中の入力があります。一覧に戻っても送信は続きます', 'warn'); return; }
     $('entry').classList.add('hidden'); $('home').classList.remove('hidden'); $('btnHome').classList.add('hidden');

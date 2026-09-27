@@ -35,22 +35,25 @@ function load(){
   PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k]||null,setProperty:(k,v)=>props[k]=v,deleteProperty:k=>{delete props[k]}})},
   LockService:{getScriptLock:()=>({waitLock(){},tryLock(){return true},releaseLock(){}})},
   Session:{getActiveUser:()=>({getEmail:()=>'tester@example.com'})},
-  Utilities:{formatDate:(d,tz,f)=>f==='yyyy'?String(d.getFullYear()):f==='MM'?('0'+(d.getMonth()+1)).slice(-2):d.toISOString().replace(/\D/g,'').slice(2,14),newBlob:(c,t,n)=>({name:n,type:t,content:c,getName(){return n}})},
+  Utilities:{formatDate:(d,tz,f)=>{const p=n=>('0'+n).slice(-2);return String(f).replace(/yyyy|yy|MM|dd|HH|mm|ss/g,t=>({yyyy:d.getFullYear(),yy:p(d.getFullYear()%100),MM:p(d.getMonth()+1),dd:p(d.getDate()),HH:p(d.getHours()),mm:p(d.getMinutes()),ss:p(d.getSeconds())})[t])},newBlob:(c,t,n)=>({name:n,type:t,content:c,getName(){return n}})},
   MailApp:{sendEmail:(to,sub,body,opt)=>{global.MAILS.push({to,sub,body,cc:opt.cc,name:opt.name,att:opt.attachments.map(a=>a.name)})}},
   UrlFetchApp:{fetch:()=>({getBlob:()=>({setName(n){this.name=n;return this}})})},
   ScriptApp:{getOAuthToken:()=>'t'},
+  HtmlService:{createHtmlOutput:(h)=>({getAs:(t)=>({html:h,type:t,name:'',setName(n){this.name=n;return this}})})},
   DriveApp:(()=>{const files={};let fid=1000000000;const mk=(name,path)=>{const kids={};const f={name,path,getId:()=>'F'+path,getName:()=>name,
-     createFile(b){const id='file'+(fid++);files[id]={blob:b,path:path+'/'+b.name};global.PDFS.push(path+'/'+b.name);return {getUrl:()=>'https://drive.google.com/file/d/'+id+'/view',getId:()=>id}},
+     createFile(b){const id='file'+(fid++);const fo={blob:b,path:path+'/'+b.name,trashed:false,setTrashed(x){this.trashed=x;global.PDFS=global.PDFS.filter(p=>p!==this.path)}};files[id]=fo;f.files.push(fo);global.PDFS.push(path+'/'+b.name);global.PDFBLOBS[path+'/'+b.name]=b;return {getUrl:()=>'https://drive.google.com/file/d/'+id+'/view',getId:()=>id}},
+     files:[],getFilesByName(n){const l=f.files.filter(x=>!x.trashed&&x.blob.name===n);let i=0;return {hasNext:()=>i<l.length,next:()=>l[i++]}},
      getFoldersByName(n){let used=false;return {hasNext:()=>!used&&!!kids[n],next(){used=true;return kids[n]}}},
      createFolder(n){return kids[n]=mk(n,path+'/'+n)}};return f};const root=mk('ROOT','');let base=null;
    return {createFolder:(n)=>base=root.createFolder(n),getFolderById:()=>{if(!base)throw new Error('none');return base},
      getFileById:(id)=>{if(SSS[id])return {moveTo(){}};if(!files[id])throw new Error('no file');return {getBlob:()=>({name:files[id].blob.name,setName(n){this.name=n;return this}})}}}})()};
- global.PDFS=[];global.ARCHIVES=[];
+ global.PDFS=[];global.ARCHIVES=[];global.PDFBLOBS={};
  global.MAILS=[];
  vm.createContext(ctx); vm.runInContext(fs.readFileSync(GAS+'/Code.js','utf8'),ctx);
  vm.runInContext(fs.readFileSync(GAS+'/Setup.js','utf8'),ctx);
  vm.runInContext(fs.readFileSync(GAS+'/Delivery.js','utf8'),ctx);
  vm.runInContext(fs.readFileSync(GAS+'/Archive.js','utf8'),ctx);
+ vm.runInContext(fs.readFileSync(GAS+'/Saiban.js','utf8'),ctx);
  ensure=vm.runInContext('ensureSheet_',ctx); ensure(ss,'ロット',vm.runInContext('LOT_HEADERS',ctx)); ensure(ss,'入力記録',vm.runInContext('LOG_HEADERS',ctx));
  const st=ensure(ss,'設定',['項目','値','説明']); vm.runInContext('SETTING_ROWS',ctx).forEach((r,i)=>{st.set(i+2,1,r[0]);st.set(i+2,2,r[1]);});
  st.set(2,2,'nouhin@example.com');

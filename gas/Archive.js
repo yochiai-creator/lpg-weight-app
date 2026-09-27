@@ -12,6 +12,10 @@ function runMaintenance() {
   const out = { trimmed: false, archived: 0, archiveDone: true };
   try { out.trimmed = trimLogColumns_(); } catch (e) { console.error('列の削除に失敗: ' + e.message); }
   try { Object.assign(out, archiveLogStep_()); } catch (e) { console.error('入力記録の移動に失敗: ' + e.message); }
+  try {
+    // 前日までの採番表PDF。3日分ずつ作り、残りがあれば続けて呼ばせる
+    if (saibanStep_() >= 3) out.archiveDone = false;
+  } catch (e) { console.error('採番表の作成に失敗: ' + e.message); }
   return out;
 }
 
