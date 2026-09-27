@@ -454,9 +454,10 @@ let LOG_TAIL_CACHE_ = null;
 function progressFromLog_(lot, full) {
   const out = {};
   const log = getSpreadsheet_().getSheetByName(SHEET_LOG);
-  if (!log || log.getLastRow() < 2) return out;
+  if (!log) return out;
   let v;
-  if (full) v = log.getRange(2, 1, log.getLastRow() - 1, LOG_HEADERS.length).getValues();
+  if (log.getLastRow() < 2) v = [];
+  else if (full) v = log.getRange(2, 1, log.getLastRow() - 1, LOG_HEADERS.length).getValues();
   else {
     if (!LOG_TAIL_CACHE_) {
       const last = log.getLastRow(), from = Math.max(2, last - 30000);
@@ -464,7 +465,10 @@ function progressFromLog_(lot, full) {
     }
     v = LOG_TAIL_CACHE_;
   }
-  v.forEach(function(r) {
+  let mine = v.filter(function(r) { return String(r[LC_LOT]) === lot.lotId; });
+  // 年替わりで別のスプレッドシートへ移したロットは、そこから読む
+  if (full && !mine.length) mine = archivedRowsForLot_(lot.lotId);
+  mine.forEach(function(r) {
     if (String(r[LC_LOT]) !== lot.lotId || r[LC_STATUS] !== '有効') return;
     const serial = String(r[LC_SERIAL]).slice(lot.prefix.length);
     const kind = r[LC_KIND];
@@ -879,6 +883,7 @@ function reopenLot(lotId) {
   const lot = findLot_(lotId);
   getSheet_(SHEET_LOTS).getRange(lot.row, 7).setValue(STATUS_ACTIVE);
   lot.status = STATUS_ACTIVE;
+  restoreArchivedLot_(lot);   // 年替わりで移した記録があれば入力記録へ戻す
   if (!getSpreadsheet_().getSheetByName(lot.sheetName)) rebuildReportSheet_(lot);
   return withProgress_(lot);
 }

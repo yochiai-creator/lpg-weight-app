@@ -110,6 +110,17 @@ function buildLotCsv_(lot) {
       if (r[LC_LOT] === lot.lotId && r[LC_STATUS] === '有効') latest[r[LC_SERIAL]] = r;
     });
   }
+  // 年替わりで別のスプレッドシートへ移したロットは、そこから読む（表示と同じ形の文字にそろえる）
+  if (!Object.keys(latest).length) {
+    archivedRowsForLot_(lot.lotId).forEach(function(r) {
+      if (r[LC_STATUS] !== '有効') return;
+      latest[String(r[LC_SERIAL])] = r.map(function(v, i) {
+        if (v instanceof Date) return Utilities.formatDate(v, 'Asia/Tokyo', 'yyyy/MM/dd HH:mm:ss');
+        if ((i === LC_MASS || i === LC_PREV) && typeof v === 'number') return v.toFixed(1);
+        return String(v);
+      });
+    });
+  }
   const rows = [['容器番号', '表示番号', '質量(kg)', '区分', '一致結果', '入力日時', '入力者', '備考']];
   const width = lot.start.length;
   for (let n = Number(lot.start); n <= Number(lot.end); n++) {

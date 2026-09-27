@@ -243,7 +243,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v47（完了後に成績表シートを消す・PDFは年月フォルダ）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v48（入力記録を年ごとに整理）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -479,6 +479,13 @@
     // 最新の読み込みより後にこの画面で入れた分を上に重ねる
     S.localOps.forEach(function(op) { const l = lotById(op.lotId); if (l) l.entries[op.serial] = op.mass; });
   }
+  // 入力記録の整理（使わない列の削除・年替わりの移動）を裏で少しずつ進める。画面は待たない
+  let maintStarted = false;
+  function runMaintenance() {
+    call('runMaintenance').then(function(r) {
+      if (r && r.archiveDone === false) setTimeout(runMaintenance, 3000);
+    }).catch(function() { /* 次に開いたときにまた試す */ });
+  }
   function loadHome() {
     const t0 = Date.now();
     return call('getBootstrap').then(function(b) {
@@ -489,6 +496,7 @@
       S.stale = false; $('staleMsg').classList.add('hidden');
       renderWorkers();
       renderHome();
+      if (!maintStarted) { maintStarted = true; setTimeout(runMaintenance, 1500); }
       if (!$('entry').classList.contains('hidden')) {
         if (!lotById(S.viewLotId)) S.viewLotId = S.lots.length ? S.lots[0].lotId : null;
         if (S.target && !lotById(S.target.lot.lotId)) resetEntry('ロットが更新されました。容器番号を入力', 'info');

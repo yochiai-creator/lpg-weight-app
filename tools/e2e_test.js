@@ -361,6 +361,35 @@ function check(name, ok, detail) {
     m.ctx.ensureLogHeaders_();
     check('並び替えは1回だけ', lg.getRange(1, 4).getValue() === 'グループNo' && lg.getRange(2, 5).getValue() === 'HEP59723');
   }
+  // ---- 入力記録の整理: 使わない列を削る・年が変わったら終わったロットの記録を別のスプレッドシートへ移す
+  {
+    const m = load(), c = m.ctx;
+    c.setup();
+    const A = c.createLot({ prefix: 'AR', start: '00101', kind: '20kg' }), B = c.createLot({ prefix: 'AR', start: '00201', kind: '20kg' });
+    c.recordEntry({ lotId: A.lotId, serial: '00101', mass: 16.7, worker: '山田' });
+    c.recordEntry({ lotId: A.lotId, serial: '00102', mass: null, missing: true, worker: '山田' });
+    c.recordEntry({ lotId: B.lotId, serial: '00201', mass: 16.9, worker: '山田' });
+    c.completeLot({ lotId: A.lotId, send: false });
+    const lg = m.ss.getSheetByName('入力記録');
+    c.runMaintenance();
+    check('整理: 入力記録の使わない列を削る', lg.getMaxColumns() === 18, lg.getMaxColumns());
+    check('整理: 年が変わるまでは移さない', lg.getLastRow() === 4 && global.ARCHIVES.length === 0);
+    const P = c.PropertiesService.getScriptProperties(), y = new Date().getFullYear();
+    P.setProperty('LOG_ARCHIVE_DONE', String(y - 2));   // 去年の分がまだ移っていない状態にする
+    let r, k = 0; do { r = c.runMaintenance(); } while (r.archiveDone === false && ++k < 10);
+    const rest = lg.getRange(2, 1, lg.getLastRow() - 1, 18).getValues();
+    check('整理: 入力中のロットの記録は残す', rest.length === 1 && rest[0][2] === B.lotId && rest[0][4] === 'AR00201');
+    const ar = global.ARCHIVES[0], ash = ar && ar.getSheets()[0];
+    check('整理: 終わったロットは「LPG容器 入力記録_去年」へ移す', ar && ar.name === 'LPG容器 入力記録_' + (y - 1) && ash.getLastRow() === 3 && ash.getRange(2, 5).getValue() === 'AR00101' && ash.getRange(2, 7).getValue() === '101');
+    check('整理: 移し終えたら次の年まで動かない', P.getProperty('LOG_ARCHIVE_DONE') === String(y - 1) && c.runMaintenance().archived === 0);
+    const csv = c.buildLotCsv_(c.findLot_(A.lotId)).content || '';
+    check('整理: 移したロットの再送信用CSVも作れる', String(csv).includes('"AR00101","101","16.7"'), String(csv).slice(0, 200));
+    c.reopenLot(A.lotId);
+    const back = lg.getRange(2, 1, lg.getLastRow() - 1, 18).getValues().filter(x => x[2] === A.lotId);
+    const shA = m.ss.getSheetByName(c.findLot_(A.lotId).sheetName);
+    check('整理: 移したロットを再開すると記録を戻して成績表を作り直す', back.length === 2 && !!shA && shA.getRange(5, 2, 2, 6).getValues().map(x => x.join('|')).join(' / ') === '101|true|1|6|,|7 / 102|false|欠|番||', shA && shA.getRange(5, 2, 2, 6).getValues().map(x => x.join('|')).join(' / '));
+    check('整理: 移し先の行は「戻し済み」', ash.getRange(2, 14).getValue() === '戻し済み');
+  }
   await browser.close();
 
   const failed = results.filter(r => !r.ok).length;
