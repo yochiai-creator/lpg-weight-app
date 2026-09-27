@@ -196,6 +196,15 @@
     font-size: 14px; color: var(--navy); white-space: nowrap; }
   .tabs button.done { border-color: var(--ok); color: var(--ok); }
   .tabs button.on { background: var(--navy); color: #fff; }
+  .ln-pre { font-size: .72em; font-weight: 600; opacity: .75; margin-right: 2px; letter-spacing: .02em; }
+  .ln-grp { font-size: 1.3em; font-weight: 800; letter-spacing: .02em; }
+  .ln-tail { font-weight: 600; opacity: .8; }
+  .ln-cnt { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: rgba(120,130,160,.15); font-size: .8em; font-weight: 600; vertical-align: 2px; }
+  .tabs button.on .ln-cnt { background: rgba(255,255,255,.22); }
+  .ln-soko { display: inline-block; margin-right: 4px; padding: 0 5px; border-radius: 4px; background: #333; color: #fff; font-size: .72em; font-weight: 700; vertical-align: 2px; }
+  #gridTitle { font-size: 22px; color: var(--navy); }
+  #gridTitle .ln-sep { margin: 0 6px; font-weight: 400; opacity: .6; }
+  #gridTitle .ln-end { font-weight: 700; }
   .gridhead { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
   .gridhead .count { font-size: 22px; font-weight: 700; }
   .lotnav { border: 0; background: #e8eaf2; color: var(--navy); border-radius: 50%; width: 34px; height: 34px; font-size: 22px; font-weight: 700; line-height: 1; margin: 0 6px; vertical-align: middle; }
@@ -206,8 +215,10 @@
   @keyframes slideR { from { transform: translateX(-40px); opacity: .3; } to { transform: none; opacity: 1; } }
   .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px 10px; grid-auto-flow: column; grid-template-rows: repeat(20, auto); }
   .cell { display: flex; justify-content: space-between; border-radius: 6px; padding: 5px 8px; font-size: 15px; cursor: pointer; user-select: none;
-    background: #f5f7fb; color: #a3abc0; font-variant-numeric: tabular-nums; border: 1px solid transparent; }
+    background: #f5f7fb; color: #7d86a0; font-weight: 600; font-variant-numeric: tabular-nums; border: 1px solid transparent; }
   .cell .m { font-weight: 700; }
+  .cell > span:first-child { font-size: 1.08em; letter-spacing: .03em; }
+  .cell.filled > span:first-child { font-weight: 700; color: var(--navy); }
   .cell.filled { background: var(--okbg); color: var(--text); }
   .cell.missing { background: #eee; color: var(--muted); }
   .cell.pending { background: var(--pend); color: var(--navy); }
@@ -226,7 +237,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v37（表をスワイプでロット切替）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v38（組番号を見やすく）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -1288,6 +1299,13 @@
     goMass({ lot: lot, serial: serial });
   }
 
+  // ロット番号の表示: 記号は小さく、組（下2桁を除いた部分）を太く大きくして見分けやすくする
+  function lotNumHtml(l) {
+    const st = String(l.start), cut = Math.max(0, st.length - 2);
+    return (l.prefix ? '<span class="ln-pre">' + esc(l.prefix) + '</span>' : '') +
+      '<span class="ln-grp">' + esc(st.slice(0, cut)) + '</span><span class="ln-tail">' + esc(st.slice(cut)) + '</span>';
+  }
+
   // 表を左右にスワイプ（または ‹ › ボタン）で、タブの並び順に前後のロットへ切り替える
   function lotOrder() {
     const out = [];
@@ -1341,7 +1359,8 @@
      g.lots.forEach(function(l) {
       const b = document.createElement('button');
       const c = countOf(l);
-      b.textContent = (l.spec === SOKO ? '底黒 ' : '') + l.prefix + l.start + '〜 (' + (c.filled + c.missing) + '/' + c.size + ')';
+      b.innerHTML = (l.spec === SOKO ? '<span class="ln-soko">底黒</span>' : '') + lotNumHtml(l) + '<span class="ln-tail">〜</span>' +
+        '<span class="ln-cnt">' + (c.filled + c.missing) + '/' + c.size + '</span>';
       b.tabIndex = -1;
       b.className = (l.lotId === S.viewLotId ? 'on' : '') + (c.filled + c.missing >= c.size ? ' done' : '');
       if (l.lotId === S.viewLotId) active = b;
@@ -1360,7 +1379,8 @@
     const g = $('grid'); g.innerHTML = '';
     if (!l) return;
     const c = countOf(l);
-    $('gridTitle').textContent = l.prefix + l.start + ' ～ ' + l.prefix + l.end;
+    $('gridTitle').innerHTML = (l.spec === SOKO ? '<span class="ln-soko">底黒</span>' : '') + lotNumHtml(l) +
+      '<span class="ln-sep">～</span><span class="ln-end">' + esc(l.end) + '</span>';
     $('gridSub').innerHTML = '';
     $('gridSub').appendChild(document.createTextNode((l.kind || '') + (median(l) !== null ? '　標準 ' + fmtMass(median(l)) : '')));
     const markText = function(obj, name, color) {
