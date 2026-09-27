@@ -50,9 +50,41 @@ function doGet() {
 
 // シートの整備（タイムゾーン・列見出し・シート名・見出しの文字サイズ）。1つが失敗しても残りは必ず行う
 function ensureSheets_() {
-  [ensureTokyoTime_, ensureLogHeaders_, ensureTitleFont_].forEach(function(fn) {
+  [ensureTokyoTime_, ensureLogHeaders_, ensureTitleFont_, ensureSettingRows_, ensureVolumes_].forEach(function(fn) {
     try { fn(); } catch (e) { console.error('シートの整備に失敗: ' + (fn.name || '') + ' ' + e.message); }
   });
+}
+
+// 後から増えた設定項目（内容積など）を既存の設定シートに足す
+function ensureSettingRows_() {
+  const sh = getSpreadsheet_().getSheetByName(SHEET_SETTINGS);
+  if (!sh) return;
+  const have = sh.getLastRow() >= 2 ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().map(function(r) { return String(r[0]).trim(); }) : [];
+  SETTING_ROWS.forEach(function(r) { if (have.indexOf(r[0]) < 0) sh.appendRow(r); });
+}
+
+// 成績表の内容積（N3、「内容積：」と「lit」の間）
+const VOLUME_CELL = 'N3';
+function volumeFor_(kind, settings) {
+  const v = (settings || readSettings_()).volume[String(kind || '').trim()];
+  return v ? v.toFixed(1) : '';
+}
+function setVolume_(sh, kind, settings) {
+  const v = volumeFor_(kind, settings);
+  const cell = sh.getRange(VOLUME_CELL);
+  cell.setNumberFormat('@').setValue(v);
+}
+// 入力中ロットで内容積が空の成績表に1度だけ入れる（v34より前に作ったロット用）
+function ensureVolumes_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('VOLUME_FILLED') === '1') return;
+  const ss = getSpreadsheet_(), settings = readSettings_();
+  readLots_().forEach(function(lot) {
+    if (lot.status !== STATUS_ACTIVE) return;
+    const sh = ss.getSheetByName(lot.sheetName);
+    if (sh && String(sh.getRange(VOLUME_CELL).getValue()) === '') setVolume_(sh, lot.kind, settings);
+  });
+  props.setProperty('VOLUME_FILLED', '1');
 }
 
 function onOpen() {
@@ -398,6 +430,7 @@ function createReportSheet_(lot) {
   applyTitleStyle_(sh.getRange('A1'));
   sh.getRange('V2').setValue(lot.prefix + lot.start + ' ～ ' + endLabel + (lot.spec ? '（' + lot.spec + '）' : ''));
   sh.getRange('H3').setValue(lot.prefix);
+  setVolume_(sh, lot.kind);
 
   const size = lotSize_(lot);
   const grid = [];
@@ -637,6 +670,8 @@ function changeLotKind(input) {
   try {
     const lot = findLot_(input.lotId);
     getSheet_(SHEET_LOTS).getRange(lot.row, 6).setValue(kind);
+    const sh = getSpreadsheet_().getSheetByName(lot.sheetName);
+    if (sh) setVolume_(sh, kind);
     return { lotId: lot.lotId, kind: kind };
   } finally {
     lock.releaseLock();
