@@ -13,7 +13,7 @@ class Sheet{constructor(ss,name){this.ss=ss;this.name=name;this.cells={};this.fo
  getRange(a,b,c,d){if(typeof a==='string')return new Range(this,...a1(a));return new Range(this,a,b,c||1,d||1)}
  appendRow(vals){const r=this.getLastRow()+1;vals.forEach((v,i)=>{if(typeof v==='string'&&v[0]==="'")v=v.slice(1);this.set(r,i+1,v)})}
  copyTo(ss){const s=new Sheet(ss,'コピー '+this.name);s.cells=JSON.parse(JSON.stringify(this.cells));s.fonts=JSON.parse(JSON.stringify(this.fonts));s.rich=JSON.parse(JSON.stringify(this.rich));s.maxR=this.maxR;s.maxC=this.maxC;ss.sheets.push(s);return s}
- setFrozenRows(){}
+ setFrozenRows(){} getParent(){return this.ss}
  moveColumns(range,dest){const src=[];for(let j=0;j<range.nc;j++)src.push(range.c+j);let maxC=Math.max(this.getLastColumn(),dest,...src);const rest=[];for(let c=1;c<=maxC;c++)if(src.indexOf(c)<0)rest.push(c);const at=rest.filter(c=>c<dest).length;const order=rest.slice(0,at).concat(src,rest.slice(at));const n={};for(const k in this.cells){const [rr,cc]=k.split(',').map(Number);const ni=order.indexOf(cc);n[rr+','+(ni<0?cc:ni+1)]=this.cells[k];}this.cells=n;return this}
  deleteRow(r){const n={};for(const k in this.cells){const [rr,cc]=k.split(',').map(Number);if(rr<r)n[k]=this.cells[k];else if(rr>r)n[(rr-1)+','+cc]=this.cells[k];}this.cells=n;return this}}
 class Range{constructor(sh,r,c,nr,nc){Object.assign(this,{sh,r,c,nr,nc})}
@@ -21,9 +21,9 @@ class Range{constructor(sh,r,c,nr,nc){Object.assign(this,{sh,r,c,nr,nc})}
  getDisplayValues(){return this.getValues().map(r=>r.map(v=>v instanceof Date?v.toISOString().slice(0,10).replace(/-/g,'/'):String(v)))}
  setValues(v){v.forEach((row,i)=>row.forEach((x,j)=>{if(typeof x==='string'&&x[0]==="'")x=x.slice(1);this.sh.set(this.r+i,this.c+j,x)}));return this}
  setValue(x){return this.setValues([[x]])} getValue(){return this.sh.get(this.r,this.c)} clearContent(){for(let i=0;i<this.nr;i++)for(let j=0;j<this.nc;j++)this.sh.set(this.r+i,this.c+j,'');return this}
- setNumberFormat(){return this} insertCheckboxes(){return this} clearDataValidations(){return this}
+ setNumberFormat(){return this} sort(spec){const rows=this.getValues();rows.sort((a,b)=>{for(const k of spec){const i=k.column-this.c;if(a[i]<b[i])return -1;if(a[i]>b[i])return 1}return 0});this.setValues(rows.map(r=>r.map(v=>typeof v==='string'&&/^0/.test(v)?"'"+v:v)));return this} insertCheckboxes(){return this} clearDataValidations(){return this}
  setFontWeight(){return this} setFontSize(n){for(let i=0;i<this.nr;i++)for(let j=0;j<this.nc;j++)this.sh.fonts[(this.r+i)+','+(this.c+j)]=n;return this} setRichTextValue(rv){this.sh.rich[this.r+','+this.c]=rv;return this} getRichText(){return this.sh.rich[this.r+','+this.c]} getFontSize(){return this.sh.fonts[this.r+','+this.c]||10} setBackground(){return this} setFontColor(){return this}}
-let ssid=1;const SSS={};class SS{constructor(name){this.sheets=[];this.tz='America/Los_Angeles';this.id='SS'+(ssid++);this.name=name;SSS[this.id]=this} getSpreadsheetTimeZone(){return this.tz} setSpreadsheetTimeZone(z){this.tz=z} getId(){return this.id} getSheetByName(n){return this.sheets.find(s=>s.name===n)||null}
+let ssid=1;const SSS={};class SS{constructor(name){this.sheets=[];this.tz='America/Los_Angeles';this.id='SS'+(ssid++);this.name=name;SSS[this.id]=this} getSpreadsheetTimeZone(){return this.tz} setSpreadsheetTimeZone(z){this.tz=z} getId(){return this.id} getUrl(){return 'https://docs.google.com/spreadsheets/d/'+this.id} getSheetByName(n){return this.sheets.find(s=>s.name===n)||null}
  insertSheet(n){const s=new Sheet(this,n);this.sheets.push(s);return s} setActiveSheet(){} moveActiveSheet(){} getNumSheets(){return this.sheets.length} deleteSheet(sh){this.sheets=this.sheets.filter(x=>x!==sh)} getSheets(){return this.sheets.slice()}}
 function load(){
  const ss=new SS(); const props={};

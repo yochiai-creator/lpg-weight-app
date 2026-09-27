@@ -401,25 +401,34 @@ function check(name, ok, detail) {
     const lot1 = c.readLots_()[0].lotId;
     c.recordEntry({ lotId: lot1, serial: '74102', mass: 16.8, overwrite: 'fix', worker: '山崎' });   // 訂正（数えない）
     c.recordEntry({ lotId: lot1, serial: '74103', mass: 16.6, overwrite: 'dup', worker: '山崎' });   // ダブり（数えない）
+    // 別の記号のロットも同じ日に流れる（1日1つの通し番号にまとめる）
+    const o = c.createLot({ prefix: 'HEP', start: '59701', kind: '50kg' });
+    c.recordEntry({ lotId: o.lotId, serial: '59723', mass: 34.8, worker: '田中' });
+    let freeN = 74400; while (order.includes(String(freeN))) freeN--;   // まだ流れていない番号を修正にする
+    const freeS = String(freeN);
+    c.recordEntry({ lotId: c.readLots_().find(l => +l.start <= freeN && freeN <= +l.end).lotId, serial: freeS, mass: null, repair: true, worker: '田中' });
     const today = c.tokyoDate_(new Date());
     const r = c.makeSaibanPdf({ date: today });
-    const f = r.files[0], key = Object.keys(global.PDFBLOBS).find(k => k.endsWith('採番表_HXF_' + today + '.pdf'));
+    const key = Object.keys(global.PDFBLOBS).find(k => k.endsWith('/採番表_' + today + '.pdf'));
     const html = key ? global.PDFBLOBS[key].html : '';
-    check('採番表: 容器記号ごとに1つのPDF（訂正・ダブりは数えない）', r.files.length === 1 && f.group === 'HXF' && f.count === 250, JSON.stringify(r.files));
-    const nums = [...html.matchAll(/<td class="no">(\d+)<\/td><td class="num">(\d*)/g)].map(x => [Number(x[1]), x[2]]).filter(x => x[1]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
-    check('採番表: 入力した順に番号が並ぶ（5桁・記号なし）', nums.length === 250 && nums.join(',') === order.join(','), nums.slice(0, 5).join(','));
-    check('採番表: 1ページ200本で2ページ・見出しに作業日と作業者', (html.match(/class="page"/g) || []).length === 2 && html.includes('作業者：<b>山崎・田中</b>') && html.includes('20kg容器　採番表'));
-    check('採番表: ダブりは載せない', !html.includes('<span class="mk">W</span>'));
+    check('採番表: 1日1つにまとめる（訂正・ダブりは数えない）', r.count === 252 && r.groups.join(',') === 'HXF,HEP' && !!r.pdfUrl && !!r.sheetUrl, JSON.stringify(r));
+    const nums = [...html.matchAll(/<td class="no">(\d+)<\/td><td class="num">([A-Z]*\d*)/g)].map(x => [Number(x[1]), x[2]]).filter(x => x[1]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
+    check('採番表PDF: 入力した順に通し番号（記号が混ざる日は記号付き）', nums.length === 252 && nums.slice(0, 250).join(',') === order.map(n => 'HXF' + n).join(',') && nums[250] === 'HEP59723' && nums[251] === 'HXF' + freeS, nums.slice(248).join(','));
+    check('採番表PDF: 1ページ200本・見出しに記号・作業者', (html.match(/class="page"/g) || []).length === 2 && html.includes('容器記号：<b>HXF・HEP</b>') && html.includes('作業者：<b>山崎・田中</b>') && html.includes('20・50kg容器　採番表'));
+    check('採番表PDF: 修正に印・ダブりは載せない', html.includes('HXF' + freeS + '<span class="mk">修正</span>') && !html.includes('>W<'));
     const d = today.split('-');
-    check('採番表: 保存先は 採番表/年/月', !!key && key.startsWith('/LPG容器 検査成績表PDF/採番表/' + d[0] + '年/' + d[1] + '月/'), key);
+    check('採番表PDF: 保存先は 採番表/年/月', !!key && key.startsWith('/LPG容器 検査成績表PDF/採番表/' + d[0] + '年/' + d[1] + '月/'), key);
+    const sss = global.ARCHIVES.find(x => x.name === 'LPG容器 採番表_' + d[0]), ssh = sss && sss.getSheets()[0];
+    const srows = ssh ? ssh.getRange(2, 1, ssh.getLastRow() - 1, 10).getValues() : [];
+    check('採番表シート: 年ごとのスプレッドシートに1行1本で書き足す', ssh && ssh.getName() === '採番表' && srows.length === 252 && srows[0][0] === today && srows[0][1] === 1 && srows[0][2] === 'HXF' && srows[0][3] === order[0] && srows[250][2] === 'HEP' && srows[250][5] === 598 && srows[251][8] === '修正', JSON.stringify(srows[0]) + JSON.stringify(srows[250]));
     c.makeSaibanPdf({ date: today });
-    check('採番表: 作り直すと古いPDFはゴミ箱へ（1つだけ残る）', global.PDFS.filter(p => p.endsWith('採番表_HXF_' + today + '.pdf')).length === 1);
-    check('採番表: 流れていない日は作らない', c.makeSaibanPdf({ date: '2000-01-01' }).files.length === 0);
+    check('採番表: 作り直すと同じ日の行・PDFは置き換える', ssh.getLastRow() - 1 === 252 && global.PDFS.filter(p => p.endsWith('/採番表_' + today + '.pdf')).length === 1);
+    check('採番表: 流れていない日は作らない', c.makeSaibanPdf({ date: '2000-01-01' }).count === 0);
     c.installNightlyTrigger(); c.installNightlyTrigger();
     check('毎晩の自動処理: 22時台の時間指定が1つだけ', global.TRIGGERS.length === 1 && global.TRIGGERS[0].o.hour === 22 && global.TRIGGERS[0].o.tz === 'Asia/Tokyo');
     global.PDFS = global.PDFS.filter(p => !p.includes('採番表_'));
     c.nightlyJob();
-    check('毎晩の自動処理: その日の採番表PDFを作る', global.PDFS.some(p => p.endsWith('採番表_HXF_' + today + '.pdf')) && c.PropertiesService.getScriptProperties().getProperty('SAIBAN_DONE_UNTIL') === today);
+    check('毎晩の自動処理: その日の採番表PDFを作る', global.PDFS.some(p => p.endsWith('/採番表_' + today + '.pdf')) && c.PropertiesService.getScriptProperties().getProperty('SAIBAN_DONE_UNTIL') === today);
   }
   await browser.close();
 

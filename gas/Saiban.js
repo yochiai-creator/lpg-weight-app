@@ -1,7 +1,8 @@
-// 採番表: その日に流れた容器を、入力記録の入力順に「流れた順番・容器番号」で並べたPDF（紙の採番表と同じ形）
-//  1ページ200本（50行×4列）。容器記号（底黒は別）ごとに1つのPDF
-//  前日までの分は入力画面を開いたときに裏で自動作成（runMaintenance）。今日の分はホームのボタンでいつでも作れる
-//  保存先: 「LPG容器 検査成績表PDF / 採番表 / 2026年 / 07月」
+// 採番表: その日に流れた容器を、入力記録の入力順に「流れた順番・容器番号」で並べる
+//  1日分を容器記号もまとめて1つの通し番号にして、
+//   ・スプレッドシート「LPG容器 採番表_2026」（年ごと、PDFフォルダ内）の「採番表」シートに書き足す
+//   ・PDF（紙の採番表と同じ形、1ページ200本＝50行×4列）を「LPG容器 検査成績表PDF / 採番表 / 2026年 / 07月」に保存
+//  毎晩22時台に自動（nightlyJob）。取りこぼした日は入力画面を開いたときに裏で作る。ホームのボタンでいつでも作り直せる
 
 const SAIBAN_FOLDER = '採番表';
 const SAIBAN_PER_PAGE = 200, SAIBAN_ROWS = 50;
@@ -26,7 +27,11 @@ function saibanRows_(date) {
     return {
       group: prefix + (lot && lot.spec === SPEC_SOKO ? '（底黒）' : ''),
       prefix: prefix,
+      full: full,
       number: full.indexOf(prefix) === 0 ? full.slice(prefix.length) : full,
+      time: r[LC_TIME],
+      groupNo: r[LC_GROUP],
+      lotId: String(r[LC_LOT]),
       kind: String(r[LC_KINDSIZE] || (lot && lot.kind) || ''),
       mark: r[LC_KIND] === REPAIR ? '修正' : '',
       worker: String(r[LC_WORKER] || '')
@@ -36,8 +41,9 @@ function saibanRows_(date) {
 
 function saibanEsc_(s) { return String(s).replace(/[&<>"]/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
-// 1グループ分のHTML（A4縦、1ページ200本）
+// 1日分のHTML（A4縦、1ページ200本）。容器記号が2つ以上ある日は番号に記号を付ける
 function saibanHtml_(date, group, rows) {
+  const multi = rows.some(function(r) { return r.group !== (rows[0] && rows[0].group); });
   const kinds = [], workers = [];
   rows.forEach(function(r) {
     if (r.kind && kinds.indexOf(r.kind) < 0) kinds.push(r.kind);
@@ -61,7 +67,7 @@ function saibanHtml_(date, group, rows) {
         const n = p * SAIBAN_PER_PAGE + c * SAIBAN_ROWS + i;   // 0始まり
         const r = rows[n];
         t += '<td class="no">' + (n + 1) + '</td><td class="num">' +
-          (r ? saibanEsc_(r.number) + (r.mark ? '<span class="mk">' + saibanEsc_(r.mark) + '</span>' : '') : '') + '</td>';
+          (r ? saibanEsc_(multi ? r.full + (r.group !== r.prefix ? '底黒' : '') : r.number) + (r.mark ? '<span class="mk">' + saibanEsc_(r.mark) + '</span>' : '') : '') + '</td>';
       }
       t += '</tr>';
     }
@@ -89,26 +95,71 @@ function saibanFolder_(date) {
   return childFolder_(childFolder_(childFolder_(getPdfFolder_(), SAIBAN_FOLDER), d[0] + '年'), d[1] + '月');
 }
 
-// 指定日の採番表PDFを作る（同じ名前の古いPDFはゴミ箱へ）。input: { date: 'yyyy-MM-dd' }（省略時は今日）
-// → { date, files: [{ group, count, url }] }
+// ---------- スプレッドシート（年ごと） ----------
+const SAIBAN_SS_PREFIX = 'LPG容器 採番表_';
+const SAIBAN_HEADERS = ['作業日', '流れた順番', '容器記号', '容器番号', '容器区分', 'グループNo', '入力時刻', '入力者', '備考', 'ロットID'];
+
+function saibanSheet_(year) {
+  const props = PropertiesService.getScriptProperties();
+  let ids = {};
+  try { ids = JSON.parse(props.getProperty('SAIBAN_SS_IDS') || '{}'); } catch (e) { ids = {}; }
+  if (ids[year]) {
+    try { return SpreadsheetApp.openById(ids[year]).getSheets()[0]; } catch (e) { /* 消されていたら作り直す */ }
+  }
+  const ss = SpreadsheetApp.create(SAIBAN_SS_PREFIX + year);
+  try { ss.setSpreadsheetTimeZone('Asia/Tokyo'); } catch (e) { /* 無視 */ }
+  try { DriveApp.getFileById(ss.getId()).moveTo(getPdfFolder_()); } catch (e) { /* マイドライブに残る */ }
+  const sh = ss.getSheets()[0].setName('採番表');
+  sh.getRange(1, 1, 1, SAIBAN_HEADERS.length).setValues([SAIBAN_HEADERS]).setFontWeight('bold');
+  sh.setFrozenRows(1);
+  if (sh.getMaxColumns() > SAIBAN_HEADERS.length) sh.deleteColumns(SAIBAN_HEADERS.length + 1, sh.getMaxColumns() - SAIBAN_HEADERS.length);
+  ids[year] = ss.getId();
+  props.setProperty('SAIBAN_SS_IDS', JSON.stringify(ids));
+  return sh;
+}
+
+// その日の行を書き直す（前に書いた同じ日の行は消してから書き足し、日付・順番で並べ直す）
+function writeSaibanSheet_(date, rows) {
+  const sh = saibanSheet_(date.slice(0, 4));
+  const last = sh.getLastRow();
+  if (last >= 2) {
+    const days = sh.getRange(2, 1, last - 1, 1).getDisplayValues();
+    for (let i = days.length - 1; i >= 0; i--) {
+      if (days[i][0] !== date) continue;
+      let j = i;
+      while (j > 0 && days[j - 1][0] === date) j--;
+      sh.deleteRows(2 + j, i - j + 1);
+      i = j;
+    }
+  }
+  if (rows.length) {
+    const start = sh.getLastRow() + 1;
+    sh.getRange(start, 1, rows.length, SAIBAN_HEADERS.length).setValues(rows.map(function(r, i) {
+      return ["'" + date, i + 1, r.group, "'" + r.number, r.kind, r.groupNo === '' ? '' : r.groupNo, r.time, r.worker, r.mark, r.lotId];
+    }));
+    sh.getRange(start, 7, rows.length, 1).setNumberFormat('HH:mm:ss');
+    if (sh.getLastRow() > 2) sh.getRange(2, 1, sh.getLastRow() - 1, SAIBAN_HEADERS.length).sort([{ column: 1 }, { column: 2 }]);
+  }
+  return sh.getParent().getUrl();
+}
+
+// 指定日の採番表（スプレッドシートへの書き足し＋PDF）を作る。同じ日の古い行・PDFは置き換える
+// input: { date: 'yyyy-MM-dd' }（省略時は今日） → { date, count, groups: [記号], pdfUrl, sheetUrl }
 function makeSaibanPdf(input) {
   const date = (input && input.date) || tokyoDate_(new Date());
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('日付は yyyy-MM-dd で指定してください');
   const rows = saibanRows_(date);
-  const groups = {};
-  rows.forEach(function(r) { (groups[r.group] = groups[r.group] || []).push(r); });
-  const out = { date: date, files: [] };
-  const names = Object.keys(groups).sort();
-  if (!names.length) return out;
+  const out = { date: date, count: rows.length, groups: [], pdfUrl: '', sheetUrl: '' };
+  if (!rows.length) return out;
+  rows.forEach(function(r) { if (out.groups.indexOf(r.group) < 0) out.groups.push(r.group); });
+  out.sheetUrl = writeSaibanSheet_(date, rows);
   const folder = saibanFolder_(date);
-  names.forEach(function(g) {
-    const name = '採番表_' + (g || '記号なし') + '_' + date + '.pdf';
-    const old = folder.getFilesByName(name);
-    while (old.hasNext()) old.next().setTrashed(true);
-    const blob = HtmlService.createHtmlOutput(saibanHtml_(date, g, groups[g])).getAs('application/pdf').setName(name);
-    const file = folder.createFile(blob);
-    out.files.push({ group: g, count: groups[g].length, url: file.getUrl() });
-  });
+  const name = '採番表_' + date + '.pdf';
+  const old = folder.getFilesByName(name);
+  while (old.hasNext()) old.next().setTrashed(true);
+  const label = out.groups.map(function(g) { return g || '（なし）'; }).join('・');
+  const blob = HtmlService.createHtmlOutput(saibanHtml_(date, label, rows)).getAs('application/pdf').setName(name);
+  out.pdfUrl = folder.createFile(blob).getUrl();
   return out;
 }
 

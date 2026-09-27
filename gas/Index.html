@@ -243,7 +243,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v51（毎晩22時に採番表PDF）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v52（採番表を1日1つ・スプレッドシートにも）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -297,9 +297,9 @@
   <div class="panel">
     <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
       <input type="date" id="saibanDate" style="font-size:16px;padding:8px">
-      <button class="btn" id="btnSaiban" type="button">採番表PDFを作る</button>
+      <button class="btn" id="btnSaiban" type="button">採番表を作る</button>
     </div>
-    <div class="msg" id="saibanMsg">前日までの分は毎日自動で作ってドライブの「採番表」フォルダに保存します。今日の分や作り直しはここから。</div>
+    <div class="msg" id="saibanMsg">毎晩22時台に、その日の分を「LPG容器 採番表」スプレッドシートに書き足し、PDFも保存します（容器記号もまとめて1日1つの通し番号）。今日の途中の分や作り直しはここから。</div>
   </div>
 </main>
 
@@ -754,12 +754,12 @@
     call('makeSaibanPdf', { date: $('saibanDate').value }).then(function(r) {
       b.disabled = false;
       const m = $('saibanMsg'); m.innerHTML = '';
-      if (!r.files.length) { m.textContent = r.date + ' に流れた容器はありません'; return; }
+      if (!r.count) { m.textContent = r.date + ' に流れた容器はありません'; return; }
       m.className = 'msg ok';
-      m.appendChild(document.createTextNode(r.date + ' の採番表を保存しました: '));
-      r.files.forEach(function(f) {
-        const a = document.createElement('a'); a.href = f.url; a.target = '_blank';
-        a.textContent = (f.group || '記号なし') + '（' + f.count + '本）'; a.style.marginRight = '12px';
+      m.appendChild(document.createTextNode(r.date + ' の採番表（' + r.count + '本）: '));
+      [['PDF', r.pdfUrl], ['スプレッドシート', r.sheetUrl]].forEach(function(x) {
+        if (!x[1]) return;
+        const a = document.createElement('a'); a.href = x[1]; a.target = '_blank'; a.textContent = x[0]; a.style.marginRight = '12px';
         m.appendChild(a);
       });
     }).catch(function(e) { b.disabled = false; $('saibanMsg').className = 'msg err'; $('saibanMsg').textContent = errText(e); });
