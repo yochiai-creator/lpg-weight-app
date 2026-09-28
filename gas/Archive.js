@@ -10,7 +10,7 @@ const ARCHIVE_CHUNK = 8000;   // 1回に調べる行数（入力の待ち時間�
 // 入力画面の読み込み後に裏で呼ばれる（画面は待たない）
 function runMaintenance() {
   const out = { trimmed: false, archived: 0, archiveDone: true };
-  try { ensureFolderLayout_(); ensurePdfKindFolders_(); } catch (e) { console.error('フォルダの整理に失敗: ' + e.message); }
+  try { mergeRootFolders_(); ensureFolderLayout_(); ensurePdfKindFolders_(); } catch (e) { console.error('フォルダの整理に失敗: ' + e.message); }
   try { out.trimmed = trimLogColumns_(); } catch (e) { console.error('列の削除に失敗: ' + e.message); }
   try { Object.assign(out, archiveLogStep_()); } catch (e) { console.error('入力記録の移動に失敗: ' + e.message); }
   try {
@@ -33,16 +33,19 @@ function trimLogColumns_() {
 function tokyoYear_(d) { return Number(Utilities.formatDate(d || new Date(), 'Asia/Tokyo', 'yyyy')); }
 
 function archiveIds_() {
-  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('LOG_ARCHIVE_IDS') || '{}'); } catch (e) { return {}; }
+  try { return JSON.parse(sharedProps_().getProperty('LOG_ARCHIVE_IDS') || '{}'); } catch (e) { return {}; }
 }
 
 // 移し先のスプレッドシート（年ごと）。「LPG容器 質量入力 / 入力記録（過去分）」に作る
 function archiveSheet_(year) {
-  const props = PropertiesService.getScriptProperties();
+  const props = sharedProps_();
   const ids = archiveIds_();
   if (ids[year]) {
     try { return SpreadsheetApp.openById(ids[year]).getSheets()[0]; } catch (e) { /* 消されていたら作り直す */ }
   }
+  // 別のプロジェクト（旧URL）が作ったものがあればそれを使う
+  const found = findSpreadsheetIn_(childFolder_(getPdfFolder_(), ARCHIVE_FOLDER), ARCHIVE_PREFIX + year);
+  if (found) { ids[year] = found.getId(); props.setProperty('LOG_ARCHIVE_IDS', JSON.stringify(ids)); return found.getSheets()[0]; }
   const ss = SpreadsheetApp.create(ARCHIVE_PREFIX + year);
   try { DriveApp.getFileById(ss.getId()).moveTo(childFolder_(getPdfFolder_(), ARCHIVE_FOLDER)); } catch (e) { /* 移せなくてもマイドライブに残る */ }
   const sh = ss.getSheets()[0].setName(SHEET_LOG);
@@ -64,7 +67,7 @@ function asWritable_(row) {
 
 // 年が変わっていたら、終わったロットの記録を少しずつ移す。1回に ARCHIVE_CHUNK 行まで
 function archiveLogStep_() {
-  const props = PropertiesService.getScriptProperties();
+  const props = sharedProps_();
   const year = tokyoYear_() - 1;               // 移す年（去年）
   const done = props.getProperty('LOG_ARCHIVE_DONE');
   if (!done) { props.setProperty('LOG_ARCHIVE_DONE', String(year)); return { archived: 0, archiveDone: true }; }

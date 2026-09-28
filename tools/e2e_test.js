@@ -374,7 +374,7 @@ function check(name, ok, detail) {
     c.runMaintenance();
     check('整理: 入力記録の使わない列を削る', lg.getMaxColumns() === 18, lg.getMaxColumns());
     check('整理: 年が変わるまでは移さない', lg.getLastRow() === 4 && global.ARCHIVES.length === 0);
-    const P = c.PropertiesService.getScriptProperties(), y = new Date().getFullYear();
+    const P = c.sharedProps_(), y = new Date().getFullYear();
     P.setProperty('LOG_ARCHIVE_DONE', String(y - 2));   // 去年の分がまだ移っていない状態にする
     let r, k = 0; do { r = c.runMaintenance(); } while (r.archiveDone === false && ++k < 10);
     const rest = lg.getRange(2, 1, lg.getLastRow() - 1, 18).getValues();
@@ -428,11 +428,11 @@ function check(name, ok, detail) {
     check('毎晩の自動処理: 22時台の時間指定が1つだけ', global.TRIGGERS.length === 1 && global.TRIGGERS[0].o.hour === 22 && global.TRIGGERS[0].o.tz === 'Asia/Tokyo');
     const beforeBlob = global.PDFBLOBS[key];
     c.nightlyJob();
-    check('毎晩の自動処理: その日の採番表PDFを作る', global.PDFBLOBS[key] !== beforeBlob && global.PDFS.filter(p => p.endsWith('/採番表_' + today + '.pdf')).length === 1 && c.PropertiesService.getScriptProperties().getProperty('SAIBAN_DONE_UNTIL') === today);
+    check('毎晩の自動処理: その日の採番表PDFを作る', global.PDFBLOBS[key] !== beforeBlob && global.PDFS.filter(p => p.endsWith('/採番表_' + today + '.pdf')).length === 1 && c.sharedProps_().getProperty('SAIBAN_DONE_UNTIL') === today);
   }
   // ---- ドライブのフォルダを「LPG容器 質量入力」に全部まとめる（v52までの並びからの整理）
   {
-    const m = load(), c = m.ctx, P = c.PropertiesService.getScriptProperties();
+    const m = load(), c = m.ctx, P = c.sharedProps_();
     const old = c.DriveApp.createFolder('LPG容器 検査成績表PDF');
     P.setProperty('PDF_FOLDER_ID', old.getId());
     old.createFolder('2026年').createFolder('09月').createFile({ name: '成績表_HEP59701-59800.pdf' });
@@ -442,7 +442,7 @@ function check(name, ok, detail) {
     c.ensureFolderLayout_();
     const names = f => f.kids.map(k => k.name).sort().join(',');
     check('フォルダ整理: 名前を「LPG容器 質量入力」に', old.getName() === 'LPG容器 質量入力' && names(old) === '入力記録（過去分）,成績表PDF,採番表', names(old));
-    const paths = global.PDFS.sort().join(' | ');
+    const paths = global.PDFS.filter(p => p.endsWith('.pdf')).sort().join(' | ');
     check('フォルダ整理: 成績表PDFは「成績表PDF/年/月」、採番表はそのまま', paths === '/LPG容器 質量入力/成績表PDF/2026年/09月/成績表_HEP59701-59800.pdf | /LPG容器 質量入力/成績表PDF/成績表_HRH00001-00100.pdf | /LPG容器 質量入力/採番表/2026年/09月/採番表_2026-09-27.pdf', paths);
     check('フォルダ整理: 1回だけ', P.getProperty('FOLDER_LAYOUT') === '1' && c.ensureFolderLayout_() === false);
     // 月フォルダ直下の古いPDFを機種のフォルダへ
@@ -454,6 +454,29 @@ function check(name, ok, detail) {
     check('機種フォルダ: 月フォルダ直下の成績表PDFを機種のフォルダへ移す', global.PDFS.includes('/LPG容器 質量入力/成績表PDF/2026年/09月/20kg/成績表_HXF74101-74200.pdf'), global.PDFS.join(' | '));
     const r = c.getPdfMonthFolder_(new Date());
     check('フォルダ整理のあと: 成績表PDFは 成績表PDF/年/月 に入る', r.parent.parent.name === '成績表PDF');
+  }
+  // ---- 同じ名前のまとめ先フォルダが2つできたときの統合（旧URLと今のURLでプロジェクトが別だったため）
+  {
+    const m = load(), c = m.ctx;
+    const a = c.DriveApp.createFolder('LPG容器 質量入力');                 // 古い方（本物）
+    a.createFolder('成績表PDF').createFolder('2026年').createFolder('09月').createFolder('50kg').createFile({ name: '成績表_HEP59701-59800.pdf' });
+    a.createFolder('採番表').createFolder('2026年').createFolder('09月').createFile({ name: '採番表_2026-09-27.pdf' });
+    const b = c.DriveApp.createFolder('LPG容器 質量入力');                 // 22時に新しくできた方
+    const bs = b.createFolder('採番表');
+    const b9 = bs.createFolder('2026年').createFolder('09月');
+    b9.createFile({ name: '採番表_2026-09-27.pdf' }); b9.createFile({ name: '採番表_2026-09-28.pdf' });
+    const sa = c.SpreadsheetApp.create('LPG容器 採番表_2026'); c.DriveApp.getFileById(sa.getId()).moveTo(bs);
+    c.DriveApp.getFileById(m.ss.getId()).moveTo(b);
+    check('統合前: 保存先が決まっていなければ一番古いフォルダを使う', c.getPdfFolder_().getId() === a.getId());
+    c.mergeRootFolders_();
+    const live = global.DRIVE_ROOT.kids.filter(k => k.name === 'LPG容器 質量入力');
+    const paths = global.PDFS.sort().join(' | ');
+    check('統合: 古い方の1つにまとまる', live.length === 1 && live[0] === a && b.trashed === true);
+    check('統合: 同じ名前のPDFは新しい方を残し、無い方はそのまま移す', paths.includes('/LPG容器 質量入力/採番表/2026年/09月/採番表_2026-09-28.pdf') &&
+      global.PDFS.filter(p => p.endsWith('採番表_2026-09-27.pdf')).length === 1 && paths.includes('/成績表PDF/2026年/09月/50kg/成績表_HEP59701-59800.pdf'), paths);
+    check('統合: 採番表のスプレッドシートと記録用スプレッドシートも移る', paths.includes('/LPG容器 質量入力/採番表/LPG容器 採番表_2026') && sa.fo.parent.parent === a && m.ss.fo.parent === a);
+    check('統合: 保存先は記録用スプレッドシートの隠しシートに入る（旧URLのプロジェクトとも共有）', m.ss.getSheetByName('_システム').getRange(2, 1, m.ss.getSheetByName('_システム').getLastRow() - 1, 2).getValues().some(r => r[0] === 'PDF_FOLDER_ID' && r[1] === a.getId()));
+    check('統合のあと: 採番表のスプレッドシートは名前で見つけて使う（作り直さない）', c.saibanSheet_('2026').getParent() === sa && global.ARCHIVES.length === 1);
   }
   await browser.close();
 

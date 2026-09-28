@@ -13,7 +13,7 @@ class Sheet{constructor(ss,name){this.ss=ss;this.name=name;this.cells={};this.fo
  getRange(a,b,c,d){if(typeof a==='string')return new Range(this,...a1(a));return new Range(this,a,b,c||1,d||1)}
  appendRow(vals){const r=this.getLastRow()+1;vals.forEach((v,i)=>{if(typeof v==='string'&&v[0]==="'")v=v.slice(1);this.set(r,i+1,v)})}
  copyTo(ss){const s=new Sheet(ss,'コピー '+this.name);s.cells=JSON.parse(JSON.stringify(this.cells));s.fonts=JSON.parse(JSON.stringify(this.fonts));s.rich=JSON.parse(JSON.stringify(this.rich));s.maxR=this.maxR;s.maxC=this.maxC;ss.sheets.push(s);return s}
- setFrozenRows(){} getParent(){return this.ss}
+ setFrozenRows(){} hideSheet(){return this} getParent(){return this.ss}
  moveColumns(range,dest){const src=[];for(let j=0;j<range.nc;j++)src.push(range.c+j);let maxC=Math.max(this.getLastColumn(),dest,...src);const rest=[];for(let c=1;c<=maxC;c++)if(src.indexOf(c)<0)rest.push(c);const at=rest.filter(c=>c<dest).length;const order=rest.slice(0,at).concat(src,rest.slice(at));const n={};for(const k in this.cells){const [rr,cc]=k.split(',').map(Number);const ni=order.indexOf(cc);n[rr+','+(ni<0?cc:ni+1)]=this.cells[k];}this.cells=n;return this}
  deleteRow(r){const n={};for(const k in this.cells){const [rr,cc]=k.split(',').map(Number);if(rr<r)n[k]=this.cells[k];else if(rr>r)n[(rr-1)+','+cc]=this.cells[k];}this.cells=n;return this}}
 class Range{constructor(sh,r,c,nr,nc){Object.assign(this,{sh,r,c,nr,nc})}
@@ -44,8 +44,8 @@ function load(){
   DriveApp:(()=>{const files={};let fid=1000000000,did=1;
    const pathOf=f=>f.parent?pathOf(f.parent)+'/'+f.name:'';
    const iter=l=>{let k=0;return {hasNext:()=>k<l.length,next:()=>l[k++]}};
-   const mk=(name,parent)=>{const f={name,parent,kids:[],files:[],id:'D'+(did++),getId(){return this.id},getName(){return this.name},setName(n){this.name=n;return this},
-     createFile(b){const id='file'+(fid++);const fo={blob:b,parent:f,trashed:false,getName:()=>b.name,get path(){return pathOf(this.parent)+'/'+b.name},
+   let clock=1;const mk=(name,parent)=>{const f={name,parent,kids:[],files:[],id:'D'+(did++),created:clock++,trashed:false,getId(){return this.id},getName(){return this.name},setName(n){this.name=n;return this},getDateCreated(){return new Date(this.created)},setTrashed(x){this.trashed=x;if(x&&this.parent)this.parent.kids=this.parent.kids.filter(z=>z!==this);return this},
+     createFile(b){const id='file'+(fid++);const fo={blob:b,parent:f,trashed:false,updated:clock++,getId:()=>id,getName:()=>b.name,getLastUpdated(){return new Date(this.updated)},get path(){return pathOf(this.parent)+'/'+b.name},
        setTrashed(x){this.trashed=x},moveTo(d){this.parent.files=this.parent.files.filter(z=>z!==this);this.parent=d;d.files.push(this);return this}};
        files[id]=fo;f.files.push(fo);global.PDFBLOBS[pathOf(f)+'/'+b.name]=b;return {getUrl:()=>'https://drive.google.com/file/d/'+id+'/view',getId:()=>id}},
      getFiles(){return iter(f.files.filter(x=>!x.trashed))},getFolders(){return iter(f.kids.slice())},
@@ -53,10 +53,10 @@ function load(){
      getFoldersByName(n){return iter(f.kids.filter(k=>k.name===n))},
      createFolder(n){const k=mk(n,f);f.kids.push(k);return k},
      moveTo(d){f.parent.kids=f.parent.kids.filter(z=>z!==f);f.parent=d;d.kids.push(f);return f}};return f};
-   const root=mk('ROOT',null);let base=null;global.DRIVE_ROOT=root;
+   const root=mk('ROOT',null);let base=null;global.DRIVE_ROOT=root;const allFolders=()=>{const o=[];const w=f=>{f.kids.forEach(k=>{o.push(k);w(k)})};w(root);return o};
    Object.defineProperty(global,'PDFS',{configurable:true,get:()=>Object.values(files).filter(x=>!x.trashed&&x.parent).map(x=>x.path),set:()=>{}});
-   return {createFolder:(n)=>base=root.createFolder(n),getFolderById:()=>{if(!base)throw new Error('none');return base},
-     getFileById:(id)=>{if(SSS[id]){const x=SSS[id];return {moveTo(d){x.folder=d;return this},getName:()=>x.name}};if(!files[id])throw new Error('no file');const fo=files[id];return {getBlob:()=>({name:fo.blob.name,setName(n){this.name=n;return this}}),moveTo:(d)=>fo.moveTo(d),getParents:()=>iter(fo.parent?[fo.parent]:[])}}}})()};
+   return {createFolder:(n)=>base=root.createFolder(n),getFolderById:(id)=>{const f=allFolders().find(x=>x.id===id);if(!f)throw new Error('none');return f},getFoldersByName:(n)=>iter(allFolders().filter(x=>x.name===n&&!x.trashed)),
+     getFileById:(id)=>{if(SSS[id]){const x=SSS[id];return {moveTo(d){if(!x.fo){const fid2='ss'+id;x.fo={blob:{name:x.name},parent:d,trashed:false,updated:clock++,getId:()=>x.id,getName:()=>x.name,getLastUpdated(){return new Date(this.updated)},setTrashed(v){this.trashed=v},moveTo(dd){this.parent.files=this.parent.files.filter(z=>z!==this);this.parent=dd;dd.files.push(this);return this},get path(){return pathOf(this.parent)+'/'+x.name}};d.files.push(x.fo);files[fid2]=x.fo}else x.fo.moveTo(d);return this},getName:()=>x.name}};if(!files[id])throw new Error('no file');const fo=files[id];return {getBlob:()=>({name:fo.blob.name,setName(n){this.name=n;return this}}),moveTo:(d)=>fo.moveTo(d),getParents:()=>iter(fo.parent?[fo.parent]:[])}}}})()};
  global.ARCHIVES=[];global.PDFBLOBS={};
  global.MAILS=[];
  vm.createContext(ctx); vm.runInContext(fs.readFileSync(GAS+'/Code.js','utf8'),ctx);

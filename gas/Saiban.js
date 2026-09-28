@@ -100,12 +100,14 @@ const SAIBAN_SS_PREFIX = 'LPG容器 採番表_';
 const SAIBAN_HEADERS = ['作業日', '流れた順番', '容器記号', '容器番号', '容器区分', 'グループNo', '入力時刻', '入力者', '備考', 'ロットID'];
 
 function saibanSheet_(year) {
-  const props = PropertiesService.getScriptProperties();
+  const props = sharedProps_();
   let ids = {};
   try { ids = JSON.parse(props.getProperty('SAIBAN_SS_IDS') || '{}'); } catch (e) { ids = {}; }
   if (ids[year]) {
     try { return SpreadsheetApp.openById(ids[year]).getSheets()[0]; } catch (e) { /* 消されていたら作り直す */ }
   }
+  const found = findSpreadsheetIn_(childFolder_(getPdfFolder_(), SAIBAN_FOLDER), SAIBAN_SS_PREFIX + year);
+  if (found) { ids[year] = found.getId(); props.setProperty('SAIBAN_SS_IDS', JSON.stringify(ids)); return found.getSheets()[0]; }
   const ss = SpreadsheetApp.create(SAIBAN_SS_PREFIX + year);
   try { ss.setSpreadsheetTimeZone('Asia/Tokyo'); } catch (e) { /* 無視 */ }
   try { DriveApp.getFileById(ss.getId()).moveTo(childFolder_(getPdfFolder_(), SAIBAN_FOLDER)); } catch (e) { /* マイドライブに残る */ }
@@ -165,7 +167,7 @@ function makeSaibanPdf(input) {
 
 // 前日まででまだ作っていない日の採番表を作る（1回に3日分まで）。初回は昨日の分から
 function saibanStep_() {
-  const props = PropertiesService.getScriptProperties();
+  const props = sharedProps_();
   const today = tokyoDate_(new Date());
   const day = 24 * 3600 * 1000;
   let doneUntil = props.getProperty('SAIBAN_DONE_UNTIL');
@@ -188,9 +190,10 @@ const NIGHTLY_HOUR = 22;   // 22時台に動く
 // 時間指定の自動処理から呼ばれる: 今日の採番表PDF、入力記録の整理、完了済みシートの片付け
 function nightlyJob() {
   const today = tokyoDate_(new Date());
+  try { mergeRootFolders_(); } catch (e) { console.error('フォルダの統合に失敗: ' + e.message); }
   saibanStep_();                                   // 取りこぼした前日までの分
   makeSaibanPdf({ date: today });
-  PropertiesService.getScriptProperties().setProperty('SAIBAN_DONE_UNTIL', today);
+  sharedProps_().setProperty('SAIBAN_DONE_UNTIL', today);
   const until = Date.now() + 4 * 60 * 1000;        // 実行時間の上限（6分）に余裕を持たせる
   let r;
   do { r = runMaintenance(); } while (r.archiveDone === false && Date.now() < until);

@@ -80,7 +80,7 @@ function trimSheet_(sh) {
 }
 // 書式シートと今ある成績表シートを1度だけ小さくする
 function ensureTrim_() {
-  const props = PropertiesService.getScriptProperties();
+  const props = sharedProps_();
   if (props.getProperty('SHEETS_TRIMMED') === '1') return;
   getSpreadsheet_().getSheets().forEach(function(sh) {
     const n = sh.getName();
@@ -117,7 +117,7 @@ function setVolume_(sh, kind, settings) {
 const VOLUME_OLD_DEFAULT = '5kg=11.8, 8kg=18.8, 20kg=47.0, 30kg=70.5, 50kg=117.5, 50kg S付=117.5';
 // 入力中ロットの成績表に内容積を1度だけ入れ直す（v34より前に作ったロット・仮の値が入ったロット用）
 function ensureVolumes_() {
-  const props = PropertiesService.getScriptProperties();
+  const props = sharedProps_();
   if (props.getProperty('VOLUME_FILLED') === '2') return;
   const ss = getSpreadsheet_();
   const conf = ss.getSheetByName(SHEET_SETTINGS);
@@ -187,7 +187,7 @@ function applyTitleStyle_(range) {
 
 // 書式シートと作成済みの成績表の見出しをそろえる（サイズを変えたときに1回だけ全シートに適用）
 function ensureTitleFont_() {
-  const props = PropertiesService.getScriptProperties();
+  const props = sharedProps_();
   const key = 'TITLE_FONT_SIZE_APPLIED';
   const want = TITLE_FONT_SIZE + '/' + NOTE_FONT_SIZE;
   if (props.getProperty(key) === want) return;
@@ -235,7 +235,7 @@ function ensureLogHeaders_() {
     const cur = log.getRange(1, 1, 1, LOG_HEADERS.length).getValues()[0];
     LOG_HEADERS.forEach(function(h, i) { if (cur[i] !== h) log.getRange(1, i + 1).setValue(h); });
     // これまでの記録の質量も小数1桁表示に（1回だけ）
-    const props = PropertiesService.getScriptProperties();
+    const props = sharedProps_();
     if (props.getProperty('LOG_MASS_FORMAT') !== '0.0' && log.getMaxRows() > 1) {
       formatLogMass_(log, 2, log.getMaxRows() - 1);
       props.setProperty('LOG_MASS_FORMAT', '0.0');
@@ -908,6 +908,54 @@ function exportLotPdf_(lot, sh) {
   return { url: file.getUrl(), blob: blob };
 }
 
+// ---------- 共有の設定値（今のURLと古いURLのプロジェクトで同じ値を使う） ----------
+// スクリプトプロパティはプロジェクトごとに別なので、保存先フォルダのIDや「1回だけの処理」の印は
+// 記録用スプレッドシートの隠しシート「_システム」（A列=キー、B列=値）に持つ。
+// まだ無いキーは、そのプロジェクトのスクリプトプロパティの値を引き継ぐ
+const SHEET_SYSTEM = '_システム';
+let SHARED_CACHE_ = null;
+function sharedProps_() {
+  const load = function() {
+    if (SHARED_CACHE_) return SHARED_CACHE_;
+    const ss = getSpreadsheet_();
+    let sh = ss.getSheetByName(SHEET_SYSTEM);
+    if (!sh) {
+      sh = ss.insertSheet(SHEET_SYSTEM);
+      sh.getRange(1, 1, 1, 2).setValues([['キー', '値']]);
+      try { sh.hideSheet(); } catch (e) { /* 隠せなくても動く */ }
+    }
+    const map = {}, rows = {};
+    if (sh.getLastRow() >= 2) {
+      sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues().forEach(function(r, i) {
+        if (r[0] !== '') { map[String(r[0])] = String(r[1]); rows[String(r[0])] = i + 2; }
+      });
+    }
+    SHARED_CACHE_ = { sh: sh, map: map, rows: rows };
+    return SHARED_CACHE_;
+  };
+  const legacy = PropertiesService.getScriptProperties();
+  return {
+    getProperty: function(k) {
+      const c = load();
+      if (k in c.map) return c.map[k] === '' ? null : c.map[k];
+      return legacy.getProperty(k);
+    },
+    setProperty: function(k, v) {
+      const c = load();
+      v = String(v);
+      if (c.rows[k]) c.sh.getRange(c.rows[k], 2).setValue("'" + v);
+      else { c.sh.appendRow([k, "'" + v]); c.rows[k] = c.sh.getLastRow(); }
+      c.map[k] = v;
+    },
+    deleteProperty: function(k) {
+      const c = load();
+      if (c.rows[k]) c.sh.getRange(c.rows[k], 2).setValue('');
+      c.map[k] = '';
+      try { legacy.deleteProperty(k); } catch (e) { /* 無視 */ }
+    }
+  };
+}
+
 // ---------- ドライブのフォルダ（全部ここにまとめる） ----------
 // LPG容器 質量入力/
 //   LPG容器_質量入力（このスプレッドシート）
@@ -919,13 +967,15 @@ const ROOT_FOLDER_NAME = 'LPG容器 質量入力';
 const REPORT_PDF_FOLDER = '成績表PDF';
 const ARCHIVE_FOLDER = '入力記録（過去分）';
 
-// まとめ先のフォルダ（プロパティ PDF_FOLDER_ID。v52までの「LPG容器 検査成績表PDF」をそのまま使う）
+// まとめ先のフォルダ（共有の PDF_FOLDER_ID）。未設定なら、同じ名前のフォルダのうち一番古いものを使う
 function getPdfFolder_() {
-  const props = PropertiesService.getScriptProperties();
+  const props = sharedProps_();
   const id = props.getProperty('PDF_FOLDER_ID');
   if (id) {
-    try { return DriveApp.getFolderById(id); } catch (e) { /* 削除されていたら作り直す */ }
+    try { return DriveApp.getFolderById(id); } catch (e) { /* 削除されていたら探し直す */ }
   }
+  const found = rootCandidates_()[0];
+  if (found) { props.setProperty('PDF_FOLDER_ID', found.getId()); return found; }
   const folder = DriveApp.createFolder(ROOT_FOLDER_NAME);
   props.setProperty('PDF_FOLDER_ID', folder.getId());
   props.setProperty('FOLDER_LAYOUT', '1');
@@ -933,9 +983,60 @@ function getPdfFolder_() {
   return folder;
 }
 
+// 「LPG容器 質量入力」（と旧名「LPG容器 検査成績表PDF」）のフォルダを古い順に
+function rootCandidates_() {
+  const out = [];
+  [ROOT_FOLDER_NAME, 'LPG容器 検査成績表PDF'].forEach(function(n) {
+    const it = DriveApp.getFoldersByName(n);
+    while (it.hasNext()) out.push(it.next());
+  });
+  return out.sort(function(a, b) { return a.getDateCreated() - b.getDateCreated(); });
+}
+
+// 同じ名前のまとめ先フォルダが2つ以上できていたら、一番古いものに中身を集めて、空になった方はゴミ箱へ（1回だけ）
+function mergeRootFolders_() {
+  const props = sharedProps_();
+  if (props.getProperty('ROOTS_MERGED') === '1') return 0;
+  const cands = rootCandidates_();
+  const root = cands[0] || getPdfFolder_();   // 一番古いものに集める（どちらのプロジェクトで動いても同じ結果）
+  props.setProperty('PDF_FOLDER_ID', root.getId());
+  let merged = 0;
+  cands.forEach(function(f) {
+    if (f.getId() === root.getId()) return;
+    mergeFolderInto_(f, root);
+    f.setTrashed(true);
+    merged++;
+  });
+  try { DriveApp.getFileById(getSpreadsheet_().getId()).moveTo(root); } catch (e) { /* 移せなくても動く */ }
+  props.setProperty('ROOTS_MERGED', '1');
+  return merged;
+}
+
+// from の中身を into へ移す。同じ名前のフォルダは中身を合わせ、同じ名前のファイルは新しい方を残す
+function mergeFolderInto_(from, into) {
+  const subs = from.getFolders(), folders = [];
+  while (subs.hasNext()) folders.push(subs.next());
+  folders.forEach(function(f) {
+    const same = into.getFoldersByName(f.getName());
+    if (same.hasNext()) { mergeFolderInto_(f, same.next()); f.setTrashed(true); }
+    else f.moveTo(into);
+  });
+  const it = from.getFiles(), files = [];
+  while (it.hasNext()) files.push(it.next());
+  files.forEach(function(file) {
+    const same = into.getFilesByName(file.getName());
+    if (same.hasNext()) {
+      const other = same.next();
+      if (other.getLastUpdated() >= file.getLastUpdated()) { file.setTrashed(true); return; }
+      other.setTrashed(true);
+    }
+    file.moveTo(into);
+  });
+}
+
 // v52までの並び（成績表PDFの年フォルダが直下）を、上の並びに1回だけ整理する
 function ensureFolderLayout_() {
-  const props = PropertiesService.getScriptProperties();
+  const props = sharedProps_();
   if (props.getProperty('FOLDER_LAYOUT') === '1') return false;
   if (!props.getProperty('PDF_FOLDER_ID')) { getPdfFolder_(); return true; }
   const root = getPdfFolder_();
@@ -984,7 +1085,7 @@ function pdfKindFolder_(monthFolder, kind) {
 
 // v53までに月フォルダの直下に保存した成績表PDFを、機種のフォルダへ1回だけ移す
 function ensurePdfKindFolders_() {
-  const props = PropertiesService.getScriptProperties();
+  const props = sharedProps_();
   if (props.getProperty('PDF_KIND_FOLDERS') === '1') return;
   readLots_().forEach(function(lot) {
     const m = String(lot.pdf || '').match(/\/d\/([\w-]{10,})/);
@@ -998,6 +1099,14 @@ function ensurePdfKindFolders_() {
     } catch (e) { /* 消されたPDFは飛ばす */ }
   });
   props.setProperty('PDF_KIND_FOLDERS', '1');
+}
+
+function findSpreadsheetIn_(folder, name) {
+  const it = folder.getFilesByName(name);
+  while (it.hasNext()) {
+    try { return SpreadsheetApp.openById(it.next().getId()); } catch (e) { /* 開けないものは飛ばす */ }
+  }
+  return null;
 }
 
 function childFolder_(parent, name) {
