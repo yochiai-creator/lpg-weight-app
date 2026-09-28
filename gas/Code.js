@@ -48,7 +48,34 @@ const MASS_MAX = 99.9;
 
 // ---------- Web app ----------
 
+// 本番のプロジェクト（スプレッドシートにバインド）と入力画面のURL。
+// 旧URL（別プロジェクト 1WRdps6z…）で開かれたら、入力はさせずに新しいURLへ案内する
+const MAIN_SCRIPT_ID = '17mOYxTzPwzIsrILrYL7pH0Rn-jYOjQ8f52n5KZm0-0p-ojhxBG246vu4';
+const MAIN_WEBAPP_URL = 'https://script.google.com/a/macros/nodagumi40.com/s/AKfycbyDM2IQ8NY6LgQpLb0gpQoK32fAQtWVBrdBQduZ6FOBWREFn61Qb55R9Q20Y4u9IfQ5/exec';
+
+function isOldProject_() {
+  try { return ScriptApp.getScriptId() !== MAIN_SCRIPT_ID; } catch (e) { return false; }
+}
+
+function movedPageHtml_() {
+  return '<!doctype html><html><head><meta charset="utf-8">' +
+    '<style>body{font-family:sans-serif;background:#f3f5fa;margin:0;padding:40px 20px;text-align:center;color:#1f2a5c}' +
+    '.box{max-width:560px;margin:0 auto;background:#fff;border-radius:16px;padding:32px 24px;box-shadow:0 6px 24px rgba(20,26,60,.12)}' +
+    'h1{font-size:22px;margin:0 0 12px}p{font-size:16px;line-height:1.7;margin:0 0 20px}' +
+    'a.btn{display:inline-block;background:#1f2a5c;color:#fff;text-decoration:none;font-size:20px;font-weight:700;padding:16px 28px;border-radius:12px}' +
+    'small{display:block;margin-top:20px;color:#6b7390;font-size:13px;line-height:1.6;word-break:break-all}</style></head><body>' +
+    '<div class="box"><h1>このURLは使えなくなりました</h1>' +
+    '<p>LPG容器 質量入力は新しいURLに移りました。<br>下のボタンで開いて、ホーム画面に追加し直してください。</p>' +
+    '<a class="btn" href="' + MAIN_WEBAPP_URL + '" target="_top">新しい入力画面を開く</a>' +
+    '<small>新しいURL: ' + MAIN_WEBAPP_URL + '</small></div></body></html>';
+}
+
 function doGet() {
+  if (isOldProject_()) {
+    return HtmlService.createHtmlOutput(movedPageHtml_()).setTitle('LPG容器 質量入力（URLが変わりました）')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
   return HtmlService.createTemplateFromFile('Index').evaluate()
     .setTitle('LPG容器 質量入力')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no')

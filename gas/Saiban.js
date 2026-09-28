@@ -189,6 +189,7 @@ const NIGHTLY_HOUR = 22;   // 22時台に動く
 
 // 時間指定の自動処理から呼ばれる: 今日の採番表PDF、入力記録の整理、完了済みシートの片付け
 function nightlyJob() {
+  if (isOldProject_()) return;                     // 旧URLのプロジェクトでは動かさない（二重に作らない）
   const today = tokyoDate_(new Date());
   try { mergeRootFolders_(); } catch (e) { console.error('フォルダの統合に失敗: ' + e.message); }
   saibanStep_();                                   // 取りこぼした前日までの分

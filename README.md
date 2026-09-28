@@ -263,3 +263,7 @@ v52までの並びは ensureFolderLayout_ が1回だけ整理（runMaintenance �
 - mergeRootFolders_（1回だけ、ROOTS_MERGED）: 同じ名前のまとめ先が複数あれば一番古いものに集める。同名フォルダは中身を合わせ、同名ファイルは新しい方を残す。空になった方はゴミ箱。記録用スプレッドシートも一番古い方へ。
 - 年ごとの採番表・入力記録（過去分）のスプレッドシートは、IDが無ければフォルダ内を名前で探してから作る。
 - 注意: スクリプトロックもプロジェクトごと。iPadはなるべく今のURLにそろえる。
+
+## 旧URLは案内画面に（v56）
+
+旧プロジェクト（1WRdps6z…）で doGet が呼ばれたら入力画面の代わりに「新しい入力画面を開く」ボタンだけの案内画面（isOldProject_ / movedPageHtml_、MAIN_SCRIPT_ID・MAIN_WEBAPP_URL）。旧プロジェクトの nightlyJob は何もしない。全部のiPadが今のURLになったら、旧デプロイを clasp undeploy し旧プロジェクトを削除してよい。

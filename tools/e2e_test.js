@@ -478,6 +478,14 @@ function check(name, ok, detail) {
     check('統合: 保存先は記録用スプレッドシートの隠しシートに入る（旧URLのプロジェクトとも共有）', m.ss.getSheetByName('_システム').getRange(2, 1, m.ss.getSheetByName('_システム').getLastRow() - 1, 2).getValues().some(r => r[0] === 'PDF_FOLDER_ID' && r[1] === a.getId()));
     check('統合のあと: 採番表のスプレッドシートは名前で見つけて使う（作り直さない）', c.saibanSheet_('2026').getParent() === sa && global.ARCHIVES.length === 1);
   }
+  // ---- 旧URL（別プロジェクト）は新しいURLへ案内するだけ
+  {
+    const m = load(), c = m.ctx;
+    check('今のプロジェクトでは入力画面を出す', c.isOldProject_() === false);
+    global.SCRIPT_ID = '1WRdps6zQgFVtqMeW9OhRvLeZGafuOCXFZkv-89skSv6WJ0atLhBZnSfG';
+    check('旧プロジェクトでは案内画面にする', c.isOldProject_() === true && c.movedPageHtml_().includes('AKfycbyDM2IQ8NY6LgQpLb0gpQoK32fAQtWVBrdBQduZ6FOBWREFn61Qb55R9Q20Y4u9IfQ5/exec'));
+    delete global.SCRIPT_ID;
+  }
   await browser.close();
 
   const failed = results.filter(r => !r.ok).length;

@@ -38,7 +38,7 @@ function load(){
   Utilities:{formatDate:(d,tz,f)=>{const p=n=>('0'+n).slice(-2);return String(f).replace(/yyyy|yy|MM|dd|HH|mm|ss/g,t=>({yyyy:d.getFullYear(),yy:p(d.getFullYear()%100),MM:p(d.getMonth()+1),dd:p(d.getDate()),HH:p(d.getHours()),mm:p(d.getMinutes()),ss:p(d.getSeconds())})[t])},newBlob:(c,t,n)=>({name:n,type:t,content:c,getName(){return n}})},
   MailApp:{sendEmail:(to,sub,body,opt)=>{global.MAILS.push({to,sub,body,cc:opt.cc,name:opt.name,att:opt.attachments.map(a=>a.name)})}},
   UrlFetchApp:{fetch:()=>({getBlob:()=>({setName(n){this.name=n;return this}})})},
-  ScriptApp:(()=>{const tr=[];global.TRIGGERS=tr;return {getOAuthToken:()=>'t',getProjectTriggers:()=>tr.slice(),deleteTrigger:(t)=>{tr.splice(tr.indexOf(t),1)},
+  ScriptApp:(()=>{const tr=[];global.TRIGGERS=tr;return {getScriptId:()=>global.SCRIPT_ID||'17mOYxTzPwzIsrILrYL7pH0Rn-jYOjQ8f52n5KZm0-0p-ojhxBG246vu4',getOAuthToken:()=>'t',getProjectTriggers:()=>tr.slice(),deleteTrigger:(t)=>{tr.splice(tr.indexOf(t),1)},
    newTrigger:(fn)=>{const o={fn};const b={timeBased:()=>b,everyDays:(n)=>{o.days=n;return b},atHour:(h)=>{o.hour=h;return b},inTimezone:(z)=>{o.tz=z;return b},create:()=>{const t={getHandlerFunction:()=>fn,o};tr.push(t);return t}};return b}}})(),
   HtmlService:{createHtmlOutput:(h)=>({getAs:(t)=>({html:h,type:t,name:'',setName(n){this.name=n;return this}})})},
   DriveApp:(()=>{const files={};let fid=1000000000,did=1;
