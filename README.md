@@ -8,6 +8,8 @@
 |---|---|
 | `gas/Code.js` | メインロジック（doGet、ロット登録・成績表シート作成、転記・取消、完了、PDF、メニュー） |
 | `gas/Delivery.js` | 設定・入力者シートの読み込み、納品メール（PDF＋質量CSV） |
+| `gas/Archive.js` | 入力記録の整理（使わない列の削除・年替わりの過去分への移動・読み戻し）、裏で動く runMaintenance |
+| `gas/Saiban.js` | 採番表（PDF＋年ごとのスプレッドシート）、毎晩22時台の自動処理 |
 | `gas/Setup.js` | 初期セットアップ |
 | `gas/Index.html` | iPad入力画面 |
 | `gas/appsscript.json` | マニフェスト（V8 / webapp: USER_DEPLOYING・DOMAIN） |

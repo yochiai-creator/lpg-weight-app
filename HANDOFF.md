@@ -25,7 +25,7 @@ iPad＋Bluetoothテンキーで「容器番号」と「質量」を入力し、�
 ## ファイル構成と役割
 
 README.md の「リポジトリ構成」を参照。`gas/` 配下が本番GASプロジェクトのファイルと1対1で対応する
-（`Code` `Setup` `Delivery` `Index` `appsscript`）。別名のファイルを置いて push すると同じ関数が重複定義になるので注意。
+（`Code` `Setup` `Delivery` `Archive` `Saiban` `Index` `appsscript`）。別名のファイルを置いて push すると同じ関数が重複定義になるので注意。全体の構成と設計判断は ARCHITECTURE.md。
 
 ## シート構成
 
