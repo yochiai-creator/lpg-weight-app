@@ -165,9 +165,13 @@ iPadの入力画面（GASのiframe）では confirm/alert のダイアログが�
 ```
 LPG容器 質量入力/
   LPG容器_質量入力（記録用スプレッドシート）
-  成績表PDF/yyyy年/MM月/  完了したロットの成績表PDF
+  成績表PDF/yyyy年/MM月/機種/  完了したロットの成績表PDF
   採番表/yyyy年/MM月/     採番表PDF
   採番表/LPG容器 採番表_yyyy  採番表の一覧（年ごと）
   入力記録（過去分）/LPG容器 入力記録_yyyy
 ```
 v52までの並びは ensureFolderLayout_ が1回だけ整理（runMaintenance から、FOLDER_LAYOUT=1）。
+
+## 成績表PDFを機種ごとのフォルダに（v54）
+
+成績表PDFの保存先を「成績表PDF/yyyy年/MM月/容器区分/」に（pdfKindFolder_。区分が空なら「その他」）。v53までに月フォルダ直下へ保存したPDFは、ロットシートのPDF URLから探して機種のフォルダへ1回だけ移す（ensurePdfKindFolders_、PDF_KIND_FOLDERS）。

@@ -56,7 +56,7 @@ function load(){
    const root=mk('ROOT',null);let base=null;global.DRIVE_ROOT=root;
    Object.defineProperty(global,'PDFS',{configurable:true,get:()=>Object.values(files).filter(x=>!x.trashed&&x.parent).map(x=>x.path),set:()=>{}});
    return {createFolder:(n)=>base=root.createFolder(n),getFolderById:()=>{if(!base)throw new Error('none');return base},
-     getFileById:(id)=>{if(SSS[id]){const x=SSS[id];return {moveTo(d){x.folder=d;return this},getName:()=>x.name}};if(!files[id])throw new Error('no file');const fo=files[id];return {getBlob:()=>({name:fo.blob.name,setName(n){this.name=n;return this}}),moveTo:(d)=>fo.moveTo(d)}}}})()};
+     getFileById:(id)=>{if(SSS[id]){const x=SSS[id];return {moveTo(d){x.folder=d;return this},getName:()=>x.name}};if(!files[id])throw new Error('no file');const fo=files[id];return {getBlob:()=>({name:fo.blob.name,setName(n){this.name=n;return this}}),moveTo:(d)=>fo.moveTo(d),getParents:()=>iter(fo.parent?[fo.parent]:[])}}}})()};
  global.ARCHIVES=[];global.PDFBLOBS={};
  global.MAILS=[];
  vm.createContext(ctx); vm.runInContext(fs.readFileSync(GAS+'/Code.js','utf8'),ctx);

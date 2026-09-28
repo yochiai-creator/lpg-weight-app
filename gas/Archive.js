@@ -10,7 +10,7 @@ const ARCHIVE_CHUNK = 8000;   // 1回に調べる行数（入力の待ち時間�
 // 入力画面の読み込み後に裏で呼ばれる（画面は待たない）
 function runMaintenance() {
   const out = { trimmed: false, archived: 0, archiveDone: true };
-  try { ensureFolderLayout_(); } catch (e) { console.error('フォルダの整理に失敗: ' + e.message); }
+  try { ensureFolderLayout_(); ensurePdfKindFolders_(); } catch (e) { console.error('フォルダの整理に失敗: ' + e.message); }
   try { out.trimmed = trimLogColumns_(); } catch (e) { console.error('列の削除に失敗: ' + e.message); }
   try { Object.assign(out, archiveLogStep_()); } catch (e) { console.error('入力記録の移動に失敗: ' + e.message); }
   try {

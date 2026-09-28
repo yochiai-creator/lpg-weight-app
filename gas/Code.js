@@ -903,7 +903,7 @@ function exportLotPdf_(lot, sh) {
     '&r1=0&c1=0&r2=30&c2=31';
   const res = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } });
   const blob = res.getBlob().setName(lot.sheetName + '.pdf');
-  const file = getPdfMonthFolder_(new Date()).createFile(blob);
+  const file = pdfKindFolder_(getPdfMonthFolder_(new Date()), lot.kind).createFile(blob);
   if (lot.row) getSheet_(SHEET_LOTS).getRange(lot.row, 14).setValue(file.getUrl());
   return { url: file.getUrl(), blob: blob };
 }
@@ -911,7 +911,7 @@ function exportLotPdf_(lot, sh) {
 // ---------- ドライブのフォルダ（全部ここにまとめる） ----------
 // LPG容器 質量入力/
 //   LPG容器_質量入力（このスプレッドシート）
-//   成績表PDF/2026年/09月/   完了したロットの成績表PDF
+//   成績表PDF/2026年/09月/50kg/   完了したロットの成績表PDF（月の中を機種ごとに分ける）
 //   採番表/2026年/09月/      採番表PDF
 //   採番表/LPG容器 採番表_2026   採番表の一覧（スプレッドシート、年ごと）
 //   入力記録（過去分）/LPG容器 入力記録_2026   年替わりに移した入力記録
@@ -977,6 +977,29 @@ function getPdfMonthFolder_(date) {
   const year = childFolder_(childFolder_(getPdfFolder_(), REPORT_PDF_FOLDER), Utilities.formatDate(date, tz, 'yyyy') + '年');
   return childFolder_(year, Utilities.formatDate(date, tz, 'MM') + '月');
 }
+// 月フォルダの中を機種（容器区分）ごとに分ける: 成績表PDF/2026年/09月/50kg/
+function pdfKindFolder_(monthFolder, kind) {
+  return childFolder_(monthFolder, String(kind || '').trim() || 'その他');
+}
+
+// v53までに月フォルダの直下に保存した成績表PDFを、機種のフォルダへ1回だけ移す
+function ensurePdfKindFolders_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('PDF_KIND_FOLDERS') === '1') return;
+  readLots_().forEach(function(lot) {
+    const m = String(lot.pdf || '').match(/\/d\/([\w-]{10,})/);
+    if (!m) return;
+    try {
+      const file = DriveApp.getFileById(m[1]);
+      const parents = file.getParents();
+      if (!parents.hasNext()) return;
+      const parent = parents.next();
+      if (/^\d{2}月$/.test(parent.getName())) file.moveTo(pdfKindFolder_(parent, lot.kind));
+    } catch (e) { /* 消されたPDFは飛ばす */ }
+  });
+  props.setProperty('PDF_KIND_FOLDERS', '1');
+}
+
 function childFolder_(parent, name) {
   const it = parent.getFoldersByName(name);
   return it.hasNext() ? it.next() : parent.createFolder(name);

@@ -252,7 +252,7 @@ function check(name, ok, detail) {
   check('送信しない指定ではメールなし', global.MAILS.length === 0);
   check('完了してPDFを保存したら成績表シートを消す', !ss.getSheetByName('成績表_HEP37001-37100'));
   { const y = String(new Date().getFullYear()), mo = ('0' + (new Date().getMonth() + 1)).slice(-2);
-    check('PDFは年・月のフォルダに保存', global.PDFS.some(p => p === '/LPG容器 質量入力/成績表PDF/' + y + '年/' + mo + '月/成績表_HEP37001-37100.pdf'), global.PDFS.join(',')); }
+    check('PDFは年・月・機種のフォルダに保存', global.PDFS.some(p => p === '/LPG容器 質量入力/成績表PDF/' + y + '年/' + mo + '月/50kg/成績表_HEP37001-37100.pdf'), global.PDFS.join(',')); }
   check('シートを消した完了ロットも入力状況は入力記録から出る', Object.keys(ctx.getBootstrap().recentDone.find(l => l.lotId === 'HEP37001').entries).length >= 15);
 
   // ---- 全数そろったら自動完了・送信
@@ -445,6 +445,13 @@ function check(name, ok, detail) {
     const paths = global.PDFS.sort().join(' | ');
     check('フォルダ整理: 成績表PDFは「成績表PDF/年/月」、採番表はそのまま', paths === '/LPG容器 質量入力/成績表PDF/2026年/09月/成績表_HEP59701-59800.pdf | /LPG容器 質量入力/成績表PDF/成績表_HRH00001-00100.pdf | /LPG容器 質量入力/採番表/2026年/09月/採番表_2026-09-27.pdf', paths);
     check('フォルダ整理: 1回だけ', P.getProperty('FOLDER_LAYOUT') === '1' && c.ensureFolderLayout_() === false);
+    // 月フォルダ直下の古いPDFを機種のフォルダへ
+    const mf = old.kids.find(k => k.name === '成績表PDF').kids.find(k => k.name === '2026年').kids.find(k => k.name === '09月');
+    const fid = mf.createFile({ name: '成績表_HXF74101-74200.pdf' }).getId();
+    c.createLot({ prefix: 'HXF', start: '74101', kind: '20kg' });
+    const lr = c.findLot_('HXF74101').row; m.ss.getSheetByName('ロット').getRange(lr, 14).setValue('https://drive.google.com/file/d/' + fid + '/view');
+    c.ensurePdfKindFolders_();
+    check('機種フォルダ: 月フォルダ直下の成績表PDFを機種のフォルダへ移す', global.PDFS.includes('/LPG容器 質量入力/成績表PDF/2026年/09月/20kg/成績表_HXF74101-74200.pdf'), global.PDFS.join(' | '));
     const r = c.getPdfMonthFolder_(new Date());
     check('フォルダ整理のあと: 成績表PDFは 成績表PDF/年/月 に入る', r.parent.parent.name === '成績表PDF');
   }
