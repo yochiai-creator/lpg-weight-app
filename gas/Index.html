@@ -243,7 +243,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v57（10kg・30kg把手の標準質量）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v58（保存を速く）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -1090,14 +1090,14 @@
     renderQueue();
     if (S.sending || !S.queue.length || S.sendError) return;
     S.sending = true;
-    const e = S.queue[0];
-    const key = e.lotId + '|' + e.serial;
-    call('recordEntry', e).then(function(res) {
+    // たまっている分はまとめて1回で送る（通信の待ち時間を1本ずつ払わない）
+    const batch = S.queue.slice(0, 20);
+    const done1 = function(e, res) {
+      const key = e.lotId + '|' + e.serial;
       S.queue.shift();
       S.pending[key]--; if (!S.pending[key]) delete S.pending[key];
       if (res.recordId) S.saved.push({ recordId: res.recordId, lotId: e.lotId, serial: e.serial, mass: res.mass });
       if (S.saved.length > 50) S.saved.shift();
-      S.sending = false;
       const ml = lotById(e.lotId);
       if (ml) {
         const mk = ml.prefix + e.serial;
@@ -1106,12 +1106,22 @@
         if (res.note === 'シール違い') bump('seals');
       }
       if (res.full) onLotFull(e.lotId, res);
-      render(); pump();
+    };
+    const fail = function(msg) {
+      const e = S.queue[0];
+      S.sendError = msg;
+      if (e) S.errors[e.lotId + '|' + e.serial] = true;
+      beep(false);
+    };
+    call('recordEntries', batch).then(function(out) {
+      S.sending = false;
+      (out.results || []).forEach(function(res, i) { done1(batch[i], res); });
+      if (out.error) fail(out.error);
+      render(); renderQueue();
+      if (!out.error) pump();
     }).catch(function(err) {
       S.sending = false;
-      S.sendError = errText(err);
-      S.errors[key] = true;
-      beep(false);
+      fail(errText(err));
       render(); renderQueue();
     });
   }

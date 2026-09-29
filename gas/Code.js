@@ -196,13 +196,17 @@ function onOpen() {
 // 取れないため、IDで開く。スクリプトプロパティ SPREADSHEET_ID があればそちらを優先する
 const DEFAULT_SPREADSHEET_ID = '1h0VM9ECv1NnSuwuo2jxTaiPVC6o5oYwWi1lZ9Qx1hms';
 
+// 1回の実行の中では同じものを使い回す（openById は毎回だと遅い）
+let SS_CACHE_ = null;
 function getSpreadsheet_() {
+  if (SS_CACHE_) return SS_CACHE_;
   const id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID') || DEFAULT_SPREADSHEET_ID;
   const ss = id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActiveSpreadsheet();
   if (!ss) {
     throw new Error('記録先のスプレッドシートが見つかりません。Apps Script の「プロジェクトの設定 > スクリプト プロパティ」に ' +
       'SPREADSHEET_ID（スプレッドシートURLの /d/ と /edit の間の文字列）を追加してください。');
   }
+  SS_CACHE_ = ss;
   return ss;
 }
 
@@ -437,7 +441,21 @@ function readLots_() {
     .filter(function(l) { return l.lotId; });
 }
 
+// ロットを1件探す。ロットシートが大きくなっても速いよう、A列を検索して見つかった行だけ読む
 function findLot_(lotId) {
+  const sh = getSheet_(SHEET_LOTS);
+  const last = sh.getLastRow();
+  if (last >= 2) {
+    const col = sh.getRange(2, 1, last - 1, 1);
+    if (typeof col.createTextFinder === 'function') {
+      const cell = col.createTextFinder(String(lotId)).matchEntireCell(true).findNext();
+      if (cell) {
+        const lot = lotRowToObj_(sh.getRange(cell.getRow(), 1, 1, LOT_HEADERS.length).getDisplayValues()[0]);
+        lot.row = cell.getRow();
+        if (lot.lotId === lotId) return lot;
+      }
+    }
+  }
   const lots = readLots_();
   for (let i = 0; i < lots.length; i++) if (lots[i].lotId === lotId) return lots[i];
   throw new Error('ロットが見つかりません: ' + lotId);
@@ -655,6 +673,37 @@ function recordEntry(payload) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
+    return recordOne_(payload);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// 送信待ちをまとめて保存する（通信1回で複数本）。途中でエラーになったらそこで止め、それまでの結果とエラーを返す
+// → { results: [recordEntry と同じ結果…], error: 'メッセージ' | '', errorClientId }
+function recordEntries(list) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  const out = { results: [], error: '', errorClientId: '' };
+  try {
+    for (let i = 0; i < (list || []).length; i++) {
+      try {
+        out.results.push(recordOne_(list[i]));
+      } catch (e) {
+        out.error = e.message;
+        out.errorClientId = list[i].clientId || '';
+        break;
+      }
+    }
+    return out;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+let LOG_LAYOUT_CHECKED_ = false;
+function recordOne_(payload) {
+  {
     const lot = findLot_(payload.lotId);
     if (lot.status !== STATUS_ACTIVE) throw new Error('このロットは完了済みです: ' + lot.lotId);
     const serial = String(payload.serial);
@@ -692,7 +741,7 @@ function recordEntry(payload) {
     if (mass === CIRCLE) kind = SPEC_SOKO;
     const note = payload.seal ? NOTE_SEAL : '';
     const logSh = getSheet_(SHEET_LOG);
-    moveLogColumns_(logSh, true);   // 古い並びのまま新しい並びの行を書かないように
+    if (!LOG_LAYOUT_CHECKED_) { moveLogColumns_(logSh, true); LOG_LAYOUT_CHECKED_ = true; }   // 古い並びのまま新しい並びの行を書かないように
     const row = {
       '記録ID': recordId, '入力日時': new Date(), 'ロットID': lot.lotId, 'グループNo': groupNoOf_(lot.kind, serial),
       '容器番号': "'" + lot.prefix + serial, '容器区分': lot.kind || '', '表示番号': "'" + displayNumber_(serial),
@@ -720,8 +769,6 @@ function recordEntry(payload) {
       }
     }
     return result;
-  } finally {
-    lock.releaseLock();
   }
 }
 

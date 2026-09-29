@@ -500,6 +500,23 @@ function check(name, ok, detail) {
     check('標準質量: 自分で書き換えた値はそのまま', c.readSettings_().typical['5kg'] === 7.0 && !c.readSettings_().typical['10kg']);
     check('30kg把手のグループNoは30kgと同じ100本ごと', c.groupNoOf_('30kg把手', '59701') === 598);
   }
+  // ---- まとめて保存（通信1回で複数本）
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const L = c.createLot({ prefix: 'BT', start: '00101', kind: '20kg' });
+    c.createLot({ prefix: 'BT', start: '00201', kind: '20kg' });
+    const before = global.TEXTFINDS || 0;
+    const r = c.recordEntries([
+      { lotId: L.lotId, serial: '00101', mass: 16.7, clientId: 'c1' },
+      { lotId: L.lotId, serial: '00102', mass: 16.8, clientId: 'c2' },
+      { lotId: L.lotId, serial: '00999', mass: 16.8, clientId: 'c3' },   // 範囲外 → ここで止まる
+      { lotId: L.lotId, serial: '00103', mass: 16.9, clientId: 'c4' }
+    ]);
+    const e = c.getLot(L.lotId).entries;
+    check('まとめて保存: 順に保存し、エラーの所で止める', r.results.length === 2 && r.errorClientId === 'c3' && r.error.includes('範囲外') && e['00101'] === 16.7 && e['00102'] === 16.8 && e['00103'] === undefined, JSON.stringify(r));
+    check('まとめて保存: ロットはA列の検索で探す（ロットシートを全部読まない）', (global.TEXTFINDS || 0) > before);
+    check('ロット検索: 見つからないロットはエラー', (() => { try { c.findLot_('NOPE'); return false; } catch (x) { return x.message.includes('見つかりません'); } })());
+  }
   await browser.close();
 
   const failed = results.filter(r => !r.ok).length;
