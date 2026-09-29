@@ -188,3 +188,7 @@ v52までの並びは ensureFolderLayout_ が1回だけ整理（runMaintenance �
 ## 旧URLは案内画面に（v56）
 
 旧プロジェクト（1WRdps6z…）で doGet が呼ばれたら入力画面の代わりに「新しい入力画面を開く」ボタンだけの案内画面（isOldProject_ / movedPageHtml_、MAIN_SCRIPT_ID・MAIN_WEBAPP_URL）。旧プロジェクトの nightlyJob は何もしない。全部のiPadが今のURLになったら、旧デプロイを clasp undeploy し旧プロジェクトを削除してよい。
+
+## 旧URL・旧プロジェクトの削除（2026-09-29）
+
+旧デプロイ AKfycbwTY85…_AIS を undeploy（旧URLは使えない）。旧プロジェクト「LPG容器重量転記アプリ」（1WRdps6z…）と以前のスプレッドシート「LPG容器重量」をドライブのゴミ箱へ（30日以内なら戻せる）。以後のデプロイは今のプロジェクト（17mOYx…）だけでよい。

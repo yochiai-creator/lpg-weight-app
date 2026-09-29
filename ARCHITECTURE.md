@@ -58,7 +58,7 @@ lpg-weight-app/
 ```
 
 - GASは全ファイルが1つのグローバル空間になる。**同じ名前の関数・定数を別ファイルに書かない**
-- 旧スタンドアロンプロジェクト（1WRdps6z…）にも同じ `gas/` を push して旧URLも最新にそろえている（記録先は同じスプレッドシート）
+- 旧スタンドアロンプロジェクト（1WRdps6z…）と旧URLは 2026-09-29 に削除済み。旧プロジェクトで動いた場合は案内画面だけを出す処理（isOldProject_）が残っている
 
 ---
 
@@ -219,8 +219,7 @@ npm run check && npm test          # 構文チェック＋E2E（160項目）
 clasp push --force                 # バインド先プロジェクトへ
 clasp version "説明"               # 版を作る
 clasp redeploy AKfycbyDM2IQ8NY6LgQpLb0gpQoK32fAQtWVBrdBQduZ6FOBWREFn61Qb55R9Q20Y4u9IfQ5 -V <版>
-# 旧URLも同じ内容に: gas/ を旧プロジェクト（1WRdps6z…）のフォルダにコピーして push → version → redeploy
-#   AKfycbwTY85bp6X5FSaC8PsQpaXN4OIs7HGTW-Fba7hMHUUz-QqVohL45A_8yttGMrpZ_AIS
+# 旧URL（旧プロジェクト 1WRdps6z…）は 2026-09-29 に公開停止・削除済み。デプロイは上の1つだけ
 ```
 
 - 画面上部に版の表示（例: v53）。iPad側で古い画面が残っていないかの確認に使う
