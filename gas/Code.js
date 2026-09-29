@@ -947,6 +947,7 @@ function deleteLot(lotId) {
   lock.waitLock(20000);
   try {
     const lot = findLot_(lotId);
+    if (lot.status === STATUS_DONE) throw new Error('完了したロットは削除できません（成績表を保存済み）: ' + lot.lotId);
     const ss = getSpreadsheet_();
     const sh = ss.getSheetByName(lot.sheetName);
     if (sh) ss.deleteSheet(sh);
@@ -962,6 +963,46 @@ function deleteLot(lotId) {
       });
     }
     return { lotId: lot.lotId, marked: marked };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// 削除してしまったロットを入力記録から戻す（ロット行を作り直し、入力記録の「削除」を「有効」に戻す）
+// 保存済みの成績表PDFがドライブにあれば「完了」で、なければ「入力中」で戻して成績表シートを作り直す
+function undeleteLot(lotId) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    try { findLot_(lotId); return { lotId: lotId, already: true }; } catch (e) { /* 無いので戻す */ }
+    const log = getSheet_(SHEET_LOG);
+    if (log.getLastRow() < 2) throw new Error('入力記録にありません: ' + lotId);
+    const v = log.getRange(2, 1, log.getLastRow() - 1, LOG_HEADERS.length).getValues();
+    const idx = [];
+    v.forEach(function(r, i) { if (String(r[LC_LOT]) === lotId && r[LC_STATUS] === '削除') idx.push(i); });
+    if (!idx.length) throw new Error('削除した記録が見つかりません: ' + lotId);
+    const m = String(lotId).match(/^(.*?)(\d+)(-底黒)?$/);
+    if (!m) throw new Error('ロットIDの形が違います: ' + lotId);
+    const prefix = m[1], start = m[2], spec = m[3] ? SPEC_SOKO : '';
+    const end = padSerial_(Number(start) + LOT_MAX - 1, start.length);
+    const sheetName = REPORT_PREFIX + prefix + start + '-' + end + (spec ? '_' + SPEC_SOKO : '');
+    const kind = String(v[idx[0]][LC_KINDSIZE] || '');
+    let first = v[idx[0]][LC_TIME];
+    idx.forEach(function(i) { if (v[i][LC_TIME] instanceof Date && v[i][LC_TIME] < first) first = v[i][LC_TIME]; });
+    let pdfUrl = '', newest = null;
+    const files = DriveApp.getFilesByName(sheetName + '.pdf');
+    while (files.hasNext()) {
+      const f = files.next();
+      if (!newest || f.getLastUpdated() > newest.getLastUpdated()) newest = f;
+    }
+    if (newest) pdfUrl = newest.getUrl();
+    const status = pdfUrl ? STATUS_DONE : STATUS_ACTIVE;
+    getSheet_(SHEET_LOTS).appendRow([lotId, first instanceof Date ? first : new Date(), prefix, "'" + start, "'" + end, kind,
+      status, sheetName, "'" + start, '', '', '', '', pdfUrl, userEmail_(), '', '', spec]);
+    idx.forEach(function(i) { log.getRange(2 + i, LC_STATUS + 1).setValue('有効'); });
+    const lot = findLot_(lotId);
+    if (status === STATUS_ACTIVE && !getSpreadsheet_().getSheetByName(sheetName)) rebuildReportSheet_(lot);
+    return { lotId: lotId, status: status, restored: idx.length, pdfUrl: pdfUrl };
   } finally {
     lock.releaseLock();
   }

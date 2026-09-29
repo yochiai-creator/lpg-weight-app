@@ -517,6 +517,24 @@ function check(name, ok, detail) {
     check('まとめて保存: ロットはA列の検索で探す（ロットシートを全部読まない）', (global.TEXTFINDS || 0) > before);
     check('ロット検索: 見つからないロットはエラー', (() => { try { c.findLot_('NOPE'); return false; } catch (x) { return x.message.includes('見つかりません'); } })());
   }
+  // ---- 完了したロットは削除できない・削除してしまったロットを戻す
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const L = c.createLot({ prefix: 'HEP', start: '59701', kind: '50kg' });
+    for (let i = 1; i <= 3; i++) c.recordEntry({ lotId: L.lotId, serial: String(59700 + i), mass: 34.8, worker: '山田' });
+    c.completeLot({ lotId: L.lotId, send: false });
+    check('完了したロットは削除できない', (() => { try { c.deleteLot(L.lotId); return false; } catch (e) { return e.message.includes('完了したロットは削除できません'); } })());
+    // 以前の作りで消えてしまった状態を再現（ロット行を消し、入力記録を「削除」に）
+    const lotsSh = m.ss.getSheetByName('ロット'); lotsSh.deleteRow(c.findLot_(L.lotId).row);
+    const lg = m.ss.getSheetByName('入力記録');
+    for (let r = 2; r <= lg.getLastRow(); r++) if (lg.getRange(r, 3).getValue() === 'HEP59701') lg.getRange(r, 14).setValue('削除');
+    c.runMaintenance();
+    const back = c.findLot_('HEP59701');
+    const st = lg.getRange(2, 1, lg.getLastRow() - 1, 18).getValues().filter(r => r[2] === 'HEP59701').map(r => r[13]);
+    check('削除してしまった完了ロットを戻す（PDFがあれば完了で）', back.status === '完了' && back.end === '59800' && back.kind === '50kg' && back.pdf.includes('drive.google.com') && st.length === 3 && st.every(x => x === '有効'), JSON.stringify(back) + st.join(','));
+    check('戻したロットの入力状況は入力記録から出る', Object.keys(c.getLot('HEP59701').entries).length === 3);
+    check('戻すのは1回だけ', c.undeleteLot('HEP59701').already === true);
+  }
   await browser.close();
 
   const failed = results.filter(r => !r.ok).length;

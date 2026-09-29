@@ -11,6 +11,14 @@ const ARCHIVE_CHUNK = 8000;   // 1回に調べる行数（入力の待ち時間�
 function runMaintenance() {
   const out = { trimmed: false, archived: 0, archiveDone: true };
   try { mergeRootFolders_(); ensureFolderLayout_(); ensurePdfKindFolders_(); } catch (e) { console.error('フォルダの整理に失敗: ' + e.message); }
+  // 2026-09-29: 完了済みなのに「最近完了したロット」の削除ボタンで消えてしまった HEP59701 を1回だけ戻す
+  try {
+    const props = sharedProps_();
+    if (props.getProperty('RESTORED_HEP59701') !== '1') {
+      try { undeleteLot('HEP59701'); } catch (e) { console.log('HEP59701: ' + e.message); }
+      props.setProperty('RESTORED_HEP59701', '1');
+    }
+  } catch (e) { console.error('ロットの復元に失敗: ' + e.message); }
   try { out.trimmed = trimLogColumns_(); } catch (e) { console.error('列の削除に失敗: ' + e.message); }
   try { Object.assign(out, archiveLogStep_()); } catch (e) { console.error('入力記録の移動に失敗: ' + e.message); }
   try {

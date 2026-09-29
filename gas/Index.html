@@ -243,7 +243,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v58（保存を速く）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v59（完了ロットは削除不可・HEP59701を戻す）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -601,7 +601,8 @@
       };
       row.appendChild(del);
     };
-    setTimeout(addDelete, 0);
+    // 削除できるのは入力中のロットだけ（完了したロットは成績表を保存済みなので消させない）
+    if (!done) setTimeout(addDelete, 0);
     if (!done) {
       const b = document.createElement('button');
       b.className = 'btn sec'; b.textContent = '完了にする';
