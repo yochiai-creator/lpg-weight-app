@@ -22,6 +22,7 @@ class Range{constructor(sh,r,c,nr,nc){Object.assign(this,{sh,r,c,nr,nc})}
  setValues(v){v.forEach((row,i)=>row.forEach((x,j)=>{if(typeof x==='string'&&x[0]==="'")x=x.slice(1);this.sh.set(this.r+i,this.c+j,x)}));return this}
  setValue(x){return this.setValues([[x]])} getValue(){return this.sh.get(this.r,this.c)} clearContent(){for(let i=0;i<this.nr;i++)for(let j=0;j<this.nc;j++)this.sh.set(this.r+i,this.c+j,'');return this}
  createTextFinder(t){const rg=this;global.TEXTFINDS=(global.TEXTFINDS||0)+1;return {matchEntireCell(){return this},findNext(){for(let i=0;i<rg.nr;i++)for(let j=0;j<rg.nc;j++)if(String(rg.sh.get(rg.r+i,rg.c+j))===String(t))return {getRow:()=>rg.r+i};return null}}}
+ setBorder(top){this.sh.borders=this.sh.borders||{};for(let i=0;i<this.nr;i++){if(top===true)this.sh.borders[this.r+i]=true;else if(top===false)delete this.sh.borders[this.r+i]}return this}
  setNumberFormat(){return this} sort(spec){const rows=this.getValues();rows.sort((a,b)=>{for(const k of spec){const i=k.column-this.c;if(a[i]<b[i])return -1;if(a[i]>b[i])return 1}return 0});this.setValues(rows.map(r=>r.map(v=>typeof v==='string'&&/^0/.test(v)?"'"+v:v)));return this} insertCheckboxes(){return this} clearDataValidations(){return this}
  setFontWeight(){return this} setFontSize(n){for(let i=0;i<this.nr;i++)for(let j=0;j<this.nc;j++)this.sh.fonts[(this.r+i)+','+(this.c+j)]=n;return this} setRichTextValue(rv){this.sh.rich[this.r+','+this.c]=rv;return this} getRichText(){return this.sh.rich[this.r+','+this.c]} getFontSize(){return this.sh.fonts[this.r+','+this.c]||10} setBackground(){return this} setFontColor(){return this}}
 let ssid=1;const SSS={};class SS{constructor(name){this.sheets=[];this.tz='America/Los_Angeles';this.id='SS'+(ssid++);this.name=name;SSS[this.id]=this} getSpreadsheetTimeZone(){return this.tz} setSpreadsheetTimeZone(z){this.tz=z} getId(){return this.id} getUrl(){return 'https://docs.google.com/spreadsheets/d/'+this.id} getSheetByName(n){return this.sheets.find(s=>s.name===n)||null}
@@ -30,7 +31,7 @@ function load(){
  const ss=new SS(); const props={};
  const tpl=ss.insertSheet('書式_成績表'); tpl.set(1,1,'高圧ガス容器検査成績表\n\n※容器の製造年月を目視確認の上、容器番号前にチェックを入れる'); tpl.set(5,2,'001'); tpl.set(5,4,3); tpl.set(5,6,',');
  const ctx={console,Date,Math,JSON,
-  SpreadsheetApp:{getActiveSpreadsheet:()=>ss,openById:(id)=>SSS[id]||ss,create:(n)=>{const x=new SS(n);x.insertSheet('シート1');global.ARCHIVES.push(x);return x},flush(){},
+  SpreadsheetApp:{BorderStyle:{SOLID_THICK:'thick',SOLID_MEDIUM:'medium'},getActiveSpreadsheet:()=>ss,openById:(id)=>SSS[id]||ss,create:(n)=>{const x=new SS(n);x.insertSheet('シート1');global.ARCHIVES.push(x);return x},flush(){},
    newTextStyle:()=>{const st={};const b={setFontSize(n){st.size=n;return b},setBold(x){st.bold=x;return b},build(){return st}};return b},
    newRichTextValue:()=>{const rv={runs:[]};const b={setText(t){rv.text=t;return b},setTextStyle(a,z,st){rv.runs.push({a,z,size:st.size,bold:st.bold});return b},build(){return rv}};return b}},
   PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k]||null,setProperty:(k,v)=>props[k]=v,deleteProperty:k=>{delete props[k]}})},

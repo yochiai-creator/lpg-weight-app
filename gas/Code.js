@@ -84,7 +84,7 @@ function doGet() {
 
 // シートの整備（タイムゾーン・列見出し・シート名・見出しの文字サイズ）。1つが失敗しても残りは必ず行う
 function ensureSheets_() {
-  [ensureTokyoTime_, ensureLogHeaders_, ensureTitleFont_, ensureSettingRows_, ensureTypicalDefault_, ensureVolumes_, ensureTrim_, cleanDoneSheets_].forEach(function(fn) {
+  [ensureTokyoTime_, ensureLogHeaders_, ensureTitleFont_, ensureSettingRows_, ensureTypicalDefault_, ensureVolumes_, ensureTrim_, cleanDoneSheets_, ensureLogDayLines_].forEach(function(fn) {
     try { fn(); } catch (e) { console.error('シートの整備に失敗: ' + (fn.name || '') + ' ' + e.message); }
   });
 }
@@ -673,6 +673,7 @@ function recordEntry(payload) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
+    LAST_LOG_DAY_ = null;
     return recordOne_(payload);
   } finally {
     lock.releaseLock();
@@ -686,6 +687,7 @@ function recordEntries(list) {
   lock.waitLock(20000);
   const out = { results: [], error: '', errorClientId: '' };
   try {
+    LAST_LOG_DAY_ = null;
     for (let i = 0; i < (list || []).length; i++) {
       try {
         out.results.push(recordOne_(list[i]));
@@ -702,6 +704,40 @@ function recordEntries(list) {
 }
 
 let LOG_LAYOUT_CHECKED_ = false;
+
+// ---------- 日付が変わる所に線（入力記録・採番表の一覧） ----------
+const DAY_LINE_COLOR = '#1f2a5c';
+function dayLine_(sh, row, width) {
+  sh.getRange(row, 1, 1, width).setBorder(true, null, null, null, null, null, DAY_LINE_COLOR, SpreadsheetApp.BorderStyle.SOLID_THICK);
+}
+// 入力記録の最後の行の日付（1回の実行の中では覚えておく）
+let LAST_LOG_DAY_ = null;
+function lastLogDay_(log) {
+  if (LAST_LOG_DAY_) return LAST_LOG_DAY_;
+  const last = log.getLastRow();
+  if (last < 2) return null;
+  const t = log.getRange(last, LC_TIME + 1).getValue();
+  LAST_LOG_DAY_ = t instanceof Date ? Utilities.formatDate(t, 'Asia/Tokyo', 'yyyy-MM-dd') : null;
+  return LAST_LOG_DAY_;
+}
+// これまでの入力記録にも日付の変わり目の線を1回だけ引く
+function ensureLogDayLines_() {
+  const props = sharedProps_();
+  if (props.getProperty('LOG_DAY_LINES') === '1') return;
+  const log = getSpreadsheet_().getSheetByName(SHEET_LOG);
+  if (!log) return;
+  if (log.getLastRow() >= 3) {
+    const t = log.getRange(2, LC_TIME + 1, log.getLastRow() - 1, 1).getValues();
+    let prev = null;
+    t.forEach(function(r, i) {
+      if (!(r[0] instanceof Date)) return;
+      const d = Utilities.formatDate(r[0], 'Asia/Tokyo', 'yyyy-MM-dd');
+      if (prev && d !== prev) dayLine_(log, 2 + i, LOG_HEADERS.length);
+      prev = d;
+    });
+  }
+  props.setProperty('LOG_DAY_LINES', '1');
+}
 function recordOne_(payload) {
   {
     const lot = findLot_(payload.lotId);
@@ -750,8 +786,12 @@ function recordOne_(payload) {
       '上書き前': prev === null ? '' : prev, 'Googleアカウント': userEmail_(), '状態': '有効',
       '入力者': String(payload.worker || ''), '端末': String(payload.device || ''), '取消日時': '', '備考': note
     };
+    const prevDay = lastLogDay_(logSh);
     logSh.appendRow(LOG_HEADERS.map(function(h) { return row[h]; }));
     formatLogMass_(logSh, logSh.getLastRow(), 1);
+    const today = Utilities.formatDate(row['入力日時'], 'Asia/Tokyo', 'yyyy-MM-dd');
+    if (prevDay && prevDay !== today) dayLine_(logSh, logSh.getLastRow(), LOG_HEADERS.length);
+    LAST_LOG_DAY_ = today;
     const result = { recordId: recordId, clientId: payload.clientId, serial: serial, mass: mass, prev: prev, kind: kind, note: note };
 
     // 全数（欠番を含む）そろったら自動で完了・PDF作成・送信する

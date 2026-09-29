@@ -535,6 +535,22 @@ function check(name, ok, detail) {
     check('戻したロットの入力状況は入力記録から出る', Object.keys(c.getLot('HEP59701').entries).length === 3);
     check('戻すのは1回だけ', c.undeleteLot('HEP59701').already === true);
   }
+  // ---- 入力記録・採番表の一覧で、日付が変わる所に線
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const L = c.createLot({ prefix: 'DL', start: '00101', kind: '20kg' });
+    const lg = m.ss.getSheetByName('入力記録');
+    c.recordEntry({ lotId: L.lotId, serial: '00101', mass: 16.7 });
+    c.recordEntry({ lotId: L.lotId, serial: '00102', mass: 16.7 });
+    lg.getRange(2, 2).setValue(new Date(Date.now() - 86400000)); lg.getRange(3, 2).setValue(new Date(Date.now() - 86400000));   // 昨日の2本にする
+    c.recordEntry({ lotId: L.lotId, serial: '00103', mass: 16.7 });
+    c.recordEntry({ lotId: L.lotId, serial: '00104', mass: 16.7 });
+    const b = lg.borders || {};
+    check('入力記録: 日付が変わった行の上に線', b[4] === true && !b[3] && !b[5], JSON.stringify(b));
+    lg.borders = {};
+    c.sharedProps_().deleteProperty('LOG_DAY_LINES'); c.ensureLogDayLines_();
+    check('入力記録: これまでの記録にも1回だけ線を引く', (lg.borders || {})[4] === true && !(lg.borders || {})[3]);
+  }
   await browser.close();
 
   const failed = results.filter(r => !r.ok).length;

@@ -141,6 +141,11 @@ function writeSaibanSheet_(date, rows) {
     }));
     sh.getRange(start, 7, rows.length, 1).setNumberFormat('HH:mm:ss');
     if (sh.getLastRow() > 2) sh.getRange(2, 1, sh.getLastRow() - 1, SAIBAN_HEADERS.length).sort([{ column: 1 }, { column: 2 }]);
+    // 日付が変わる所に線（並べ直したので引き直す）
+    const n = sh.getLastRow() - 1;
+    sh.getRange(2, 1, n, SAIBAN_HEADERS.length).setBorder(false, null, null, null, null, false);
+    const days = sh.getRange(2, 1, n, 1).getDisplayValues();
+    for (let i = 1; i < days.length; i++) if (days[i][0] !== days[i - 1][0]) dayLine_(sh, 2 + i, SAIBAN_HEADERS.length);
   }
   return sh.getParent().getUrl();
 }
