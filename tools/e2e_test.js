@@ -486,6 +486,20 @@ function check(name, ok, detail) {
     check('旧プロジェクトでは案内画面にする', c.isOldProject_() === true && c.movedPageHtml_().includes('AKfycbyDM2IQ8NY6LgQpLb0gpQoK32fAQtWVBrdBQduZ6FOBWREFn61Qb55R9Q20Y4u9IfQ5/exec'));
     delete global.SCRIPT_ID;
   }
+  // ---- 標準質量に 10kg・30kg把手（初期値のままの設定は置き換える）
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const conf = m.ss.getSheetByName('設定'), rows = conf.getRange(2, 1, conf.getLastRow() - 1, 2).getValues();
+    const i = rows.findIndex(r => r[0] === '標準質量');
+    conf.getRange(2 + i, 2).setValue('5kg=6.8, 8kg=9.6, 20kg=16.7, 30kg=24.0, 50kg=34.8, 50kg S付=36.3');
+    c.ensureTypicalDefault_();
+    const t = c.readSettings_().typical;
+    check('標準質量: 10kg=11.3・30kg=23.5・30kg把手=24.0', t['10kg'] === 11.3 && t['30kg'] === 23.5 && t['30kg把手'] === 24.0, JSON.stringify(t));
+    conf.getRange(2 + i, 2).setValue('5kg=7.0');
+    c.ensureTypicalDefault_();
+    check('標準質量: 自分で書き換えた値はそのまま', c.readSettings_().typical['5kg'] === 7.0 && !c.readSettings_().typical['10kg']);
+    check('30kg把手のグループNoは30kgと同じ100本ごと', c.groupNoOf_('30kg把手', '59701') === 598);
+  }
   await browser.close();
 
   const failed = results.filter(r => !r.ok).length;

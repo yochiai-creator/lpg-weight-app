@@ -84,7 +84,7 @@ function doGet() {
 
 // シートの整備（タイムゾーン・列見出し・シート名・見出しの文字サイズ）。1つが失敗しても残りは必ず行う
 function ensureSheets_() {
-  [ensureTokyoTime_, ensureLogHeaders_, ensureTitleFont_, ensureSettingRows_, ensureVolumes_, ensureTrim_, cleanDoneSheets_].forEach(function(fn) {
+  [ensureTokyoTime_, ensureLogHeaders_, ensureTitleFont_, ensureSettingRows_, ensureTypicalDefault_, ensureVolumes_, ensureTrim_, cleanDoneSheets_].forEach(function(fn) {
     try { fn(); } catch (e) { console.error('シートの整備に失敗: ' + (fn.name || '') + ' ' + e.message); }
   });
 }
@@ -140,8 +140,20 @@ function setVolume_(sh, kind, settings) {
   const cell = sh.getRange(VOLUME_CELL);
   cell.setNumberFormat('@').setValue(v);
 }
-// v34の仮の初期値（設定シートに入っていたら正式な値に置き換える）
+// v56までの標準質量の初期値
+const TYPICAL_OLD_DEFAULT = '5kg=6.8, 8kg=9.6, 20kg=16.7, 30kg=24.0, 50kg=34.8, 50kg S付=36.3';
+// v34の仮の内容積（設定シートに入っていたら正式な値に置き換える）
 const VOLUME_OLD_DEFAULT = '5kg=11.8, 8kg=18.8, 20kg=47.0, 30kg=70.5, 50kg=117.5, 50kg S付=117.5';
+// 設定シートの標準質量が v56 までの初期値のままなら、10kg・30kg把手を足した値に（30kgは把手なしの23.5に直す）
+function ensureTypicalDefault_() {
+  const conf = getSpreadsheet_().getSheetByName(SHEET_SETTINGS);
+  if (!conf || conf.getLastRow() < 2) return;
+  conf.getRange(2, 1, conf.getLastRow() - 1, 2).getValues().forEach(function(r, i) {
+    if (String(r[0]).trim() === '標準質量' && String(r[1]).trim() === TYPICAL_OLD_DEFAULT) {
+      conf.getRange(2 + i, 2).setValue(SETTING_ROWS.filter(function(x) { return x[0] === '標準質量'; })[0][1]);
+    }
+  });
+}
 // 入力中ロットの成績表に内容積を1度だけ入れ直す（v34より前に作ったロット・仮の値が入ったロット用）
 function ensureVolumes_() {
   const props = sharedProps_();

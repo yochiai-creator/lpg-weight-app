@@ -243,7 +243,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v56（旧URLは案内画面に）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v57（10kg・30kg把手の標準質量）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -277,7 +277,7 @@
       <div><label>容器区分</label>
         <select id="fKind">
           <option>5kg</option><option>8kg</option><option>10kg</option><option>20kg</option>
-          <option>30kg</option><option selected>50kg</option><option>50kg S付</option><option>その他</option>
+          <option>30kg</option><option>30kg把手</option><option selected>50kg</option><option>50kg S付</option><option>その他</option>
         </select>
       </div>
       <div><label>仕様</label>
@@ -656,7 +656,7 @@
   }
 
   // 容器区分（機種）の並び順
-  const KIND_ORDER = ['5kg', '8kg', '10kg', '20kg', '30kg', '50kg', '50kg S付', 'その他'];
+  const KIND_ORDER = ['5kg', '8kg', '10kg', '20kg', '30kg', '30kg把手', '50kg', '50kg S付', 'その他'];
   function kindRank(k) { const i = KIND_ORDER.indexOf(k); return i < 0 ? KIND_ORDER.length : i; }
   function groupByKind(lots) {
     const map = {};
