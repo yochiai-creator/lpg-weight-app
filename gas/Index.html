@@ -254,7 +254,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v62（製造年月OK・ダブり・取消ボタン）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v63（取消は1回・ダブりの警告なし）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -1051,20 +1051,15 @@
   function goMass(hit) {
     const prev = hit.lot.entries[hit.serial];
     if (hit.lot.spec === SOKO) return markCircle(hit, prev);
-    if (prev !== undefined && !S.confirmDup) {
-      S.confirmDup = true; S.target = hit;
-      setNotice('⚠ ダブり: ' + label(hit.lot, hit.serial) + ' は入力済み（' + fmtMass(prev) + '）。上書きの理由を選んでください', 'dup');
-      beep(false); setTimeout(function() { beep(false); }, 400); S.viewLotId = hit.lot.lotId; render(); return;
-    }
-    S.target = hit;
+    // 入力済みの容器でも警告は出さずに入力バーを開く（ダブりはバーの「ダブり」、入力ミスは質量を入れ直して訂正）
+    S.target = hit; S.confirmDup = false;
     S.stage = 'mass'; S.bufMass = ''; S.confirmMassText = null; S.viewLotId = hit.lot.lotId; S.fullMass = false;
     S.dateOk = false;
     if (prev === undefined) S.overwrite = '';
     else if (!S.overwrite) S.overwrite = 'fix';
     // ダブり（2回流れてきた）は同じ容器なのでWも前と同じ。入れ直さずにそのまま記録する
     if (S.overwrite === 'dup' && isMass(prev)) { S.bufMass = prev.toFixed(1); S.confirmMassText = null; return submitMass(); }
-    setNotice(S.overwrite === 'dup' ? 'ダブりとして記録: 質量を入力' : S.overwrite === 'fix' ? '訂正: 正しい質量を入力' : '質量を入力',
-      S.overwrite ? 'warn' : 'info');
+    setNotice(prev === undefined ? '質量を入力' : label(hit.lot, hit.serial) + ' は入力済み（' + fmtMass(prev) + '）。2回流れたなら「ダブり」、直すなら質量を入力', 'info');
     render();
   }
 
@@ -1214,14 +1209,13 @@
   }
 
   // ---------- 取り消し ----------
+  // 直前の入力を取り消す（確認なしですぐ取り消す。＊キー・取消ボタン）
   function askUndo() {
     if (S.queue.length) { setNotice('送信が終わってから取り消してください（送信中 ' + S.queue.length + ' 件）', 'warn'); beep(false); render(); return; }
     const last = S.saved[S.saved.length - 1];
     if (!last) { setNotice('取り消せる入力がありません', 'warn'); beep(false); render(); return; }
-    const l = lotById(last.lotId);
     S.stage = 'undo';
-    setNotice('直前の入力「' + (l ? label(l, last.serial) : last.serial) + '　' + fmtMass(last.mass) + '」を取り消しますか？ Enter か下のボタンをもう一度＝取消 ／ ⌫=やめる', 'warn');
-    render();
+    handleUndoKey('Enter');
   }
 
   function handleUndoKey(k) {
@@ -1291,10 +1285,9 @@
     const lastSaved = S.saved[S.saved.length - 1];
     const showUndo = !!lastSaved && (S.stage === 'num' || S.stage === 'undo') && !S.confirmDup;
     $('btnUndo').classList.toggle('hidden', !showUndo);
-    $('btnUndo').classList.toggle('armed', S.stage === 'undo');
     if (showUndo) {
       const ul = lotById(lastSaved.lotId);
-      $('btnUndo').innerHTML = (S.stage === 'undo' ? 'もう一度押すと取り消します' : '↶ 直前の入力を取り消す') +
+      $('btnUndo').innerHTML = '↶ 直前の入力を取り消す' +
         '<small>' + esc((ul ? label(ul, lastSaved.serial) : lastSaved.serial) + '　' + fmtMass(lastSaved.mass)) + '</small>';
     }
     renderSteps(); renderCands(); renderTabs(); renderGrid();
@@ -1338,7 +1331,7 @@
   };
   $('btnUndo').onclick = function() {
     this.blur();
-    if (S.stage === 'undo') handleUndoKey('Enter'); else askUndo();
+    if (S.stage !== 'undo') askUndo();
   };
   $('btnSeal').onclick = function() { this.blur(); if (S.stage === 'mass') { S.seal = !S.seal; render(); } };
   // 修正（品質不良で修正に回す容器）: 質量なしでその場で保存
@@ -1353,13 +1346,6 @@
   function clearEntryOf(lot, serial) {
     const key = lot.lotId + '|' + serial;
     if (S.pending[key]) { setNotice('保存中です。少し待ってからもう一度押してください', 'warn'); beep(false); render(); return; }
-    // 確認ダイアログはiPadの入力画面で出ないことがあるので、同じボタンをもう一度押して確定する
-    if (!S.clearArm || S.clearArm.key !== key || Date.now() - S.clearArm.t > 5000) {
-      S.clearArm = { key: key, t: Date.now() };
-      setNotice('もう一度「入力を消す」を押すと ' + label(lot, serial) + '（' + fmtMass(lot.entries[serial]) + '）を消して空に戻します', 'warn');
-      beep(false); render(); return;
-    }
-    S.clearArm = null;
     setNotice('消しています…', 'info'); render();
     call('clearEntry', { lotId: lot.lotId, serial: serial }).then(function() {
       delete lot.entries[serial];
@@ -1432,7 +1418,14 @@
   function tapCell(lot, serial) {
     if (S.stage === 'undo') return;
     // 底黒の〇済みのマスは質量バーが出ないので、タップで消せるようにする
-    if (lot.spec === SOKO && lot.entries[serial] === CIRCLE) { S.viewLotId = lot.lotId; clearEntryOf(lot, serial); return; }
+    if (lot.spec === SOKO && lot.entries[serial] === CIRCLE) {
+      // 表のマスは見るだけで触ることもあるので、〇を消すのは同じマスを続けて2回タップしたときだけ
+      S.viewLotId = lot.lotId;
+      const key = lot.lotId + '|' + serial;
+      if (S.sokoArm && S.sokoArm.key === key && Date.now() - S.sokoArm.t < 5000) { S.sokoArm = null; clearEntryOf(lot, serial); return; }
+      S.sokoArm = { key: key, t: Date.now() };
+      setNotice(label(lot, serial) + ' の〇を消すなら、もう一度タップしてください', 'warn'); render(); return;
+    }
     const same = S.target && S.target.lot.lotId === lot.lotId && S.target.serial === serial;
     if (!same) { S.confirmDup = false; S.ng = false; S.bufActual = ''; S.ngFrom = ''; }
     S.stage = 'num';

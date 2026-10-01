@@ -111,9 +111,7 @@ function check(name, ok, detail) {
   await page.click('#cands button[data-mass="34.8"]'); await page.waitForTimeout(400);
   check('マス→候補ボタンのタップ2回で保存', (await page.textContent('#notice')).includes('HEP37065　W34.8'));
   await page.click('#grid .cell[data-serial="37065"]'); await page.waitForTimeout(100);
-  check('入力済みのマスは上書きの理由を選ぶ', (await page.textContent('#notice')).includes('理由') && !(await page.getAttribute('#dupChoice', 'class')).includes('hidden'));
-  await page.click('#grid .cell[data-serial="37065"]'); await page.waitForTimeout(100);
-  check('もう一度タップで上書きの質量入力へ', (await page.locator('#cands button').count()) === 10);
+  check('入力済みのマスは警告なしでそのまま入力バーを開く', (await page.textContent('#notice')).includes('入力済み') && !(await page.getAttribute('#notice', 'class')).includes('dup') && (await page.locator('#cands button').count()) === 10);
   await page.keyboard.press('Escape');
   await keys('7066');
   check('前回±0.1のボタン（前回34.8）', (await page.getAttribute('#steps button[data-delta="-1"]', 'data-mass')) === '34.7' && (await page.getAttribute('#steps button[data-delta="1"]', 'data-mass')) === '34.9');
@@ -123,14 +121,14 @@ function check(name, ok, detail) {
   check('次の「前回」はいま入れた34.9', (await page.getAttribute('#steps button[data-delta="0"]', 'data-mass')) === '34.9');
   await page.click('#steps button[data-delta="-1"]'); await page.waitForTimeout(400);
   check('前回−0.1のタップで保存', (await page.textContent('#notice')).includes('HEP37067　W34.8'));
-  check('入力済みは上書き確認', (await keys('7023')).includes('入力済み'));
-  check('ダブりは赤い点滅表示', (await page.getAttribute('#notice', 'class')).includes('dup') && (await page.textContent('#notice')).includes('ダブり'));
-  check('ダブり（＋）は入れ直さずに前と同じWで記録', (await keys('+', 500)).includes('【ダブり】HEP37023　W34.8'));
+  check('入力済みの番号は警告なし（入力済みと前のWを表示）', (await keys('7023')).includes('入力済み') && !(await page.getAttribute('#notice', 'class')).includes('dup'));
+  await page.click('#btnDupMass'); await page.waitForTimeout(500);
+  check('入力バーの「ダブり」で前と同じWのまま記録', (await page.textContent('#notice')).includes('【ダブり】HEP37023　W34.8'));
   check('ダブったマスは赤枠＋「W」', (await page.getAttribute('#grid .cell[data-serial="37023"]', 'class')).includes('dup') && (await page.textContent('#grid .cell[data-serial="37023"]')).includes('W'));
   check('表の見出しにダブり件数', (await page.textContent('#gridSub')).includes('ダブり 1件'));
   check('開き直してもダブりが残る（サーバー記録）', ctx.getBootstrap().lots.find(l => l.lotId === 'HEP37001').dups['HEP37023'] === 1);
   // 修正（入力ミスを直す）
-  check('訂正: Enterで訂正として上書き', (await keys('7024E', 150)).includes('訂正'));
+  check('訂正: 入力済みの番号に質量を入れ直すと訂正', (await keys('7024', 150)).includes('入力済み'));
   await keys('0', 400);
   check('訂正は印を付けない', !(await page.textContent('#grid .cell[data-serial="37024"]')).includes('修') && !(await page.getAttribute('#grid .cell[data-serial="37024"]', 'class')).includes('dup'));
   // 修正（品質不良）
@@ -170,8 +168,7 @@ function check(name, ok, detail) {
   await page.check('#autoMode');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(500);
-  await keys('*');
-  check('直前の取消', (await keys('E', 500)).includes('取り消しました'));
+  check('直前の取消（＊）は確認なしですぐ取り消す', (await keys('*', 500)).includes('取り消しました'));
   check('入力中は桁数が減らない（ロット完了前）', (await page.textContent('#numHint')).includes('下4桁'));
   check('取消でセルが空に戻る', slot(59)[2] === '' && slot(59)[1] === false, slot(59).join('|'));
   check('NGで入れたHEP37041は残る', slot(40)[1] === true, slot(40).join('|'));
@@ -210,10 +207,8 @@ function check(name, ok, detail) {
   const hasBefore = ctx.getBootstrap().lots.find(l => l.lotId === 'HEP37001').entries['37090'] !== undefined;
   await page.click('#grid .cell[data-serial="37090"]'); await page.waitForTimeout(150);
   await page.screenshot({ path: path.join(__dirname, 'out', 'clear.png') });
-  check('入力済みのマスをタップすると「入力を消す」が出る', hasBefore && await page.isVisible('#btnDel'));
-  await page.click('#btnDel'); await page.waitForTimeout(150);
-  check('1回目は確認メッセージだけ（まだ消さない）', (await page.textContent('#notice')).includes('もう一度') && ctx.getBootstrap().lots.find(l => l.lotId === 'HEP37001').entries['37090'] !== undefined);
-  await page.click('#btnDel'); await page.waitForTimeout(400);
+  check('入力済みのマスをタップすると「この入力を消す」が出る', hasBefore && await page.isVisible('#btnClear'));
+  await page.click('#btnClear'); await page.waitForTimeout(400);
   check('消すとマスが空に戻る', ctx.getBootstrap().lots.find(l => l.lotId === 'HEP37001').entries['37090'] === undefined && !(await page.textContent('#grid .cell[data-serial="37090"]')).includes('W'));
   const hepSh = ss.getSheetByName('成績表_HEP37001-37100');
   check('消すと成績表の質量欄も空', hepSh.getRange(5 + 89 % 20, 2 + Math.floor(89 / 20) * 6, 1, 6).getValues()[0].slice(2).join('') === ',');
@@ -221,7 +216,7 @@ function check(name, ok, detail) {
   check('消した記録は「取消」で残る', cl.length >= 1 && cl.every(r => r[13] === '取消'));
 
   await page.click('#grid .cell[data-serial="37069"]'); await page.waitForTimeout(150);
-  await page.click('#btnDel'); await page.click('#btnDel'); await page.waitForTimeout(400);
+  await page.click('#btnClear'); await page.waitForTimeout(400);
   check('修正（品質不良）も消せる', ctx.getBootstrap().lots.find(l => l.lotId === 'HEP37001').entries['37069'] === undefined);
   // ---- タブレット縦向き: 上に表・下に入力
   await page.setViewportSize({ width: 820, height: 1180 }); await page.waitForTimeout(200);
