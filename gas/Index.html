@@ -82,7 +82,8 @@
     #massSheet { display: block; position: fixed; left: 8px; right: 8px; bottom: var(--sheetBottom, 340px); z-index: 20;
       background: #fff; border: 2px solid var(--navy); border-radius: 14px; box-shadow: 0 -10px 28px rgba(20, 26, 60, .28);
       padding: 10px 12px; transform: translateY(24px); opacity: 0; pointer-events: none; transition: transform .15s, opacity .15s;
-      display: grid; grid-template-columns: 1fr 1.7fr; column-gap: 10px; grid-template-areas: "title title" "mass steps" "cands cands" "extra extra"; }
+      display: grid; grid-template-columns: 1fr 1.7fr; column-gap: 10px; grid-template-areas: "title title" "dok dok" "mass steps" "cands cands" "extra extra"; }
+    #massSheet #btnDateOk { grid-area: dok; }
     #massSheet.open { transform: none; opacity: 1; pointer-events: auto; }
     #massSheet .sheet-head { grid-area: title; }
     #massSheet #fldMass { grid-area: mass; margin-bottom: 8px; }
@@ -144,8 +145,18 @@
   .sheet-close { flex: none; width: 40px; height: 40px; margin: -4px -4px 4px 0; border: 0; border-radius: 50%; background: #e8eaf2; color: var(--navy); font-size: 24px; font-weight: 700; line-height: 1; }
   .sheet-title { font-size: 15px; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
   .cell.repair { background: #fff1dc; color: #9a5a00; }
-  .extra-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
-  .extra-row.has-clear { grid-template-columns: 1fr 1fr 1fr; }
+  .dateok { display: block; width: 100%; margin: 0 0 8px; border: 0; border-radius: 12px; padding: 12px 8px; background: #c77700; color: #fff; font-size: 20px; font-weight: 800; letter-spacing: .05em; }
+  .dateok small { display: block; font-size: 12px; font-weight: 400; letter-spacing: 0; opacity: .9; }
+  .dateok.done { background: var(--okbg); color: var(--ok); border: 2px solid var(--ok); padding: 6px 8px; font-size: 16px; }
+  .dateok.done small { display: none; }
+  #massSheet.locked #fldMass, #massSheet.locked #steps, #massSheet.locked #cands { opacity: .35; pointer-events: none; }
+  .extra-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .extra-row > button { flex: 1 1 0; min-width: 0; }
+  .dupbtn { border: 2px solid var(--ng); background: #fff; color: var(--ng); border-radius: 10px; padding: 8px; font-size: 15px; font-weight: 700; }
+  .dupbtn:disabled { border-color: #d5d9e4; color: #a3abc0; }
+  .undobtn { display: block; width: 100%; margin: -4px 0 10px; border: 2px solid #8a93ad; background: #fff; color: var(--navy); border-radius: 10px; padding: 10px 8px; font-size: 15px; font-weight: 700; text-align: left; }
+  .undobtn.armed { border-color: var(--ng); background: var(--ngbg); color: var(--ng); }
+  .undobtn small { font-weight: 400; margin-left: 6px; }
   .clearbtn { border: 2px solid var(--ng); background: #fff; color: var(--ng); border-radius: 10px; padding: 8px; font-size: 15px; font-weight: 700; }
   .repairbtn { border: 2px solid #c77700; background: #fff; color: #9a5a00; border-radius: 10px; padding: 8px; font-size: 15px; font-weight: 700; }
   .sealbtn { width: 100%; border: 2px dashed #7a5bc4; background: #fff; color: #7a5bc4; border-radius: 10px; padding: 8px; font-size: 15px; font-weight: 700; }
@@ -243,7 +254,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v61（前回と同じはロットごと）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v62（製造年月OK・ダブり・取消ボタン）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -312,7 +323,7 @@
         <div class="resolved" id="resolved"></div>
       </div>
       <div class="match" id="matchRow">
-        <button id="btnOk" class="on ok" tabindex="-1">製造年月 OK</button>
+        <button id="btnOk" class="on ok" tabindex="-1">番号 OK</button>
         <button id="btnNg" class="ng" tabindex="-1">NG（／キー）</button>
       </div>
       <div class="field hidden" id="fldActual">
@@ -320,14 +331,16 @@
         <div class="val" id="valActual"></div>
       </div>
       <div class="notice info" id="notice">容器番号を入力</div>
+      <button class="undobtn hidden" id="btnUndo" tabindex="-1"></button>
       <div class="dupchoice hidden" id="dupChoice">
         <button class="fix" id="btnFix" tabindex="-1">訂正して上書き<span>入力ミスを直す（Enter・もう一度タップ）</span></button>
-        <button class="dup" id="btnDup" tabindex="-1">ダブりとして記録<span>2回流れてきた（＋キー）</span></button>
+        <button class="dup" id="btnDup" tabindex="-1">ダブりとして記録<span>2回流れてきた・前と同じWで（＋キー）</span></button>
         <button class="del" id="btnDel" tabindex="-1">入力を消す<span>ミスを取り消して空に戻す</span></button>
       </div>
       <!-- 質量の入力バー: 容器番号が決まると出る -->
       <div id="massSheet">
         <div class="sheet-head"><div class="sheet-title" id="sheetTitle"></div><button type="button" class="sheet-close" id="btnSheetClose" aria-label="閉じる">×</button></div>
+        <button type="button" class="dateok" id="btnDateOk" tabindex="-1">製造年月 OK<small>目視で確認したら押す（Enter）</small></button>
         <div class="field" id="fldMass">
         <div class="lbl"><span>W（kg）</span><span id="massHint">「68」→6.8 と入力してもOK</span></div>
         <div class="val" id="valMass"></div>
@@ -342,6 +355,7 @@
       <div class="extra-row" id="extraRow">
         <button class="sealbtn" id="btnSeal" tabindex="-1">シール違い</button>
         <button class="repairbtn" id="btnRepair" tabindex="-1">修正（品質不良）</button>
+        <button class="dupbtn" id="btnDupMass" tabindex="-1">ダブり</button>
         <button class="clearbtn hidden" id="btnClear" tabindex="-1">この入力を消す</button>
       </div>
       </div>
@@ -361,6 +375,9 @@
       </label>
       <label class="keys opt" style="display:flex;gap:8px;align-items:center">
         <input type="checkbox" id="shortMode" style="width:auto" tabindex="-1"> 質量は小数第1位の1桁だけで保存（標準±0.5kgの範囲。範囲外は「.」のあと3桁）
+      </label>
+      <label class="keys opt" style="display:flex;gap:8px;align-items:center">
+        <input type="checkbox" id="dateOkMode" style="width:auto" tabindex="-1"> 製造年月OKを押してから質量を入力する（Enter で OK）
       </label>
       </div>
       <div class="queue" id="queue"></div>
@@ -547,6 +564,11 @@
   }
   S.auto = store.get('lpg.auto') !== '0';
   $('autoMode').checked = S.auto;
+  S.needDateOk = store.get('lpg.dateok') !== '0';
+  $('dateOkMode').checked = S.needDateOk;
+  $('dateOkMode').onchange = function() {
+    S.needDateOk = $('dateOkMode').checked; store.set('lpg.dateok', S.needDateOk ? '1' : '0'); this.blur(); render();
+  };
   S.short = store.get('lpg.short') !== '0';
   $('shortMode').checked = S.short;
   $('shortMode').onchange = function() {
@@ -809,7 +831,11 @@
   // ---------- 入力画面 ----------
   function showEntry() {
     $('home').classList.add('hidden'); $('entry').classList.remove('hidden'); $('btnHome').classList.remove('hidden');
-    if (!S.viewLotId || !lotById(S.viewLotId)) S.viewLotId = S.lots[0].lotId;
+    // 表示するロット: 前に見ていたもの → 選んでいる機種の最初のロット → 全体の最初
+    if (!S.viewLotId || !lotById(S.viewLotId) || (kindFilter && (lotById(S.viewLotId).kind || 'その他') !== kindFilter)) {
+      const first = S.lots.filter(function(l) { return !kindFilter || (l.kind || 'その他') === kindFilter; })[0] || S.lots[0];
+      S.viewLotId = first.lotId;
+    }
     S.numDigits = computeNumDigits();
     window.scrollTo(0, 0);
     if (document.activeElement) document.activeElement.blur();
@@ -819,7 +845,7 @@
   function resetEntry(msg, kind) {
     S.stage = 'num'; S.ng = false; S.bufNum = ''; S.bufActual = ''; S.bufMass = '';
     S.target = null; S.confirmDup = false; S.confirmMassText = null; S.ngFrom = ''; S.fullMass = false;
-    S.overwrite = ''; S.seal = false;
+    S.overwrite = ''; S.seal = false; S.dateOk = false;
     setNotice(msg || '容器番号を入力', kind || 'info');
     render();
   }
@@ -945,6 +971,11 @@
       render(); return;
     }
     if (S.stage === 'mass') {
+      // 製造年月を目視で確認して OK を押すまで、質量は入れられない（Enter = 製造年月OK）
+      if (dateLocked()) {
+        if (k === 'Enter') { S.dateOk = true; setNotice('製造年月OK。質量を入力', 'info'); render(); return; }
+        if (/^\d$/.test(k) || k === '.' || k === '+') { dateOkFirst(); return; }
+      }
       if (/^\d$/.test(k) || k === '.') {
         if (S.bufMass === MISSING || S.bufMass === REPAIR) S.bufMass = '';
         const win = shortWindow(S.target.lot);
@@ -1027,8 +1058,11 @@
     }
     S.target = hit;
     S.stage = 'mass'; S.bufMass = ''; S.confirmMassText = null; S.viewLotId = hit.lot.lotId; S.fullMass = false;
+    S.dateOk = false;
     if (prev === undefined) S.overwrite = '';
     else if (!S.overwrite) S.overwrite = 'fix';
+    // ダブり（2回流れてきた）は同じ容器なのでWも前と同じ。入れ直さずにそのまま記録する
+    if (S.overwrite === 'dup' && isMass(prev)) { S.bufMass = prev.toFixed(1); S.confirmMassText = null; return submitMass(); }
     setNotice(S.overwrite === 'dup' ? 'ダブりとして記録: 質量を入力' : S.overwrite === 'fix' ? '訂正: 正しい質量を入力' : '質量を入力',
       S.overwrite ? 'warn' : 'info');
     render();
@@ -1186,7 +1220,7 @@
     if (!last) { setNotice('取り消せる入力がありません', 'warn'); beep(false); render(); return; }
     const l = lotById(last.lotId);
     S.stage = 'undo';
-    setNotice('直前の入力「' + (l ? label(l, last.serial) : last.serial) + '　' + fmtMass(last.mass) + '」を取り消しますか？ Enter=取消 ／ ⌫=やめる', 'warn');
+    setNotice('直前の入力「' + (l ? label(l, last.serial) : last.serial) + '　' + fmtMass(last.mass) + '」を取り消しますか？ Enter か下のボタンをもう一度＝取消 ／ ⌫=やめる', 'warn');
     render();
   }
 
@@ -1233,6 +1267,10 @@
     $('resolved').textContent = t ? '→ ' + label(t.lot, t.serial) + '（' + t.lot.sheetName + '）' : '';
     $('dupChoice').classList.toggle('hidden', !S.confirmDup || (S.stage !== 'num' && S.stage !== 'actual'));
     const sheetOpen = S.stage === 'mass';
+    $('btnDateOk').classList.toggle('hidden', !S.needDateOk);
+    $('btnDateOk').classList.toggle('done', !!S.dateOk);
+    $('btnDateOk').innerHTML = S.dateOk ? '✓ 製造年月 OK' : '製造年月 OK<small>目視で確認したら押す（Enter）</small>';
+    $('massSheet').classList.toggle('locked', dateLocked());
     $('massSheet').classList.toggle('open', sheetOpen);
     // 容器番号は大きく: 記号は小さめ、下3桁（表のマスの番号）を特に大きく
     if (sheetOpen && S.target) {
@@ -1245,7 +1283,20 @@
     $('btnSeal').classList.toggle('on', S.seal);
     const canClear = sheetOpen && S.target && S.target.lot.entries[S.target.serial] !== undefined;
     $('btnClear').classList.toggle('hidden', !canClear);
-    $('extraRow').classList.toggle('has-clear', !!canClear);
+    // ダブり: 入力済みの容器がもう一度流れてきたとき、前と同じWでそのまま記録（未入力の容器では押せない）
+    const prevW = sheetOpen && S.target ? S.target.lot.entries[S.target.serial] : undefined;
+    $('btnDupMass').disabled = !isMass(prevW);
+    $('btnDupMass').innerHTML = isMass(prevW) ? 'ダブり<small style="display:block;font-weight:400;font-size:11px">前と同じ ' + esc(fmtMass(prevW)) + ' で記録</small>' : 'ダブり<small style="display:block;font-weight:400;font-size:11px">未入力の容器</small>';
+    // 直前の入力を取り消すボタン（番号入力中・取消の確認中に出す）
+    const lastSaved = S.saved[S.saved.length - 1];
+    const showUndo = !!lastSaved && (S.stage === 'num' || S.stage === 'undo') && !S.confirmDup;
+    $('btnUndo').classList.toggle('hidden', !showUndo);
+    $('btnUndo').classList.toggle('armed', S.stage === 'undo');
+    if (showUndo) {
+      const ul = lotById(lastSaved.lotId);
+      $('btnUndo').innerHTML = (S.stage === 'undo' ? 'もう一度押すと取り消します' : '↶ 直前の入力を取り消す') +
+        '<small>' + esc((ul ? label(ul, lastSaved.serial) : lastSaved.serial) + '　' + fmtMass(lastSaved.mass)) + '</small>';
+    }
     renderSteps(); renderCands(); renderTabs(); renderGrid();
   }
 
@@ -1277,6 +1328,18 @@
   }
   $('btnFix').onclick = function() { this.blur(); if (S.confirmDup) handleKey('Enter'); };
   $('btnDup').onclick = function() { this.blur(); if (S.confirmDup) handleKey('+'); };
+  $('btnDupMass').onclick = function() {
+    this.blur();
+    if (S.stage !== 'mass' || !S.target) return;
+    const prev = S.target.lot.entries[S.target.serial];
+    if (!isMass(prev)) return;
+    S.overwrite = 'dup'; S.bufMass = prev.toFixed(1); S.confirmMassText = null;
+    submitMass();
+  };
+  $('btnUndo').onclick = function() {
+    this.blur();
+    if (S.stage === 'undo') handleUndoKey('Enter'); else askUndo();
+  };
   $('btnSeal').onclick = function() { this.blur(); if (S.stage === 'mass') { S.seal = !S.seal; render(); } };
   // 修正（品質不良で修正に回す容器）: 質量なしでその場で保存
   $('btnRepair').onclick = function() {
@@ -1317,10 +1380,19 @@
     if (S.stage === 'mass' && S.target) clearEntryOf(S.target.lot, S.target.serial);
   };
 
+  // 製造年月OKがまだ（必須にしているとき）
+  function dateLocked() { return S.needDateOk && S.stage === 'mass' && !S.dateOk; }
+  function dateOkFirst() { setNotice('先に容器の製造年月を確認して「製造年月 OK」を押してください（Enter）', 'warn'); beep(false); render(); }
+  $('btnDateOk').onclick = function() {
+    this.blur();
+    if (S.stage !== 'mass') return;
+    S.dateOk = true; setNotice('製造年月OK。質量を入力', 'info'); render();
+  };
   $('steps').addEventListener('click', function(ev) {
     const b = ev.target.closest('button'); if (!b) return;
     b.blur();
     if (S.stage !== 'mass') return;
+    if (dateLocked()) return dateOkFirst();
     S.bufMass = b.getAttribute('data-mass'); S.confirmMassText = null;
     submitMass();
   });
@@ -1348,6 +1420,7 @@
       b.onclick = function() {
         b.blur();
         if (S.stage !== 'mass') return;
+        if (dateLocked()) return dateOkFirst();
         S.bufMass = v; S.confirmMassText = null;
         submitMass();
       };
@@ -1391,9 +1464,15 @@
   }
 
   // 表を左右にスワイプ（または ‹ › ボタン）で、タブの並び順に前後のロットへ切り替える
+  // 入力画面の上のバーに出すロット: ホームで機種を選んでいればその機種だけ（表示中のロットは別の機種でも出す）
+  function tabLots() {
+    if (!kindFilter) return S.lots;
+    const mine = S.lots.filter(function(l) { return (l.kind || 'その他') === kindFilter || l.lotId === S.viewLotId; });
+    return mine.length ? mine : S.lots;
+  }
   function lotOrder() {
     const out = [];
-    groupByKind(S.lots).forEach(function(g) { Array.prototype.push.apply(out, g.lots); });
+    groupByKind(tabLots()).forEach(function(g) { Array.prototype.push.apply(out, g.lots); });
     return out;
   }
   function stepLot(dir) {
@@ -1432,9 +1511,10 @@
     const tabs = $('tabs');
     const keep = tabs.scrollLeft;
     tabs.innerHTML = '';
-    if (S.lots.length < 2) return;
+    const shownLots = tabLots();
+    if (shownLots.length < 2) return;
     let active = null;
-    const groups = groupByKind(S.lots);
+    const groups = groupByKind(shownLots);
     groups.forEach(function(g) {
      if (groups.length > 1) {
        const lab = document.createElement('span'); lab.className = 'kind-label'; lab.textContent = g.kind;

@@ -29,6 +29,9 @@ function check(name, ok, detail) {
   });
   await page.setContent(html);
   await page.waitForTimeout(300);
+  // 製造年月OKの必須は専用のテストで確かめる（ほかのテストは質量をすぐ入れる）
+  const noDateOk = async (pg) => pg.evaluate(() => { const c = document.getElementById('dateOkMode'); c.checked = false; c.dispatchEvent(new Event('change')); });
+  await noDateOk(page);
 
   const KEY = { '.': 'NumpadDecimal', '+': 'NumpadAdd', '-': 'NumpadSubtract', '*': 'NumpadMultiply', '/': 'NumpadDivide', E: 'NumpadEnter' };
   const keys = async (seq, wait = 150) => {
@@ -122,7 +125,7 @@ function check(name, ok, detail) {
   check('前回−0.1のタップで保存', (await page.textContent('#notice')).includes('HEP37067　W34.8'));
   check('入力済みは上書き確認', (await keys('7023')).includes('入力済み'));
   check('ダブりは赤い点滅表示', (await page.getAttribute('#notice', 'class')).includes('dup') && (await page.textContent('#notice')).includes('ダブり'));
-  await keys('+.349', 400);
+  check('ダブり（＋）は入れ直さずに前と同じWで記録', (await keys('+', 500)).includes('【ダブり】HEP37023　W34.8'));
   check('ダブったマスは赤枠＋「W」', (await page.getAttribute('#grid .cell[data-serial="37023"]', 'class')).includes('dup') && (await page.textContent('#grid .cell[data-serial="37023"]')).includes('W'));
   check('表の見出しにダブり件数', (await page.textContent('#gridSub')).includes('ダブり 1件'));
   check('開き直してもダブりが残る（サーバー記録）', ctx.getBootstrap().lots.find(l => l.lotId === 'HEP37001').dups['HEP37023'] === 1);
@@ -320,7 +323,7 @@ function check(name, ok, detail) {
   const sokoRows = ss.getSheetByName('入力記録').getRange(2, 1, ss.getSheetByName('入力記録').getLastRow() - 1, 18).getValues().filter(r => r[2] === 'HEP37001-底黒');
   check('底黒: 入力記録は区分「底黒」で1行', sokoRows.length === 1 && sokoRows[0][8] === '底黒' && sokoRows[0][7] === '');
   ctx.reopenLot('HEP37001');
-  check('再開すると成績表シートを入力記録から作り直す', !!sh() && slot(22).join('|') === '023|true|3|4|,|9' && slot(30).join('|') === '031|false|欠|番||', slot(22).join('|') + ' / ' + (sh() ? slot(30).join('|') : ''));
+  check('再開すると成績表シートを入力記録から作り直す', !!sh() && slot(22).join('|') === '023|true|3|4|,|8' && slot(30).join('|') === '031|false|欠|番||', slot(22).join('|') + ' / ' + (sh() ? slot(30).join('|') : ''));
   { const before = global.MAILS.length; const r = ctx.resendLot('HEP36001');
     check('シートを消したロットの再送信は保存済みPDFを送る', global.MAILS.length === before + 1 && r.pdfUrl.includes('drive.google.com') && !ss.getSheetByName('成績表_HEP36001-36100') && global.MAILS[before].att[0] === '成績表_HEP36001-36100.pdf'); }
   { const t = ss.getSheetByName('書式_成績表'); check('書式シートの余った行・列を削る', t.getMaxRows() <= 34 && t.getMaxColumns() <= 34, t.getMaxRows() + 'x' + t.getMaxColumns()); }
@@ -564,6 +567,7 @@ function check(name, ok, detail) {
       catch (e) { return JSON.stringify({ err: e.message }); }
     });
     await p3.setContent(html); await p3.waitForTimeout(500);
+    await noDateOk(p3);
     await p3.selectOption('#fWorker', '山田'); await p3.fill('#fDevice', 'x');
     await p3.click('#btnStart'); await p3.waitForTimeout(200);
     const k3 = async (seq, w = 250) => { for (const ch of seq) await p3.keyboard.press(KEY[ch] || 'Numpad' + ch); await p3.waitForTimeout(w); return p3.textContent('#notice'); };
@@ -575,6 +579,38 @@ function check(name, ok, detail) {
     const n4 = await k3('E', 600);
     check('確認してEnterなら保存できる', c.getLot(B.lotId).entries['97106'] === 34.8, n4);
     await p3.close();
+  }
+  // ---- 製造年月OKを押すまで質量は入れられない
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const L = c.createLot({ prefix: 'DT', start: '00101', kind: '20kg' });
+    const p4 = await browser.newPage({ viewport: { width: 820, height: 1180 } });
+    p4.on('pageerror', e => check('ページでJSエラーなし(製造年月)', false, e.message));
+    await p4.exposeFunction('__gas', (fn, arg) => {
+      try { const v = c[fn](JSON.parse(arg)); return JSON.stringify({ v: JSON.parse(JSON.stringify(v === undefined ? null : v)) }); }
+      catch (e) { return JSON.stringify({ err: e.message }); }
+    });
+    await p4.setContent(html); await p4.waitForTimeout(500);
+    await p4.selectOption('#fWorker', '山田'); await p4.fill('#fDevice', 'x');
+    await p4.click('#btnStart'); await p4.waitForTimeout(200);
+    const k4 = async (seq, w = 250) => { for (const ch of seq) await p4.keyboard.press(KEY[ch] || 'Numpad' + ch); await p4.waitForTimeout(w); return p4.textContent('#notice'); };
+    await k4('105');
+    check('製造年月OKのボタンが入力バーの上に出る', await p4.isVisible('#btnDateOk') && (await p4.getAttribute('#massSheet', 'class')).includes('locked'));
+    const n1 = await k4('167', 400);
+    check('OKの前は質量を打っても入らない', n1.includes('製造年月') && c.getLot(L.lotId).entries['00105'] === undefined, n1);
+    await p4.click('#cands button >> nth=5', { force: true }); await p4.waitForTimeout(300);
+    check('OKの前は候補ボタンをタップしても入らない', c.getLot(L.lotId).entries['00105'] === undefined);
+    await k4('E');
+    check('Enterで製造年月OK', (await p4.textContent('#btnDateOk')).includes('✓') && !(await p4.getAttribute('#massSheet', 'class')).includes('locked'));
+    await k4('167', 500);
+    check('OKのあとは質量が入る', c.getLot(L.lotId).entries['00105'] === 16.7);
+    await k4('106');
+    check('次の容器ではまたOKが必要', (await p4.getAttribute('#massSheet', 'class')).includes('locked'));
+    await p4.screenshot({ path: path.join(__dirname, 'out', 'dateok.png') });
+    await p4.click('#btnDateOk'); await p4.waitForTimeout(100);
+    await p4.click('#cands button >> nth=5'); await p4.waitForTimeout(400);
+    check('ボタンでOKしてから候補タップで保存', c.getLot(L.lotId).entries['00106'] === 16.7);
+    await p4.close();
   }
   await browser.close();
 
