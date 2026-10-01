@@ -566,6 +566,8 @@ function check(name, ok, detail) {
     await p3.selectOption('#fWorker', '山田'); await p3.fill('#fDevice', 'x');
     await p3.click('#btnStart'); await p3.waitForTimeout(200);
     const k3 = async (seq, w = 250) => { for (const ch of seq) await p3.keyboard.press(KEY[ch] || 'Numpad' + ch); await p3.waitForTimeout(w); return p3.textContent('#notice'); };
+    const tabsTxt = (await p3.textContent('#tabs')).replace(/\s+/g, '');
+    check('上のバー: 20kg以下は容器番号、50kgはグループNo', tabsTxt.includes('HXP97101〜') && tabsTxt.includes('HEP643'), tabsTxt);
     await k3('207'); await k3('8', 400);
     const n1 = await k3('105'); const n2 = await k3('+', 600);
     check('「＋」は同じロットの値（20kgのロットに50kgの値を入れない）', n2.includes('HXP97105') && n2.includes('W16.7') && c.getLot(B.lotId).entries['97105'] === 16.7, n2);

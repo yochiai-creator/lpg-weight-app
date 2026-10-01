@@ -254,7 +254,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v64（10kg・30kg把手の内容積）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v65（20kg以下は上のバーを容器番号に）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -1451,9 +1451,12 @@
     return String(l.start);
   }
   // ロット番号の表示: 記号は小さく、グループNo（または開始番号）を太く大きくして見分けやすくする
-  function lotNumHtml(l) {
+  // 20kg以下（5・8・10・20kg）は上のバーではグループNoではなく容器番号（開始番号）を出す
+  function smallKind(l) { return /^(5kg|8kg|10kg|20kg)/.test(String(l.kind || '')); }
+  function lotNumHtml(l, forTab) {
     return (l.prefix ? '<span class="ln-pre">' + esc(l.prefix) + '</span>' : '') +
-      '<span class="ln-grp">' + esc(lotLabel(l)) + '</span>';
+      '<span class="ln-grp">' + esc(forTab && smallKind(l) ? String(l.start) : lotLabel(l)) + '</span>' +
+      (forTab && smallKind(l) ? '<span class="ln-tail">〜</span>' : '');
   }
 
   // 表を左右にスワイプ（または ‹ › ボタン）で、タブの並び順に前後のロットへ切り替える
@@ -1516,7 +1519,7 @@
      g.lots.forEach(function(l) {
       const b = document.createElement('button');
       const c = countOf(l);
-      b.innerHTML = (l.spec === SOKO ? '<span class="ln-soko">底黒</span>' : '') + lotNumHtml(l) +
+      b.innerHTML = (l.spec === SOKO ? '<span class="ln-soko">底黒</span>' : '') + lotNumHtml(l, true) +
         '<span class="ln-cnt">' + (c.filled + c.missing) + '/' + c.size + '</span>';
       b.tabIndex = -1;
       b.className = (l.lotId === S.viewLotId ? 'on' : '') + (c.filled + c.missing >= c.size ? ' done' : '');
