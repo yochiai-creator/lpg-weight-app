@@ -141,15 +141,16 @@ function setVolume_(sh, kind, settings) {
   cell.setNumberFormat('@').setValue(v);
 }
 // v56までの標準質量の初期値
-const TYPICAL_OLD_DEFAULT = '5kg=6.8, 8kg=9.6, 20kg=16.7, 30kg=24.0, 50kg=34.8, 50kg S付=36.3';
+const TYPICAL_OLD_DEFAULTS = ['5kg=6.8, 8kg=9.6, 20kg=16.7, 30kg=24.0, 50kg=34.8, 50kg S付=36.3',
+  '5kg=6.8, 8kg=9.6, 10kg=11.3, 20kg=16.7, 30kg=23.5, 30kg把手=24.0, 50kg=34.8, 50kg S付=36.3'];
 // v34の仮の内容積（設定シートに入っていたら正式な値に置き換える）
 const VOLUME_OLD_DEFAULT = '5kg=11.8, 8kg=18.8, 20kg=47.0, 30kg=70.5, 50kg=117.5, 50kg S付=117.5';
-// 設定シートの標準質量が v56 までの初期値のままなら、10kg・30kg把手を足した値に（30kgは把手なしの23.5に直す）
+// 設定シートの標準質量が以前の初期値のままなら、今の初期値に置き換える（10kg・30kg把手・20kg三部制を足す。30kgは把手なしの23.5）
 function ensureTypicalDefault_() {
   const conf = getSpreadsheet_().getSheetByName(SHEET_SETTINGS);
   if (!conf || conf.getLastRow() < 2) return;
   conf.getRange(2, 1, conf.getLastRow() - 1, 2).getValues().forEach(function(r, i) {
-    if (String(r[0]).trim() === '標準質量' && String(r[1]).trim() === TYPICAL_OLD_DEFAULT) {
+    if (String(r[0]).trim() === '標準質量' && TYPICAL_OLD_DEFAULTS.indexOf(String(r[1]).trim()) >= 0) {
       conf.getRange(2 + i, 2).setValue(SETTING_ROWS.filter(function(x) { return x[0] === '標準質量'; })[0][1]);
     }
   });

@@ -493,6 +493,8 @@ function check(name, ok, detail) {
     c.ensureTypicalDefault_();
     const t = c.readSettings_().typical;
     check('標準質量: 10kg=11.3・30kg=23.5・30kg把手=24.0', t['10kg'] === 11.3 && t['30kg'] === 23.5 && t['30kg把手'] === 24.0, JSON.stringify(t));
+    check('標準質量: 20kg三部制=17.5', t['20kg三部制'] === 17.5);
+    check('20kg三部制のグループNoは20kgと同じ50本ごと', c.groupNoOf_('20kg三部制', '59701') === 195);
     conf.getRange(2 + i, 2).setValue('5kg=7.0');
     c.ensureTypicalDefault_();
     check('標準質量: 自分で書き換えた値はそのまま', c.readSettings_().typical['5kg'] === 7.0 && !c.readSettings_().typical['10kg']);

@@ -254,7 +254,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v65（20kg以下は上のバーを容器番号に）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v66（20kg三部制）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -287,7 +287,7 @@
       <div><label>組容器番号 終了（まとめて作るとき）</label><input id="fEnd" inputmode="numeric" autocomplete="off" placeholder="空欄なら100本"></div>
       <div><label>容器区分</label>
         <select id="fKind">
-          <option>5kg</option><option>8kg</option><option>10kg</option><option>20kg</option>
+          <option>5kg</option><option>8kg</option><option>10kg</option><option>20kg</option><option>20kg三部制</option>
           <option>30kg</option><option>30kg把手</option><option selected>50kg</option><option>50kg S付</option><option>その他</option>
         </select>
       </div>
@@ -679,7 +679,7 @@
   }
 
   // 容器区分（機種）の並び順
-  const KIND_ORDER = ['5kg', '8kg', '10kg', '20kg', '30kg', '30kg把手', '50kg', '50kg S付', 'その他'];
+  const KIND_ORDER = ['5kg', '8kg', '10kg', '20kg', '20kg三部制', '30kg', '30kg把手', '50kg', '50kg S付', 'その他'];
   function kindRank(k) { const i = KIND_ORDER.indexOf(k); return i < 0 ? KIND_ORDER.length : i; }
   function groupByKind(lots) {
     const map = {};
