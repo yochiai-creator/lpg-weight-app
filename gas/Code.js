@@ -821,7 +821,9 @@ function recordOne_(payload) {
     // 全数（欠番を含む）そろったら自動で完了・PDF作成・送信する
     if (prev === null && countFilled_(lot) >= lotSize_(lot)) {
       result.full = true;
-      if (!lot.sentAt && readSettings_().auto) {
+      // 自動で完了・送信するのは、送付先が入っていて「自動送信=する」のときだけ（送付先が空なら完了は手動で）
+      const st = readSettings_();
+      if (!lot.sentAt && st.auto && st.to) {
         try {
           const done = finishLot_(lot, true);
           result.completed = true;

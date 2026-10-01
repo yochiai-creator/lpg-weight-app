@@ -623,6 +623,16 @@ function check(name, ok, detail) {
     c.ensureVolumes3_();
     check('設定の内容積に10kg=24・30kg把手=71を足し、入力中ロットの空欄も埋める', c.readSettings_().volume['10kg'] === 24 && c.readSettings_().volume['30kg把手'] === 71 && String(sh.getRange('N3').getValue()) === '24');
   }
+  // ---- 送付先が空なら、全数そろっても自動では完了しない
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const conf = m.ss.getSheetByName('設定'), crow = conf.getRange(2, 1, conf.getLastRow() - 1, 1).getValues().findIndex(x => x[0] === '送付先');
+    conf.getRange(2 + crow, 2).setValue('');
+    const L = c.createLot({ prefix: 'AC', start: '00101', kind: '20kg' });
+    let r;
+    for (let i = 101; i <= 200; i++) r = c.recordEntry({ lotId: L.lotId, serial: '00' + i, mass: 16.7 });
+    check('送付先が空なら全数そろっても入力中のまま（完了は手動）', r.full === true && !r.completed && c.findLot_(L.lotId).status === '入力中' && !!m.ss.getSheetByName(c.findLot_(L.lotId).sheetName));
+  }
   await browser.close();
 
   const failed = results.filter(r => !r.ok).length;
