@@ -254,7 +254,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v63（取消は1回・ダブりの警告なし）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v64（10kg・30kg把手の内容積）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -1439,12 +1439,12 @@
     const st = String(l.start), w = Math.max(1, st.length - 2);
     return pad(Math.floor((Number(st) - 1) / 100) + 1, w);
   }
-  // 5kg・8kg・20kg: 50本ごとのグループNo（番号取り早見表: 1〜50 が 1 … 49951〜50000 が 0、50001 からまた 1）。1ロット100本なので2つ入る
+  // 5kg・8kg・10kg・20kg: 50本ごとのグループNo（番号取り早見表: 1〜50 が 1 … 49951〜50000 が 0、50001 からまた 1）。1ロット100本なので2つ入る
   function group20(n) { return (Math.floor((Number(n) - 1) / 50) + 1) % 1000; }
   function lotLabel(l) {
     const kind = String(l.kind || '');
     if (/^(30kg|50kg)/.test(kind)) return groupNo(l);
-    if (/^(5kg|8kg|20kg)/.test(kind) && Number(l.start) >= 1) {
+    if (/^(5kg|8kg|10kg|20kg)/.test(kind) && Number(l.start) >= 1) {
       const a = group20(l.start), b = group20(l.end);
       return a === b ? String(a) : a + '・' + b;
     }

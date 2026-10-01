@@ -84,7 +84,7 @@ function doGet() {
 
 // シートの整備（タイムゾーン・列見出し・シート名・見出しの文字サイズ）。1つが失敗しても残りは必ず行う
 function ensureSheets_() {
-  [ensureTokyoTime_, ensureLogHeaders_, ensureTitleFont_, ensureSettingRows_, ensureTypicalDefault_, ensureVolumes_, ensureTrim_, cleanDoneSheets_, ensureLogDayLines_].forEach(function(fn) {
+  [ensureTokyoTime_, ensureLogHeaders_, ensureTitleFont_, ensureSettingRows_, ensureTypicalDefault_, ensureVolumes_, ensureVolumes3_, ensureTrim_, cleanDoneSheets_, ensureLogDayLines_].forEach(function(fn) {
     try { fn(); } catch (e) { console.error('シートの整備に失敗: ' + (fn.name || '') + ' ' + e.message); }
   });
 }
@@ -178,6 +178,29 @@ function ensureVolumes_() {
     if (cur === '' || wasOld) setVolume_(sh, lot.kind, settings);
   });
   props.setProperty('VOLUME_FILLED', '2');
+}
+
+// v62までの内容積の初期値（10kg・30kg把手なし）のままなら足した値に置き換え、入力中ロットの空欄の内容積を埋める（1回だけ）
+const VOLUME_V35_DEFAULT = '5kg=12, 8kg=19, 20kg=47, 30kg=71, 50kg=118, 50kg S付=118';
+function ensureVolumes3_() {
+  const props = sharedProps_();
+  if (props.getProperty('VOLUME_FILLED') === '3') return;
+  const ss = getSpreadsheet_();
+  const conf = ss.getSheetByName(SHEET_SETTINGS);
+  if (conf && conf.getLastRow() >= 2) {
+    conf.getRange(2, 1, conf.getLastRow() - 1, 2).getValues().forEach(function(r, i) {
+      if (String(r[0]).trim() === '内容積' && String(r[1]).trim() === VOLUME_V35_DEFAULT) {
+        conf.getRange(2 + i, 2).setValue(SETTING_ROWS.filter(function(x) { return x[0] === '内容積'; })[0][1]);
+      }
+    });
+  }
+  const settings = readSettings_();
+  readLots_().forEach(function(lot) {
+    if (lot.status !== STATUS_ACTIVE) return;
+    const sh = ss.getSheetByName(lot.sheetName);
+    if (sh && String(sh.getRange(VOLUME_CELL).getValue()) === '') setVolume_(sh, lot.kind, settings);
+  });
+  props.setProperty('VOLUME_FILLED', '3');
 }
 
 function onOpen() {
@@ -326,13 +349,13 @@ function userEmail_() {
 
 // ---------- 純粋ロジック（テスト可能） ----------
 
-// グループNo（容器1本ごと）: 5kg・8kg・20kg は50本ごと（番号取り早見表: 1〜50 → 1 … 49951〜50000 → 0、50001〜50050 → 1）
+// グループNo（容器1本ごと）: 5kg・8kg・10kg・20kg は50本ごと（番号取り早見表: 1〜50 → 1 … 49951〜50000 → 0、50001〜50050 → 1）
 // 30kg・50kg系は100本ごと（59701〜59800 → 598）
 function groupNoOf_(kind, serial) {
   const k = String(kind || '').trim(), n = Number(serial);
   if (!(n > 0)) return '';
   if (/^(30kg|50kg)/.test(k)) return Math.floor((n - 1) / 100) + 1;
-  if (/^(5kg|8kg|20kg)/.test(k)) return (Math.floor((n - 1) / 50) + 1) % 1000;
+  if (/^(5kg|8kg|10kg|20kg)/.test(k)) return (Math.floor((n - 1) / 50) + 1) % 1000;
   return '';
 }
 

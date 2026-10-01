@@ -607,6 +607,18 @@ function check(name, ok, detail) {
     check('ボタンでOKしてから候補タップで保存', c.getLot(L.lotId).entries['00106'] === 16.7);
     await p4.close();
   }
+  // ---- 10kg（50本ごと・内容積24）・30kg把手（内容積71）
+  {
+    const m = load(), c = m.ctx; c.setup();
+    check('10kgのグループNoは50本ごと', c.groupNoOf_('10kg', '59701') === 195 && c.groupNoOf_('10kg', '50050') === 1);
+    const conf = m.ss.getSheetByName('設定'), rows = conf.getRange(2, 1, conf.getLastRow() - 1, 2).getValues();
+    conf.getRange(2 + rows.findIndex(r => r[0] === '内容積'), 2).setValue('5kg=12, 8kg=19, 20kg=47, 30kg=71, 50kg=118, 50kg S付=118');
+    const L = c.createLot({ prefix: 'TK', start: '00101', kind: '10kg' });
+    const sh = m.ss.getSheetByName(c.findLot_(L.lotId).sheetName);
+    check('（前の設定のままだと）10kgの内容積は空', String(sh.getRange('N3').getValue()) === '');
+    c.ensureVolumes3_();
+    check('設定の内容積に10kg=24・30kg把手=71を足し、入力中ロットの空欄も埋める', c.readSettings_().volume['10kg'] === 24 && c.readSettings_().volume['30kg把手'] === 71 && String(sh.getRange('N3').getValue()) === '24');
+  }
   await browser.close();
 
   const failed = results.filter(r => !r.ok).length;
