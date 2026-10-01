@@ -243,7 +243,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v60（日付の変わり目に線）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v61（前回と同じはロットごと）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -392,7 +392,7 @@
 
 <script>
 (function() {
-  const MASS_MIN = 0.1, MASS_MAX = 99.9, DEVIATION_KG = 0.5, MISSING = '欠番', REPAIR = '修正', CIRCLE = '〇', SOKO = '底黒';
+  const MASS_MIN = 0.1, MASS_MAX = 99.9, DEVIATION_KG = 0.5, TYPICAL_DEVIATION_KG = 1.5, MISSING = '欠番', REPAIR = '修正', CIRCLE = '〇', SOKO = '底黒';
   function isMass(m) { return typeof m === 'number'; }
   const $ = function(id) { return document.getElementById(id); };
 
@@ -964,8 +964,10 @@
         if (!S.bufMass) { backToNum(); }
         else { S.bufMass = S.bufMass === MISSING || S.bufMass === REPAIR ? '' : S.bufMass.slice(0, -1); S.confirmMassText = null; }
       } else if (k === '+') {
-        if (S.lastMass === null) { setNotice('前回の質量がまだありません', 'warn'); beep(false); }
-        else { S.bufMass = String(S.lastMass.toFixed(1)); S.confirmMassText = null; return submitMass(); }
+        // 前回と同じ = このロットで最後に入れた値（なければ中央値・標準質量）。別の機種のロットの値は使わない
+        const same = stepBase(S.target.lot);
+        if (same === null) { setNotice('このロットの前回の質量がまだありません', 'warn'); beep(false); }
+        else { S.bufMass = String(same.toFixed(1)); S.confirmMassText = null; return submitMass(); }
       } else if (k === '-') {
         S.bufMass = MISSING; setNotice('欠番として記録します。Enter で保存', 'warn');
       } else if (k === '/') {
@@ -1061,6 +1063,13 @@
       if (med !== null && Math.abs(mass - med) > DEVIATION_KG + 1e-9 && S.confirmMassText !== S.bufMass) {
         S.confirmMassText = S.bufMass;
         setNotice(fmtMass(mass) + ' はこのロットの標準（' + fmtMass(med) + '）から離れています。刻印を再確認して、正しければ Enter', 'warn');
+        beep(false); render(); return;
+      }
+      // 中央値がまだない（入れ始め）ときは、容器区分の標準質量から大きく外れていないか見る（別機種の値の入れ間違い防止）
+      const typ = S.typical[t.lot.kind];
+      if (med === null && typ && Math.abs(mass - typ) > TYPICAL_DEVIATION_KG + 1e-9 && S.confirmMassText !== S.bufMass) {
+        S.confirmMassText = S.bufMass;
+        setNotice(fmtMass(mass) + ' は ' + t.lot.kind + ' の標準（' + fmtMass(typ) + '）から大きく離れています。機種と刻印を確認して、正しければ Enter', 'warn');
         beep(false); render(); return;
       }
     }

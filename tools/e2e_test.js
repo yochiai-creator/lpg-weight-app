@@ -551,6 +551,31 @@ function check(name, ok, detail) {
     c.sharedProps_().deleteProperty('LOG_DAY_LINES'); c.ensureLogDayLines_();
     check('入力記録: これまでの記録にも1回だけ線を引く', (lg.borders || {})[4] === true && !(lg.borders || {})[3]);
   }
+  // ---- 「＋ 前回と同じ」はロットごと（50kgのあとに20kgで押しても50kgの値を入れない）・標準から大きく外れた値は確認
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const A = c.createLot({ prefix: 'HEP', start: '64201', kind: '50kg' });
+    for (let i = 1; i <= 6; i++) c.recordEntry({ lotId: A.lotId, serial: String(64200 + i), mass: 34.8 });
+    const B = c.createLot({ prefix: 'HXP', start: '97101', kind: '20kg' });
+    const p3 = await browser.newPage({ viewport: { width: 1180, height: 820 } });
+    p3.on('pageerror', e => check('ページでJSエラーなし(+)', false, e.message));
+    await p3.exposeFunction('__gas', (fn, arg) => {
+      try { const v = c[fn](JSON.parse(arg)); return JSON.stringify({ v: JSON.parse(JSON.stringify(v === undefined ? null : v)) }); }
+      catch (e) { return JSON.stringify({ err: e.message }); }
+    });
+    await p3.setContent(html); await p3.waitForTimeout(500);
+    await p3.selectOption('#fWorker', '山田'); await p3.fill('#fDevice', 'x');
+    await p3.click('#btnStart'); await p3.waitForTimeout(200);
+    const k3 = async (seq, w = 250) => { for (const ch of seq) await p3.keyboard.press(KEY[ch] || 'Numpad' + ch); await p3.waitForTimeout(w); return p3.textContent('#notice'); };
+    await k3('207'); await k3('8', 400);
+    const n1 = await k3('105'); const n2 = await k3('+', 600);
+    check('「＋」は同じロットの値（20kgのロットに50kgの値を入れない）', n2.includes('HXP97105') && n2.includes('W16.7') && c.getLot(B.lotId).entries['97105'] === 16.7, n2);
+    await k3('106'); const n3 = await k3('348', 400);
+    check('20kgのロットに34.8は確認してから', n3.includes('大きく離れています') && c.getLot(B.lotId).entries['97106'] === undefined, n3);
+    const n4 = await k3('E', 600);
+    check('確認してEnterなら保存できる', c.getLot(B.lotId).entries['97106'] === 34.8, n4);
+    await p3.close();
+  }
   await browser.close();
 
   const failed = results.filter(r => !r.ok).length;
