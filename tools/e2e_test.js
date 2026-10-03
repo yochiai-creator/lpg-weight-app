@@ -621,7 +621,7 @@ function check(name, ok, detail) {
     const sh = m.ss.getSheetByName(c.findLot_(L.lotId).sheetName);
     check('（前の設定のままだと）10kgの内容積は空', String(sh.getRange('N3').getValue()) === '');
     c.ensureVolumes3_();
-    check('設定の内容積に10kg=24・30kg把手=71を足し、入力中ロットの空欄も埋める', c.readSettings_().volume['10kg'] === 24 && c.readSettings_().volume['30kg把手'] === 71 && String(sh.getRange('N3').getValue()) === '24');
+    check('設定の内容積に10kg=24・30kg把手=71を足し、入力中ロットの空欄も埋める', c.readSettings_().volume['10kg'] === 24 && c.readSettings_().volume['30kg把手'] === 71 && c.readSettings_().volume['20kg三部制'] === 47 && String(sh.getRange('N3').getValue()) === '24');
   }
   // ---- 送付先が空なら、全数そろっても自動では完了しない
   {

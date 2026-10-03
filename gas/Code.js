@@ -181,16 +181,17 @@ function ensureVolumes_() {
   props.setProperty('VOLUME_FILLED', '2');
 }
 
-// v62までの内容積の初期値（10kg・30kg把手なし）のままなら足した値に置き換え、入力中ロットの空欄の内容積を埋める（1回だけ）
-const VOLUME_V35_DEFAULT = '5kg=12, 8kg=19, 20kg=47, 30kg=71, 50kg=118, 50kg S付=118';
+// 内容積が以前の初期値のままなら今の初期値（10kg・20kg三部制・30kg把手あり）に置き換え、入力中ロットの空欄の内容積を埋める（1回だけ）
+const VOLUME_OLD_DEFAULTS = ['5kg=12, 8kg=19, 20kg=47, 30kg=71, 50kg=118, 50kg S付=118',
+  '5kg=12, 8kg=19, 10kg=24, 20kg=47, 30kg=71, 30kg把手=71, 50kg=118, 50kg S付=118'];
 function ensureVolumes3_() {
   const props = sharedProps_();
-  if (props.getProperty('VOLUME_FILLED') === '3') return;
+  if (props.getProperty('VOLUME_FILLED') === '4') return;
   const ss = getSpreadsheet_();
   const conf = ss.getSheetByName(SHEET_SETTINGS);
   if (conf && conf.getLastRow() >= 2) {
     conf.getRange(2, 1, conf.getLastRow() - 1, 2).getValues().forEach(function(r, i) {
-      if (String(r[0]).trim() === '内容積' && String(r[1]).trim() === VOLUME_V35_DEFAULT) {
+      if (String(r[0]).trim() === '内容積' && VOLUME_OLD_DEFAULTS.indexOf(String(r[1]).trim()) >= 0) {
         conf.getRange(2 + i, 2).setValue(SETTING_ROWS.filter(function(x) { return x[0] === '内容積'; })[0][1]);
       }
     });
@@ -201,7 +202,7 @@ function ensureVolumes3_() {
     const sh = ss.getSheetByName(lot.sheetName);
     if (sh && String(sh.getRange(VOLUME_CELL).getValue()) === '') setVolume_(sh, lot.kind, settings);
   });
-  props.setProperty('VOLUME_FILLED', '3');
+  props.setProperty('VOLUME_FILLED', '4');
 }
 
 function onOpen() {
