@@ -21,8 +21,16 @@ const SETTING_ROWS = [
   ['完了後の成績表シート', '削除する',
     '「削除する」: 完了してPDFを保存したら成績表シートを消す（PDFはドライブに残る。再開すると入力記録から作り直す）／「残す」: 消さない'],
   ['内容積', '5kg=12, 8kg=19, 10kg=24, 20kg=47, 20kg三部制=47, 30kg=71, 30kg把手=71, 50kg=118, 50kg S付=118',
-    '成績表の「内容積：　lit」に自動で入れる値（容器区分=リットル）。ロット登録時・機種変更時に入る。空欄の区分は入れない']
+    '成績表の「内容積：　lit」に自動で入れる値（容器区分=リットル）。ロット登録時・機種変更時に入る。空欄の区分は入れない'],
+  ['件名（まとめて送信）', '【高圧ガス容器検査成績表】{ロット数}ロット分（{組容器番号}）',
+    'ホーム画面の「まとめてメール送信」の件名。{ロット数} {本数} {組容器番号}（最初～最後）が使えます'],
+  ['本文（まとめて送信）',
+    'ご担当者様\n\nいつもお世話になっております。\n高圧ガス容器検査成績表を{ロット数}ロット分まとめてお送りします。\n\n' +
+    '{一覧}\n\n添付：検査成績表（PDF）、質量データ（CSV）各{ロット数}件\n\nよろしくお願いいたします。',
+    '{一覧} にロットごとの「組容器番号（容器区分）本数」が1行ずつ入ります']
 ];
+
+const BULK_MAIL_MAX_LOTS = 20;   // 1通に添付するロット数。超えたら複数のメールに分ける（添付は1通25MBまで）
 
 // 「5kg=6.8, 50kg S付=36.3」→ { '5kg': 6.8, '50kg S付': 36.3 }
 function parseTypical_(text) {
@@ -52,6 +60,8 @@ function readSettings_() {
     senderName: get('差出人名'),
     subject: get('件名'),
     body: get('本文'),
+    bulkSubject: get('件名（まとめて送信）'),
+    bulkBody: get('本文（まとめて送信）'),
     typical: parseTypical_(get('標準質量')),
     volume: parseTypical_(get('内容積')),
     removeDoneSheet: String(get('完了後の成績表シート')).trim() !== '残す'
@@ -67,14 +77,12 @@ function readWorkers_() {
     .filter(function(n) { return n; });
 }
 
-// 送信して宛先を返す。宛先が空なら送らずにエラー
-function sendLotMail_(lot, pdfBlob) {
-  const st = readSettings_();
-  if (!st.to) throw new Error('設定シートの「送付先」が空です');
+// メールに差し込む値（本数・欠番・修正など）
+function lotMailVars_(lot) {
   const progress = readProgress_(lot);
   let missing = 0, repair = 0;
   Object.keys(progress).forEach(function(k) { if (progress[k] === MISSING) missing++; if (progress[k] === REPAIR) repair++; });
-  const vars = {
+  return {
     '組容器番号': lot.prefix + lot.start + '～' + lot.prefix + lot.end,
     '容器区分': lot.kind || '',
     '本数': String(Object.keys(progress).length - missing - repair) + '本',
@@ -82,34 +90,99 @@ function sendLotMail_(lot, pdfBlob) {
     '修正': String(repair),
     '耐圧試験日': lot.pressure && lot.pressure.testDate ? lot.pressure.testDate.replace(/-/g, '/') : ''
   };
-  // 値が空になる差し込み（例: 耐圧試験日）を含む行は、行ごと省く
-  const fill = function(t) {
-    return String(t).split('\n').filter(function(line) {
-      const keys = line.match(/\{([^}]+)\}/g) || [];
-      return !keys.some(function(m) { const k = m.slice(1, -1); return k in vars && vars[k] === ''; });
-    }).join('\n').replace(/\{([^}]+)\}/g, function(m, k) { return k in vars ? vars[k] : m; });
-  };
+}
+
+// 値が空になる差し込み（例: 耐圧試験日）を含む行は、行ごと省く
+function fillMail_(t, vars) {
+  return String(t).split('\n').filter(function(line) {
+    const keys = line.match(/\{([^}]+)\}/g) || [];
+    return !keys.some(function(m) { const k = m.slice(1, -1); return k in vars && vars[k] === ''; });
+  }).join('\n').replace(/\{([^}]+)\}/g, function(m, k) { return k in vars ? vars[k] : m; });
+}
+
+function markSent_(lot, st) {
+  if (lot.row) getSheet_(SHEET_LOTS).getRange(lot.row, 16, 1, 2).setValues([[new Date(), st.to + (st.cc ? ' / CC: ' + st.cc : '')]]);
+}
+
+// 送信して宛先を返す。宛先が空なら送らずにエラー
+function sendLotMail_(lot, pdfBlob) {
+  const st = readSettings_();
+  if (!st.to) throw new Error('設定シートの「送付先」が空です');
+  const vars = lotMailVars_(lot);
   const options = {
     name: st.senderName,
     attachments: [pdfBlob, buildLotCsv_(lot)]
   };
   if (st.cc) options.cc = st.cc;
-  MailApp.sendEmail(st.to, fill(st.subject), fill(st.body), options);
-
-  const lots = getSheet_(SHEET_LOTS);
-  if (lot.row) lots.getRange(lot.row, 16, 1, 2).setValues([[new Date(), st.to + (st.cc ? ' / CC: ' + st.cc : '')]]);
+  MailApp.sendEmail(st.to, fillMail_(st.subject, vars), fillMail_(st.body, vars), options);
+  markSent_(lot, st);
   return st.to;
 }
 
-// ロットの最新の有効な入力（容器ごと）をCSVに。Excelで開けるようBOM付きUTF-8
-function buildLotCsv_(lot) {
-  const log = getSheet_(SHEET_LOG);
-  const latest = {};
-  if (log.getLastRow() >= 2) {
-    log.getRange(2, 1, log.getLastRow() - 1, Math.min(log.getLastColumn(), LOG_HEADERS.length)).getDisplayValues().forEach(function(r) {
-      if (r[LC_LOT] === lot.lotId && r[LC_STATUS] === '有効') latest[r[LC_SERIAL]] = r;
+// まとめて送信の候補（完了したロット。新しい順）
+function listDoneLots() {
+  return readLots_().filter(function(l) { return l.status === STATUS_DONE; }).reverse().map(function(l) {
+    return { lotId: l.lotId, prefix: l.prefix, start: l.start, end: l.end, kind: l.kind, sheetName: l.sheetName,
+      sentAt: l.sentAt, pdf: l.pdf, spec: l.spec };
+  });
+}
+
+// 選んだ完了ロットの成績表PDF＋CSVを、1通（多いときは BULK_MAIL_MAX_LOTS ロットずつ）にまとめて送る
+function sendLotsMail(lotIds) {
+  const st = readSettings_();
+  if (!st.to) throw new Error('設定シートの「送付先」が空です');
+  const ids = (lotIds || []).map(String).filter(function(id, i, a) { return id && a.indexOf(id) === i; });
+  if (!ids.length) throw new Error('送るロットを選んでください');
+  const lots = ids.map(function(id) {
+    const lot = findLot_(id);
+    if (lot.status !== STATUS_DONE) throw new Error('完了していないロットは送れません: ' + lot.lotId);
+    return lot;
+  });
+  // 番号順にそろえる
+  lots.sort(function(a, b) { return a.prefix.localeCompare(b.prefix) || Number(a.start) - Number(b.start); });
+  const logRows = logDisplayRows_();
+  let mails = 0;
+  for (let i = 0; i < lots.length; i += BULK_MAIL_MAX_LOTS) {
+    const part = lots.slice(i, i + BULK_MAIL_MAX_LOTS);
+    const attachments = [], lines = [];
+    let total = 0;
+    part.forEach(function(lot) {
+      attachments.push(lotPdf_(lot).blob, buildLotCsv_(lot, logRows));
+      const v = lotMailVars_(lot);
+      total += parseInt(v['本数'], 10) || 0;
+      lines.push('・' + v['組容器番号'] + '（' + v['容器区分'] + '）' + v['本数'] +
+        (v['欠番'] !== '0' ? '　欠番 ' + v['欠番'] : '') + (v['修正'] !== '0' ? '　修正 ' + v['修正'] : ''));
     });
+    const first = part[0], last = part[part.length - 1];
+    const vars = {
+      'ロット数': String(part.length),
+      '本数': total + '本',
+      '組容器番号': first.prefix + first.start + (part.length > 1 ? '～' + last.prefix + last.end : '～' + first.prefix + first.end),
+      '一覧': lines.join('\n')
+    };
+    const options = { name: st.senderName, attachments: attachments };
+    if (st.cc) options.cc = st.cc;
+    MailApp.sendEmail(st.to, fillMail_(st.bulkSubject, vars), fillMail_(st.bulkBody, vars), options);
+    part.forEach(function(lot) { markSent_(lot, st); });
+    mails++;
   }
+  return { sentTo: st.to, lots: lots.length, mails: mails };
+}
+
+// 入力記録（表示どおりの文字）
+function logDisplayRows_() {
+  const log = getSheet_(SHEET_LOG);
+  return log.getLastRow() < 2 ? [] :
+    log.getRange(2, 1, log.getLastRow() - 1, Math.min(log.getLastColumn(), LOG_HEADERS.length)).getDisplayValues();
+}
+
+// ロットの最新の有効な入力（容器ごと）をCSVに。Excelで開けるようBOM付きUTF-8
+// logRows: まとめて送信のとき、1度読んだ入力記録を使い回す
+function buildLotCsv_(lot, logRows) {
+  const latest = {};
+  (logRows || logDisplayRows_()).forEach(function(r) {
+    if (r[LC_LOT] === lot.lotId && r[LC_STATUS] === '有効') latest[r[LC_SERIAL]] = r;
+  });
   // 年替わりで別のスプレッドシートへ移したロットは、そこから読む（表示と同じ形の文字にそろえる）
   if (!Object.keys(latest).length) {
     archivedRowsForLot_(lot.lotId).forEach(function(r) {

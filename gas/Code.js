@@ -981,18 +981,20 @@ function finishLot_(lot, send) {
 // 完了済みロットをもう一度送る
 function resendLot(lotId) {
   const lot = findLot_(lotId);
+  const pdf = lotPdf_(lot);
+  return { lotId: lot.lotId, pdfUrl: pdf.url, sentTo: sendLotMail_(lot, pdf.blob) };
+}
+
+// 完了ロットの成績表PDF。シートがあればPDFにし、消したロットは保存済みのPDFを使う（なければ作り直してPDFにし、また消す）
+function lotPdf_(lot) {
   const sh = getSpreadsheet_().getSheetByName(lot.sheetName);
-  if (sh) {
-    const pdf = exportLotPdf_(lot, sh);
-    return { lotId: lot.lotId, pdfUrl: pdf.url, sentTo: sendLotMail_(lot, pdf.blob) };
-  }
-  // 成績表シートを消したロットは、保存済みのPDFをそのまま送る（なければ作り直してPDFにし、また消す）
+  if (sh) return exportLotPdf_(lot, sh);
   const saved = savedPdfBlob_(lot);
-  if (saved) return { lotId: lot.lotId, pdfUrl: lot.pdf, sentTo: sendLotMail_(lot, saved) };
+  if (saved) return { url: lot.pdf, blob: saved };
   const tmp = rebuildReportSheet_(lot);
   const pdf = exportLotPdf_(lot, tmp);
   if (readSettings_().removeDoneSheet) getSpreadsheet_().deleteSheet(tmp);
-  return { lotId: lot.lotId, pdfUrl: pdf.url, sentTo: sendLotMail_(lot, pdf.blob) };
+  return pdf;
 }
 
 function savedPdfBlob_(lot) {

@@ -35,6 +35,11 @@
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
   .card h3 { margin: 0 0 4px; font-size: 18px; }
   .card .sub { color: var(--muted); font-size: 13px; }
+  .bulk-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; margin-top: 10px; max-height: 420px; overflow-y: auto; }
+  .bulk-list label { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: 15px; background: var(--card); }
+  .bulk-list input { width: 22px; height: 22px; flex: none; }
+  .bulk-list .bk-sent { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .bulk-list .bk-kind { grid-column: 1 / -1; font-size: 13px; font-weight: 700; color: var(--navy); margin-top: 4px; }
   .bar { height: 8px; background: #e6ebf5; border-radius: 4px; margin: 10px 0 6px; overflow: hidden; }
   .bar > div { height: 100%; background: var(--navy); }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -254,7 +259,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v70（6桁で登録されたロットを5桁に）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v71（検査表をまとめてメール送信）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -303,6 +308,18 @@
 
   <h2>最近完了したロット</h2>
   <div class="cards" id="doneLots"></div>
+
+  <h2>検査表をまとめてメール送信</h2>
+  <div class="panel">
+    <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn sec" id="btnBulkLoad" type="button">完了したロットを表示</button>
+      <button class="btn sec hidden" id="btnBulkUnsent" type="button">未送信をすべて選ぶ</button>
+      <button class="btn sec hidden" id="btnBulkNone" type="button">選択を外す</button>
+    </div>
+    <div class="bulk-list" id="bulkList"></div>
+    <div class="row" style="margin-top:10px"><button class="btn hidden" id="btnBulkSend" type="button">送信</button></div>
+    <div class="msg" id="bulkMsg">チェックした完了ロットの成績表PDFと質量データCSVを、1通のメールにまとめて送付先へ送ります（20ロットを超えると20ロットずつ分けて送ります）。</div>
+  </div>
 
   <h2>採番表（その日に流れた順番）</h2>
   <div class="panel">
@@ -722,6 +739,7 @@
     const dn = $('doneLots'); dn.innerHTML = '';
     if (!S.done.length) dn.innerHTML = '<div class="sub">まだありません</div>';
     S.done.forEach(function(l) { dn.appendChild(lotCard(l, true)); });
+    if (bulkLots && bulkLots.length) renderBulk();
     $('btnStart').disabled = !S.lots.length || (S.workers.length > 0 && !worker());
     $('btnStart').textContent = S.workers.length && !worker() ? '入力者を選ぶと入力できます' : '入力を始める';
   }
@@ -787,6 +805,64 @@
       });
     }).catch(function(e) { b.disabled = false; $('saibanMsg').className = 'msg err'; $('saibanMsg').textContent = errText(e); });
   };
+  // ---------- 検査表をまとめてメール送信 ----------
+  var bulkLots = [];   // var: renderHome から先に参照されることがある
+  function bulkChecked() {
+    return Array.prototype.slice.call($('bulkList').querySelectorAll('input:checked')).map(function(x) { return x.value; });
+  }
+  function bulkUpdate() {
+    const n = bulkChecked().length, b = $('btnBulkSend');
+    b._armT = 0;
+    b.textContent = n ? '選んだ ' + n + ' ロットを送信' + (n > 20 ? '（' + Math.ceil(n / 20) + '通）' : '') : 'ロットを選んでください';
+    b.disabled = !n;
+  }
+  function renderBulk() {
+    const list = $('bulkList'); list.innerHTML = '';
+    const lots = bulkLots.filter(function(l) { return !kindFilter || (l.kind || 'その他') === kindFilter; });
+    if (!lots.length) { list.innerHTML = '<div class="sub">完了したロットはありません</div>'; }
+    groupByKind(lots).forEach(function(g) {
+      if (!kindFilter) { const h = document.createElement('div'); h.className = 'bk-kind'; h.textContent = g.kind; list.appendChild(h); }
+      g.lots.forEach(function(l) {
+        const lab = document.createElement('label');
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = l.lotId; cb.checked = !l.sentAt; cb.onchange = bulkUpdate;
+        const t = document.createElement('span'); t.textContent = l.prefix + l.start + ' ～ ' + l.end;
+        const st = document.createElement('span'); st.className = 'bk-sent'; st.textContent = l.sentAt ? '送信済 ' + l.sentAt.replace(/^\d{4}[\/-]/, '').replace(/:\d\d$/, '') : '未送信';
+        if (!l.sentAt) st.style.color = 'var(--ng)';
+        lab.appendChild(cb); lab.appendChild(t); lab.appendChild(st);
+        list.appendChild(lab);
+      });
+    });
+    ['btnBulkUnsent', 'btnBulkNone', 'btnBulkSend'].forEach(function(id) { $(id).classList.toggle('hidden', !lots.length); });
+    bulkUpdate();
+  }
+  function loadBulk() {
+    const b = $('btnBulkLoad'); b.disabled = true;
+    return call('listDoneLots').then(function(r) { b.disabled = false; b.textContent = '一覧を更新'; bulkLots = r; renderBulk(); })
+      .catch(function(e) { b.disabled = false; $('bulkMsg').className = 'msg err'; $('bulkMsg').textContent = errText(e); });
+  }
+  $('btnBulkLoad').onclick = loadBulk;
+  $('btnBulkUnsent').onclick = function() {
+    Array.prototype.forEach.call($('bulkList').querySelectorAll('input'), function(x) {
+      const l = bulkLots.find(function(y) { return y.lotId === x.value; }); x.checked = !!l && !l.sentAt;
+    });
+    bulkUpdate();
+  };
+  $('btnBulkNone').onclick = function() {
+    Array.prototype.forEach.call($('bulkList').querySelectorAll('input'), function(x) { x.checked = false; });
+    bulkUpdate();
+  };
+  $('btnBulkSend').onclick = function() {
+    const ids = bulkChecked(), b = this;
+    if (!ids.length) return;
+    const m = $('bulkMsg');
+    if (!armed(b, 'もう一度押すと送信')) { m.className = 'msg err'; m.textContent = (S.mail.to || '（送付先未設定）') + ' に ' + ids.length + ' ロット分を送ります。もう一度押すと送信します'; return; }
+    b.disabled = true; m.className = 'msg'; m.textContent = '送信中…（PDFを集めています。数十秒かかることがあります）';
+    call('sendLotsMail', ids).then(function(r) {
+      m.className = 'msg ok'; m.textContent = r.sentTo + ' に ' + r.lots + ' ロット分を送信しました' + (r.mails > 1 ? '（' + r.mails + '通）' : '');
+      return Promise.all([loadBulk(), loadHome()]);
+    }).catch(function(e) { b.disabled = false; m.className = 'msg err'; m.textContent = errText(e); });
+  };
+
   $('btnHome').onclick = function() {
     if (S.queue.length && !armed(this, 'もう一度押すと戻る')) { setNotice('まだ送信中の入力があります。一覧に戻っても送信は続きます', 'warn'); return; }
     $('entry').classList.add('hidden'); $('home').classList.remove('hidden'); $('btnHome').classList.add('hidden');

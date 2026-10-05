@@ -323,6 +323,23 @@ function check(name, ok, detail) {
     check('シートを消したロットの再送信は保存済みPDFを送る', global.MAILS.length === before + 1 && r.pdfUrl.includes('drive.google.com') && !ss.getSheetByName('成績表_HEP36001-36100') && global.MAILS[before].att[0] === '成績表_HEP36001-36100.pdf'); }
   { const t = ss.getSheetByName('書式_成績表'); check('書式シートの余った行・列を削る', t.getMaxRows() <= 34 && t.getMaxColumns() <= 34, t.getMaxRows() + 'x' + t.getMaxColumns()); }
   await page.click('#btnHome'); await page.waitForTimeout(300);
+  // ---- 検査表をまとめてメール送信（ホーム画面）
+  {
+    await page.click('#btnBulkLoad'); await page.waitForTimeout(300);
+    const items = await page.$$eval('#bulkList input', xs => xs.map(x => ({ id: x.value, on: x.checked })));
+    const done = ctx.readLots_().filter(l => l.status === '完了');
+    check('まとめて送信: 完了したロットが並び、未送信だけ最初から選ばれている', items.length === done.length && items.every(x => x.on === !done.find(l => l.lotId === x.id).sentAt), JSON.stringify(items));
+    await page.click('#btnBulkUnsent'); await page.click('#btnBulkNone');
+    await page.check('#bulkList input[value="HEP36001"]');
+    const n = (await page.$$eval('#bulkList input:checked', xs => xs.length));
+    const before = global.MAILS.length;
+    await page.click('#btnBulkSend'); await page.waitForTimeout(100);
+    check('まとめて送信: 1回目の押しでは送らない', global.MAILS.length === before && (await page.textContent('#bulkMsg')).includes('もう一度押すと送信'));
+    await page.click('#btnBulkSend'); await page.waitForTimeout(600);
+    const m = global.MAILS[before];
+    check('まとめて送信: 選んだロットのPDFとCSVを1通で', global.MAILS.length === before + 1 && n === 1 && m && m.att.join(',') === '成績表_HEP36001-36100.pdf,成績表_HEP36001-36100.csv' && m.sub.includes('1ロット分'), JSON.stringify(m));
+    check('まとめて送信: 送信後に送信済みと表示', (await page.textContent('#bulkMsg')).includes('送信しました'));
+  }
 
   fs.mkdirSync(path.join(__dirname, 'out'), { recursive: true });
   await page.screenshot({ path: path.join(__dirname, 'out', 'home.png'), fullPage: true });
@@ -660,6 +677,30 @@ function check(name, ok, detail) {
     check('古いIDで送られてきても正しいロットに入る', c.recordEntry({ lotId: 'HXP099001', serial: '099072', mass: 16.9 }).serial === '99072' && c.getLot('HXP99001').entries['99072'] === 16.9);
     check('完了済みのPDFを5桁で作り直し、古いPDFはゴミ箱へ', global.PDFS.some(p => p.endsWith('成績表_HXP99901-99999.pdf')) && global.PDFS.filter(p => p.includes('HXP099901')).length === 0 && oldPdfs === 1, global.PDFS.join(' | '));
     check('直すのは1回だけ', c.fixPaddedLots_() === 0);
+  }
+  // ---- まとめて送信: 複数ロットを1通に・20ロットを超えたら分けて送る・完了していないロットは送らない
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const ids = [];
+    for (let k = 0; k < 22; k++) {
+      const st = String(10001 + k * 100);
+      const L = c.createLot({ prefix: 'BM', start: st, kind: '20kg' });
+      c.recordEntry({ lotId: L.lotId, serial: st, mass: 16.7 });
+      c.completeLot({ lotId: L.lotId, send: false });
+      ids.push(L.lotId);
+    }
+    const open = c.createLot({ prefix: 'BM', start: '20001', kind: '20kg' });
+    let err = '';
+    try { c.sendLotsMail([ids[0], open.lotId]); } catch (e) { err = e.message; }
+    check('まとめて送信: 入力中のロットが混ざっていたら送らない', err.includes('完了していない'), err);
+    const before = global.MAILS.length;
+    const r = c.sendLotsMail(ids.slice(0, 3).reverse());
+    const mm = global.MAILS[before];
+    check('まとめて送信: 3ロットを番号順に1通で（PDF・CSV各3）', r.mails === 1 && r.lots === 3 && mm.att.length === 6 && mm.att[0] === '成績表_BM10001-10100.pdf' && mm.att[4] === '成績表_BM10201-10300.pdf' && mm.sub.includes('3ロット分') && mm.sub.includes('BM10001～BM10300') && mm.body.includes('・BM10101～BM10200（20kg）1本'), JSON.stringify(mm));
+    check('まとめて送信: 送ったロットに送信日時', ids.slice(0, 3).every(id => c.findLot_(id).sentAt) && !c.findLot_(ids[3]).sentAt);
+    const r2 = c.sendLotsMail(ids);
+    check('まとめて送信: 20ロットを超えたら分けて送る', r2.mails === 2 && global.MAILS.length === before + 3 && global.MAILS[before + 1].att.length === 40 && global.MAILS[before + 2].att.length === 4);
+    check('まとめて送信の候補は完了ロットだけ（新しい順）', c.listDoneLots().filter(l => l.prefix === 'BM').length === 22 && c.listDoneLots()[0].lotId === ids[21]);
   }
   await browser.close();
 
