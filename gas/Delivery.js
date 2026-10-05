@@ -26,10 +26,13 @@ const SETTING_ROWS = [
     'ホーム画面の「まとめてメール送信」の件名。{ロット数} {本数} {組容器番号}（最初～最後）が使えます'],
   ['本文（まとめて送信）',
     'ご担当者様\n\nいつもお世話になっております。\n高圧ガス容器検査成績表を{ロット数}ロット分まとめてお送りします。\n\n' +
-    '{一覧}\n\n添付：検査成績表（PDF）、質量データ（CSV）各{ロット数}件\n\nよろしくお願いいたします。',
-    '{一覧} にロットごとの「組容器番号（容器区分）本数」が1行ずつ入ります']
+    '{一覧}\n\n添付：検査成績表（PDF）、質量データ（CSV）各{ロット数}件\n採番表（PDF）：{採番表}\n\nよろしくお願いいたします。',
+    '{一覧} にロットごとの「組容器番号（容器区分）本数」が1行ずつ入ります。{採番表} は付けた採番表の日付（付けないときはその行ごと省く）']
 ];
 
+// v71の「本文（まとめて送信）」の初期値（{採番表} の行がない）。このままなら今の初期値に置き換える
+const BULK_BODY_OLD_DEFAULT = 'ご担当者様\n\nいつもお世話になっております。\n高圧ガス容器検査成績表を{ロット数}ロット分まとめてお送りします。\n\n' +
+  '{一覧}\n\n添付：検査成績表（PDF）、質量データ（CSV）各{ロット数}件\n\nよろしくお願いいたします。';
 const BULK_MAIL_MAX_LOTS = 20;   // 1通に添付するロット数。超えたら複数のメールに分ける（添付は1通25MBまで）
 
 // 「5kg=6.8, 50kg S付=36.3」→ { '5kg': 6.8, '50kg S付': 36.3 }
@@ -128,9 +131,12 @@ function listDoneLots() {
 }
 
 // 選んだ完了ロットの成績表PDF＋CSVを、1通（多いときは BULK_MAIL_MAX_LOTS ロットずつ）にまとめて送る
-function sendLotsMail(lotIds) {
+// input: [lotId, ...] または { lotIds: [...], saiban: true }（saiban: そのロットの容器が流れた日の採番表PDFも付ける）
+function sendLotsMail(input) {
   const st = readSettings_();
   if (!st.to) throw new Error('設定シートの「送付先」が空です');
+  const lotIds = Array.isArray(input) ? input : (input && input.lotIds);
+  const withSaiban = !Array.isArray(input) && !!(input && input.saiban);
   const ids = (lotIds || []).map(String).filter(function(id, i, a) { return id && a.indexOf(id) === i; });
   if (!ids.length) throw new Error('送るロットを選んでください');
   const lots = ids.map(function(id) {
@@ -141,7 +147,9 @@ function sendLotsMail(lotIds) {
   // 番号順にそろえる
   lots.sort(function(a, b) { return a.prefix.localeCompare(b.prefix) || Number(a.start) - Number(b.start); });
   const logRows = logDisplayRows_();
-  let mails = 0;
+  const lotDays = withSaiban ? saibanDatesForLots_(lots.map(function(l) { return l.lotId; })) : {};
+  const saibanBlobs = {};   // 日付 → PDF（分けて送るときに同じ日を作り直さない）
+  let mails = 0, saibanCount = 0;
   for (let i = 0; i < lots.length; i += BULK_MAIL_MAX_LOTS) {
     const part = lots.slice(i, i + BULK_MAIL_MAX_LOTS);
     const attachments = [], lines = [];
@@ -153,12 +161,22 @@ function sendLotsMail(lotIds) {
       lines.push('・' + v['組容器番号'] + '（' + v['容器区分'] + '）' + v['本数'] +
         (v['欠番'] !== '0' ? '　欠番 ' + v['欠番'] : '') + (v['修正'] !== '0' ? '　修正 ' + v['修正'] : ''));
     });
+    const days = [];
+    part.forEach(function(lot) { (lotDays[lot.lotId] || []).forEach(function(d) { if (days.indexOf(d) < 0) days.push(d); }); });
+    days.sort();
+    const sentDays = [];
+    days.forEach(function(d) {
+      if (!(d in saibanBlobs)) saibanBlobs[d] = saibanPdfBlob_(d);
+      if (saibanBlobs[d]) { attachments.push(saibanBlobs[d]); sentDays.push(d); }
+    });
+    saibanCount += sentDays.length;
     const first = part[0], last = part[part.length - 1];
     const vars = {
       'ロット数': String(part.length),
       '本数': total + '本',
       '組容器番号': first.prefix + first.start + (part.length > 1 ? '～' + last.prefix + last.end : '～' + first.prefix + first.end),
-      '一覧': lines.join('\n')
+      '一覧': lines.join('\n'),
+      '採番表': sentDays.map(function(d) { return d.slice(5).replace('-', '/'); }).join('・')
     };
     const options = { name: st.senderName, attachments: attachments };
     if (st.cc) options.cc = st.cc;
@@ -166,7 +184,7 @@ function sendLotsMail(lotIds) {
     part.forEach(function(lot) { markSent_(lot, st); });
     mails++;
   }
-  return { sentTo: st.to, lots: lots.length, mails: mails };
+  return { sentTo: st.to, lots: lots.length, mails: mails, saiban: saibanCount };
 }
 
 // 入力記録（表示どおりの文字）

@@ -39,6 +39,8 @@
   .bulk-list label { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: 15px; background: var(--card); }
   .bulk-list input { width: 22px; height: 22px; flex: none; }
   .bulk-list .bk-sent { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .bulk-opt { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+  .bulk-opt input { width: 22px; height: 22px; }
   .bulk-list .bk-kind { grid-column: 1 / -1; font-size: 13px; font-weight: 700; color: var(--navy); margin-top: 4px; }
   .bar { height: 8px; background: #e6ebf5; border-radius: 4px; margin: 10px 0 6px; overflow: hidden; }
   .bar > div { height: 100%; background: var(--navy); }
@@ -259,7 +261,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v71（検査表をまとめてメール送信）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v72（まとめて送信に採番表も）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -317,8 +319,11 @@
       <button class="btn sec hidden" id="btnBulkNone" type="button">選択を外す</button>
     </div>
     <div class="bulk-list" id="bulkList"></div>
-    <div class="row" style="margin-top:10px"><button class="btn hidden" id="btnBulkSend" type="button">送信</button></div>
-    <div class="msg" id="bulkMsg">チェックした完了ロットの成績表PDFと質量データCSVを、1通のメールにまとめて送付先へ送ります（20ロットを超えると20ロットずつ分けて送ります）。</div>
+    <div class="row" style="margin-top:10px;gap:14px;align-items:center;flex-wrap:wrap">
+      <button class="btn hidden" id="btnBulkSend" type="button">送信</button>
+      <label class="bulk-opt"><input type="checkbox" id="bulkSaiban">採番表も付ける（容器が流れた日の分）</label>
+    </div>
+    <div class="msg" id="bulkMsg">チェックした完了ロットの成績表PDFと質量データCSVを、1通のメールにまとめて送付先へ送ります（20ロットを超えると20ロットずつ分けて送ります）。採番表を付けると、そのロットの容器が流れた日の採番表PDFも添付します（今日の分はその時点までで作ります）。</div>
   </div>
 
   <h2>採番表（その日に流れた順番）</h2>
@@ -841,6 +846,8 @@
       .catch(function(e) { b.disabled = false; $('bulkMsg').className = 'msg err'; $('bulkMsg').textContent = errText(e); });
   }
   $('btnBulkLoad').onclick = loadBulk;
+  $('bulkSaiban').checked = store.get('lpg.bulkSaiban') !== '0';
+  $('bulkSaiban').onchange = function() { store.set('lpg.bulkSaiban', this.checked ? '1' : '0'); };
   $('btnBulkUnsent').onclick = function() {
     Array.prototype.forEach.call($('bulkList').querySelectorAll('input'), function(x) {
       const l = bulkLots.find(function(y) { return y.lotId === x.value; }); x.checked = !!l && !l.sentAt;
@@ -857,8 +864,8 @@
     const m = $('bulkMsg');
     if (!armed(b, 'もう一度押すと送信')) { m.className = 'msg err'; m.textContent = (S.mail.to || '（送付先未設定）') + ' に ' + ids.length + ' ロット分を送ります。もう一度押すと送信します'; return; }
     b.disabled = true; m.className = 'msg'; m.textContent = '送信中…（PDFを集めています。数十秒かかることがあります）';
-    call('sendLotsMail', ids).then(function(r) {
-      m.className = 'msg ok'; m.textContent = r.sentTo + ' に ' + r.lots + ' ロット分を送信しました' + (r.mails > 1 ? '（' + r.mails + '通）' : '');
+    call('sendLotsMail', { lotIds: ids, saiban: $('bulkSaiban').checked }).then(function(r) {
+      m.className = 'msg ok'; m.textContent = r.sentTo + ' に ' + r.lots + ' ロット分' + (r.saiban ? '＋採番表 ' + r.saiban + '日分' : '') + 'を送信しました' + (r.mails > 1 ? '（' + r.mails + '通）' : '');
       return Promise.all([loadBulk(), loadHome()]);
     }).catch(function(e) { b.disabled = false; m.className = 'msg err'; m.textContent = errText(e); });
   };

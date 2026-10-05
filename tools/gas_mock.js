@@ -47,7 +47,7 @@ function load(){
    const pathOf=f=>f.parent?pathOf(f.parent)+'/'+f.name:'';
    const iter=l=>{let k=0;return {hasNext:()=>k<l.length,next:()=>l[k++]}};
    let clock=1;const mk=(name,parent)=>{const f={name,parent,kids:[],files:[],id:'D'+(did++),created:clock++,trashed:false,getId(){return this.id},getName(){return this.name},setName(n){this.name=n;return this},getDateCreated(){return new Date(this.created)},setTrashed(x){this.trashed=x;if(x&&this.parent)this.parent.kids=this.parent.kids.filter(z=>z!==this);return this},
-     createFile(b){const id='file'+(fid++);const fo={blob:b,parent:f,trashed:false,updated:clock++,getId:()=>id,getName:()=>b.name,getLastUpdated(){return new Date(this.updated)},get path(){return pathOf(this.parent)+'/'+b.name},
+     createFile(b){const id='file'+(fid++);const fo={blob:b,parent:f,trashed:false,updated:clock++,getId:()=>id,getName:()=>b.name,getBlob(){return {name:b.name,setName(n){this.name=n;return this}}},getLastUpdated(){return new Date(this.updated)},get path(){return pathOf(this.parent)+'/'+b.name},
        setTrashed(x){this.trashed=x},moveTo(d){this.parent.files=this.parent.files.filter(z=>z!==this);this.parent=d;d.files.push(this);return this}};
        files[id]=fo;f.files.push(fo);global.PDFBLOBS[pathOf(f)+'/'+b.name]=b;return {getUrl:()=>'https://drive.google.com/file/d/'+id+'/view',getId:()=>id}},
      getFiles(){return iter(f.files.filter(x=>!x.trashed))},getFolders(){return iter(f.kids.slice())},

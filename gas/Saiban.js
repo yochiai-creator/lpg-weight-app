@@ -174,6 +174,35 @@ function makeSaibanPdf(input) {
   return out;
 }
 
+// メールに付ける採番表PDF。前日までは保存済みのPDFを使い（なければ作る）、今日の分はその時点までで作り直す
+function saibanPdfBlob_(date) {
+  const name = '採番表_' + date + '.pdf';
+  if (date < tokyoDate_(new Date())) {
+    const it = saibanFolder_(date).getFilesByName(name);
+    if (it.hasNext()) return it.next().getBlob().setName(name);
+  }
+  if (!makeSaibanPdf({ date: date }).count) return null;
+  const it2 = saibanFolder_(date).getFilesByName(name);
+  return it2.hasNext() ? it2.next().getBlob().setName(name) : null;
+}
+
+// ロットの容器が流れた日（採番表に載る入力がある日）。lotIds → { lotId: ['yyyy-MM-dd', ...] }
+function saibanDatesForLots_(lotIds) {
+  const out = {};
+  lotIds.forEach(function(id) { out[id] = []; });
+  const log = getSpreadsheet_().getSheetByName(SHEET_LOG);
+  if (!log || log.getLastRow() < 2) return out;
+  log.getRange(2, 1, log.getLastRow() - 1, LOG_HEADERS.length).getValues().forEach(function(r) {
+    const days = out[String(r[LC_LOT])];
+    const t = r[LC_TIME];
+    if (!days || !(t instanceof Date) || r[LC_STATUS] === '取消' ||
+      r[LC_KIND] === MISSING || r[LC_KIND] === KIND_FIX || r[LC_KIND] === KIND_DUP) return;
+    const d = tokyoDate_(t);
+    if (days.indexOf(d) < 0) days.push(d);
+  });
+  return out;
+}
+
 // 前日まででまだ作っていない日の採番表を作る（1回に3日分まで）。初回は昨日の分から
 function saibanStep_() {
   const props = sharedProps_();

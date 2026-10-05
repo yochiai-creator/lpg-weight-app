@@ -95,6 +95,11 @@ function ensureSettingRows_() {
   if (!sh) return;
   const have = sh.getLastRow() >= 2 ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().map(function(r) { return String(r[0]).trim(); }) : [];
   SETTING_ROWS.forEach(function(r) { if (have.indexOf(r[0]) < 0) sh.appendRow(r); });
+  // 「本文（まとめて送信）」がv71の初期値のままなら、採番表の行がある今の初期値に置き換える
+  const i = have.indexOf('本文（まとめて送信）');
+  if (i >= 0 && String(sh.getRange(2 + i, 2).getValue()) === BULK_BODY_OLD_DEFAULT) {
+    sh.getRange(2 + i, 2).setValue(SETTING_ROWS.filter(function(x) { return x[0] === '本文（まとめて送信）'; })[0][1]);
+  }
 }
 
 // ---------- シートを小さく保つ ----------
