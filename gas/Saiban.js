@@ -1,6 +1,6 @@
 // 採番表: その日に流れた容器を、入力記録の入力順に「流れた順番・容器番号」で並べる
 //  1日分を容器記号もまとめて1つの通し番号にして、
-//   ・スプレッドシート「LPG容器 質量入力 / 採番表 / LPG容器 採番表_2026」（年ごと）の「採番表」シートに書き足す
+//   ・スプレッドシート「LPG容器 質量入力 / 採番表 / 2026年 / LPG容器 採番表_2026-10」（月ごと）の「採番表」シートに書き足す
 //   ・PDF（紙の採番表と同じ形、1ページ200本＝50行×4列）を「LPG容器 質量入力 / 採番表 / 2026年 / 07月」に保存
 //  毎晩22時台に自動（nightlyJob）。取りこぼした日は入力画面を開いたときに裏で作る。ホームのボタンでいつでも作り直せる
 
@@ -99,30 +99,34 @@ function saibanFolder_(date) {
 const SAIBAN_SS_PREFIX = 'LPG容器 採番表_';
 const SAIBAN_HEADERS = ['作業日', '流れた順番', '容器記号', '容器番号', '容器区分', 'グループNo', '入力時刻', '入力者', '備考', 'ロットID'];
 
-function saibanSheet_(year) {
+// 一覧のスプレッドシートは月ごと（key = 'yyyy-MM'）。「採番表 / 2026年 / LPG容器 採番表_2026-10」
+// （v69より前は年ごと 'yyyy' で「採番表」直下。そのファイルはそのまま残る）
+function saibanSheet_(key) {
   const props = sharedProps_();
   let ids = {};
   try { ids = JSON.parse(props.getProperty('SAIBAN_SS_IDS') || '{}'); } catch (e) { ids = {}; }
-  if (ids[year]) {
-    try { return SpreadsheetApp.openById(ids[year]).getSheets()[0]; } catch (e) { /* 消されていたら作り直す */ }
+  if (ids[key]) {
+    try { return SpreadsheetApp.openById(ids[key]).getSheets()[0]; } catch (e) { /* 消されていたら作り直す */ }
   }
-  const found = findSpreadsheetIn_(childFolder_(getPdfFolder_(), SAIBAN_FOLDER), SAIBAN_SS_PREFIX + year);
-  if (found) { ids[year] = found.getId(); props.setProperty('SAIBAN_SS_IDS', JSON.stringify(ids)); return found.getSheets()[0]; }
-  const ss = SpreadsheetApp.create(SAIBAN_SS_PREFIX + year);
+  const base = childFolder_(getPdfFolder_(), SAIBAN_FOLDER);
+  const folder = /^\d{4}-\d{2}$/.test(key) ? childFolder_(base, key.slice(0, 4) + '年') : base;
+  const found = findSpreadsheetIn_(folder, SAIBAN_SS_PREFIX + key);
+  if (found) { ids[key] = found.getId(); props.setProperty('SAIBAN_SS_IDS', JSON.stringify(ids)); return found.getSheets()[0]; }
+  const ss = SpreadsheetApp.create(SAIBAN_SS_PREFIX + key);
   try { ss.setSpreadsheetTimeZone('Asia/Tokyo'); } catch (e) { /* 無視 */ }
-  try { DriveApp.getFileById(ss.getId()).moveTo(childFolder_(getPdfFolder_(), SAIBAN_FOLDER)); } catch (e) { /* マイドライブに残る */ }
+  try { DriveApp.getFileById(ss.getId()).moveTo(folder); } catch (e) { /* マイドライブに残る */ }
   const sh = ss.getSheets()[0].setName('採番表');
   sh.getRange(1, 1, 1, SAIBAN_HEADERS.length).setValues([SAIBAN_HEADERS]).setFontWeight('bold');
   sh.setFrozenRows(1);
   if (sh.getMaxColumns() > SAIBAN_HEADERS.length) sh.deleteColumns(SAIBAN_HEADERS.length + 1, sh.getMaxColumns() - SAIBAN_HEADERS.length);
-  ids[year] = ss.getId();
+  ids[key] = ss.getId();
   props.setProperty('SAIBAN_SS_IDS', JSON.stringify(ids));
   return sh;
 }
 
 // その日の行を書き直す（前に書いた同じ日の行は消してから書き足し、日付・順番で並べ直す）
 function writeSaibanSheet_(date, rows) {
-  const sh = saibanSheet_(date.slice(0, 4));
+  const sh = saibanSheet_(date.slice(0, 7));   // 月ごとのファイル
   const last = sh.getLastRow();
   if (last >= 2) {
     const days = sh.getRange(2, 1, last - 1, 1).getDisplayValues();

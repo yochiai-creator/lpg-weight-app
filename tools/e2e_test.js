@@ -416,9 +416,10 @@ function check(name, ok, detail) {
     check('採番表PDF: 修正に印・ダブりは載せない', html.includes('HXF' + freeS + '<span class="mk">修正</span>') && !html.includes('>W<'));
     const d = today.split('-');
     check('採番表PDF: 保存先は 採番表/年/月', !!key && key.startsWith('/LPG容器 質量入力/採番表/' + d[0] + '年/' + d[1] + '月/'), key);
-    const sss = global.ARCHIVES.find(x => x.name === 'LPG容器 採番表_' + d[0]), ssh = sss && sss.getSheets()[0];
+    const sss = global.ARCHIVES.find(x => x.name === 'LPG容器 採番表_' + d[0] + '-' + d[1]), ssh = sss && sss.getSheets()[0];
     const srows = ssh ? ssh.getRange(2, 1, ssh.getLastRow() - 1, 10).getValues() : [];
-    check('採番表シート: 年ごとのスプレッドシートに1行1本で書き足す', ssh && ssh.getName() === '採番表' && srows.length === 252 && srows[0][0] === today && srows[0][1] === 1 && srows[0][2] === 'HXF' && srows[0][3] === order[0] && srows[250][2] === 'HEP' && srows[250][5] === 598 && srows[251][8] === '修正', JSON.stringify(srows[0]) + JSON.stringify(srows[250]));
+    check('採番表シート: 月ごとのスプレッドシート（採番表/年/）に1行1本で書き足す', ssh && ssh.getName() === '採番表' && srows.length === 252 && srows[0][0] === today && srows[0][1] === 1 && srows[0][2] === 'HXF' && srows[0][3] === order[0] && srows[250][2] === 'HEP' && srows[250][5] === 598 && srows[251][8] === '修正', JSON.stringify(srows[0]) + JSON.stringify(srows[250]));
+    check('採番表シート: 置き場所は 採番表/年 フォルダ', sss && sss.fo && sss.fo.parent.name === d[0] + '年' && sss.fo.parent.parent.name === '採番表');
     c.makeSaibanPdf({ date: today });
     check('採番表: 作り直すと同じ日の行・PDFは置き換える', ssh.getLastRow() - 1 === 252 && global.PDFS.filter(p => p.endsWith('/採番表_' + today + '.pdf')).length === 1);
     check('採番表: 流れていない日は作らない', c.makeSaibanPdf({ date: '2000-01-01' }).count === 0);
