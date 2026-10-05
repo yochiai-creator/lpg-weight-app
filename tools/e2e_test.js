@@ -634,6 +634,33 @@ function check(name, ok, detail) {
     for (let i = 101; i <= 200; i++) r = c.recordEntry({ lotId: L.lotId, serial: '00' + i, mass: 16.7 });
     check('送付先が空なら全数そろっても入力中のまま（完了は手動）', r.full === true && !r.completed && c.findLot_(L.lotId).status === '入力中' && !!m.ss.getSheetByName(c.findLot_(L.lotId).sheetName));
   }
+  // ---- 終わりの桁が多い範囲でも開始の桁数で登録・6桁で登録されたロットを5桁に直す
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const r = c.createLots({ prefix: 'HXQ', start: '99701', end: '100000', kind: '20kg' });
+    const q = c.readLots_().filter(l => l.prefix === 'HXQ');
+    check('一括登録: 開始の桁数のまま・99999で止める', r.created.join(',') === 'HXQ99701,HXQ99801,HXQ99901' && q[2].end === '99999', JSON.stringify(q.map(l => l.start + '-' + l.end)));
+    // 以前の作りで6桁になったロットを再現
+    c.createLot({ prefix: 'HXP', start: '98901', kind: '20kg' });
+    const A = c.createLot({ prefix: 'HXP', start: '099001', end: '099100', kind: '20kg' });
+    const B = c.createLot({ prefix: 'HXP', start: '099901', end: '100000', kind: '20kg' });
+    c.createLot({ prefix: 'HXR', start: '00001', kind: '20kg' });   // HXRは00001が正しいので直さない
+    c.recordEntry({ lotId: A.lotId, serial: '099070', mass: 16.7 });
+    c.recordEntry({ lotId: A.lotId, serial: '099071', mass: 16.8 });
+    for (let i = 99901; i <= 99999; i++) c.recordEntry({ lotId: B.lotId, serial: '0' + i, mass: 16.7 });
+    c.completeLot({ lotId: B.lotId, send: false });
+    const oldPdfs = global.PDFS.filter(p => p.includes('HXP099901')).length;
+    c.fixPaddedLots_();
+    const a2 = c.findLot_('HXP99001'), b2 = c.findLot_('HXP99901');
+    check('6桁のロットを5桁に（ID・開始・終了・シート名）', a2.start === '99001' && a2.end === '99100' && a2.sheetName === '成績表_HXP99001-99100' && !!m.ss.getSheetByName('成績表_HXP99001-99100') && b2.end === '99999', JSON.stringify([a2.lotId, a2.start, a2.end, a2.sheetName, b2.end]));
+    check('HXR00001 のような正しい0始まりは直さない', !!c.findLot_('HXR00001'));
+    const lg = m.ss.getSheetByName('入力記録'), rows = lg.getRange(2, 1, lg.getLastRow() - 1, 18).getValues();
+    check('入力記録の容器番号・ロットIDも5桁に', rows.some(x => x[2] === 'HXP99001' && x[4] === 'HXP99070') && !rows.some(x => String(x[4]).startsWith('HXP0')));
+    check('入力状況は新しいIDで出る', c.getLot('HXP99001').entries['99070'] === 16.7);
+    check('古いIDで送られてきても正しいロットに入る', c.recordEntry({ lotId: 'HXP099001', serial: '099072', mass: 16.9 }).serial === '99072' && c.getLot('HXP99001').entries['99072'] === 16.9);
+    check('完了済みのPDFを5桁で作り直し、古いPDFはゴミ箱へ', global.PDFS.some(p => p.endsWith('成績表_HXP99901-99999.pdf')) && global.PDFS.filter(p => p.includes('HXP099901')).length === 0 && oldPdfs === 1, global.PDFS.join(' | '));
+    check('直すのは1回だけ', c.fixPaddedLots_() === 0);
+  }
   await browser.close();
 
   const failed = results.filter(r => !r.ok).length;

@@ -483,6 +483,9 @@ function findLot_(lotId) {
   }
   const lots = readLots_();
   for (let i = 0; i < lots.length; i++) if (lots[i].lotId === lotId) return lots[i];
+  // 番号を直したロット（例 HXP099001 → HXP99001）は古いIDでも見つける
+  const alias = lotAliases_()[lotId];
+  if (alias && alias !== lotId) return findLot_(alias);
   throw new Error('ロットが見つかりません: ' + lotId);
 }
 
@@ -581,16 +584,21 @@ function createLots(input) {
   const start = String(input.start || '').trim();
   const end = String(input.end || '').trim();
   if (!/^\d{3,8}$/.test(start) || !/^\d{3,8}$/.test(end)) throw new Error('開始・終了は数字で入力してください');
-  const s = Number(start), e = Number(end);
+  const s = Number(start);
+  let e = Number(end);
   if (e < s) throw new Error('終了が開始より小さくなっています');
-  const width = Math.max(start.length, end.length);
+  // 桁数は開始の番号に合わせる（99001〜100000 と入れても 099001 のような6桁にしない）。
+  // その桁数で表せない番号（5桁なら99999より後）は登録しない。最後のロットは 99901〜99999 のように短くなる
+  const width = start.length;
+  const cap = Math.pow(10, width) - 1;
+  if (e > cap) e = cap;
   const blocks = lotBlocks_(s, e);
   if (blocks.length > 50) throw new Error('一度に作れるのは50ロット（5000本）までです（' + blocks.length + 'ロットになります）');
   const prefix = String(input.prefix || '').trim().toUpperCase();
   const created = [], skipped = [];
   blocks.forEach(function(b) {
     try {
-      created.push(createLot({ prefix: prefix, start: padSerial_(b, width), end: padSerial_(b + LOT_MAX - 1, width), kind: input.kind, spec: input.spec }).lotId);
+      created.push(createLot({ prefix: prefix, start: padSerial_(b, width), end: padSerial_(Math.min(b + LOT_MAX - 1, cap), width), kind: input.kind, spec: input.spec }).lotId);
     } catch (err) {
       if (/登録済み/.test(err.message)) skipped.push(prefix + padSerial_(b, width));
       else throw new Error(err.message + '（' + created.length + 'ロット作成済み）');
@@ -766,6 +774,8 @@ function ensureLogDayLines_() {
 function recordOne_(payload) {
   {
     const lot = findLot_(payload.lotId);
+    // 古いID（6桁）で送られてきた容器番号は、ロットの桁数にそろえる（099070 → 99070）
+    if (String(payload.serial).length > lot.start.length && /^0/.test(String(payload.serial))) payload.serial = String(payload.serial).slice(String(payload.serial).length - lot.start.length);
     if (lot.status !== STATUS_ACTIVE) throw new Error('このロットは完了済みです: ' + lot.lotId);
     const serial = String(payload.serial);
     const index = Number(serial) - Number(lot.start);
@@ -1073,6 +1083,100 @@ function undeleteLot(lotId) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// ---------- 開始番号に余分な0が付いて登録されたロットを直す ----------
+// v69まで: 99001〜100000 のように終わりの桁が多い範囲を一括登録すると、開始も6桁（099001）で登録されていた。
+// 同じ記号に1桁少ないロットがあるのに、頭に0が付いた1桁多いロットを、正しい桁数に直す（1回だけ）。
+// 直したロットの古いIDは LOT_ALIASES に残し、古い画面からの送信も受け付ける
+function lotAliases_() {
+  try { return JSON.parse(sharedProps_().getProperty('LOT_ALIASES') || '{}'); } catch (e) { return {}; }
+}
+function fixPaddedLots_() {
+  const props = sharedProps_();
+  if (props.getProperty('PADDED_LOTS_FIXED') === '1') return 0;
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return 0;
+  let fixed = 0;
+  try {
+    const lots = readLots_();
+    const widths = {};
+    lots.forEach(function(l) { if (!/^0/.test(l.start)) (widths[l.prefix] = widths[l.prefix] || {})[l.start.length] = true; });
+    const targets = lots.filter(function(l) {
+      return /^0/.test(l.start) && widths[l.prefix] && widths[l.prefix][l.start.length - 1];
+    });
+    if (!targets.length) { props.setProperty('PADDED_LOTS_FIXED', '1'); return 0; }
+    const ss = getSpreadsheet_(), lotsSh = getSheet_(SHEET_LOTS), log = getSheet_(SHEET_LOG);
+    const aliases = lotAliases_(), dates = {};
+    // 入力記録: ロットIDと容器番号を直す
+    const n = log.getLastRow() - 1;
+    const ids = n > 0 ? log.getRange(2, LC_LOT + 1, n, 1).getValues() : [];
+    const sers = n > 0 ? log.getRange(2, LC_SERIAL + 1, n, 1).getValues() : [];
+    const times = n > 0 ? log.getRange(2, LC_TIME + 1, n, 1).getValues() : [];
+    const plan = targets.map(function(l) {
+      const w = l.start.length - 1;
+      const start = l.start.slice(1);
+      const end = l.end.length > w ? (/^0/.test(l.end) ? l.end.slice(1) : padSerial_(Math.pow(10, w) - 1, w)) : l.end;
+      const lotId = l.prefix + start + (l.spec ? '-' + SPEC_SOKO : '');
+      const sheetName = REPORT_PREFIX + l.prefix + start + '-' + end + (l.spec ? '_' + SPEC_SOKO : '');
+      return { old: l, start: start, end: end, lotId: lotId, sheetName: sheetName };
+    });
+    const byOld = {};
+    plan.forEach(function(p) { byOld[p.old.lotId] = p; aliases[p.old.lotId] = p.lotId; });
+    let changed = false;
+    for (let i = 0; i < n; i++) {
+      const p = byOld[String(ids[i][0])];
+      if (!p) continue;
+      ids[i][0] = p.lotId;
+      const full = String(sers[i][0]), pre = p.old.prefix;
+      const num = full.indexOf(pre) === 0 ? full.slice(pre.length) : full;
+      sers[i][0] = "'" + pre + (num.length > p.start.length && /^0/.test(num) ? num.slice(num.length - p.start.length) : num);
+      if (times[i][0] instanceof Date) dates[Utilities.formatDate(times[i][0], 'Asia/Tokyo', 'yyyy-MM-dd')] = true;
+      changed = true;
+    }
+    if (changed) {
+      log.getRange(2, LC_LOT + 1, n, 1).setValues(ids);
+      log.getRange(2, LC_SERIAL + 1, n, 1).setValues(sers.map(function(r) { return [typeof r[0] === 'string' && r[0][0] !== "'" ? "'" + r[0] : r[0]]; }));
+    }
+    plan.forEach(function(p) {
+      const l = p.old;
+      lotsSh.getRange(l.row, 1).setValue(p.lotId);
+      lotsSh.getRange(l.row, 4, 1, 2).setValues([["'" + p.start, "'" + p.end]]);
+      lotsSh.getRange(l.row, 8, 1, 2).setValues([[p.sheetName, "'" + p.start]]);
+      const lot = findLot_(p.lotId);
+      const sh = ss.getSheetByName(l.sheetName);
+      if (sh) {
+        sh.setName(p.sheetName);
+        sh.getRange('V2').setValue(lot.prefix + lot.start + ' ～ ' + lot.prefix + lot.end + (lot.spec ? '（' + lot.spec + '）' : ''));
+        sh.getRange('H26').setNumberFormat('@').setValue(lot.start);
+        // 短くなったロット（99901〜99999）の、範囲外になったマスを空にする
+        for (let i = lotSize_(lot); i < LOT_MAX; i++) {
+          const pos = slotPosition_(i);
+          sh.getRange(pos.row, pos.numberCol, 1, 6).setValues([['', '', '', '', '', '']]);
+        }
+      }
+      // 完了済みは成績表PDFを作り直す（古いPDFはゴミ箱へ）
+      if (lot.status === STATUS_DONE) {
+        const oldBlob = String(l.pdf || '').match(/\/d\/([\w-]{10,})/);
+        const tmp = ss.getSheetByName(lot.sheetName) || rebuildReportSheet_(lot);
+        exportLotPdf_(lot, tmp);
+        if (readSettings_().removeDoneSheet) ss.deleteSheet(tmp);
+        if (oldBlob) { try { DriveApp.getFileById(oldBlob[1]).setTrashed(true); } catch (e) { /* 無ければ飛ばす */ } }
+      }
+      fixed++;
+    });
+    props.setProperty('LOT_ALIASES', JSON.stringify(aliases));
+    props.setProperty('PADDED_LOTS_FIXED', '1');
+    LOG_TAIL_CACHE_ = null;
+    props.setProperty('PADDED_LOTS_DATES', Object.keys(dates).join(','));
+  } finally {
+    lock.releaseLock();
+  }
+  // 直した日の採番表を作り直す（PDF・一覧）
+  String(props.getProperty('PADDED_LOTS_DATES') || '').split(',').filter(String).forEach(function(d) {
+    try { makeSaibanPdf({ date: d }); } catch (e) { console.error('採番表の作り直しに失敗 ' + d + ': ' + e.message); }
+  });
+  return fixed;
 }
 
 function reopenLot(lotId) {

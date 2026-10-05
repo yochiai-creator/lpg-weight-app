@@ -11,6 +11,7 @@ const ARCHIVE_CHUNK = 8000;   // 1回に調べる行数（入力の待ち時間�
 function runMaintenance() {
   const out = { trimmed: false, archived: 0, archiveDone: true };
   try { mergeRootFolders_(); ensureFolderLayout_(); ensurePdfKindFolders_(); } catch (e) { console.error('フォルダの整理に失敗: ' + e.message); }
+  try { fixPaddedLots_(); } catch (e) { console.error('ロット番号の修正に失敗: ' + e.message); }
   // 2026-09-29: 完了済みなのに「最近完了したロット」の削除ボタンで消えてしまった HEP59701 を1回だけ戻す
   try {
     const props = sharedProps_();
