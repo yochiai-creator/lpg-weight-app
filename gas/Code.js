@@ -849,6 +849,7 @@ function recordOne_(payload) {
     // 古いID（6桁）で送られてきた容器番号は、ロットの桁数にそろえる（099070 → 99070）
     if (String(payload.serial).length > lot.start.length && /^0/.test(String(payload.serial))) payload.serial = String(payload.serial).slice(String(payload.serial).length - lot.start.length);
     if (lot.status !== STATUS_ACTIVE) throw new Error('このロットは完了済みです: ' + lot.lotId);
+    checkClaim_(lot.lotId, payload, true);
     const serial = String(payload.serial);
     const index = Number(serial) - Number(lot.start);
     if (!(index >= 0 && index < lotSize_(lot))) throw new Error('容器番号がロットの範囲外です: ' + serial);
@@ -962,6 +963,7 @@ function clearEntry(input) {
   lock.waitLock(20000);
   try {
     const lot = findLot_(input.lotId);
+    checkClaim_(lot.lotId, input, false);
     const serial = String(input.serial);
     const idx = Number(serial) - Number(lot.start);
     if (!(idx >= 0 && idx <= Number(lot.end) - Number(lot.start))) throw new Error('このロットの番号ではありません: ' + serial);
@@ -1025,6 +1027,7 @@ function completeLot(input) {
   lock.waitLock(20000);
   try {
     const lot = findLot_(input.lotId);
+    checkClaim_(lot.lotId, input, false);
     return finishLot_(lot, !!input.send);
   } finally {
     lock.releaseLock();
@@ -1033,6 +1036,7 @@ function completeLot(input) {
 
 // 完了にしてPDFを作り、送信設定があればメールで納品する
 function finishLot_(lot, send) {
+  try { releaseClaim_(lot.lotId); } catch (e) { /* 使用中の記録が読めなくても完了はする */ }
   const lots = getSheet_(SHEET_LOTS);
   lots.getRange(lot.row, 7).setValue(STATUS_DONE);
   lot.status = STATUS_DONE;
@@ -1088,6 +1092,7 @@ function changeLotKind(input) {
   lock.waitLock(20000);
   try {
     const lot = findLot_(input.lotId);
+    checkClaim_(lot.lotId, input, false);
     getSheet_(SHEET_LOTS).getRange(lot.row, 6).setValue(kind);
     const sh = getSpreadsheet_().getSheetByName(lot.sheetName);
     if (sh) setVolume_(sh, kind);
@@ -1098,11 +1103,15 @@ function changeLotKind(input) {
 }
 
 // 登録間違いのロットを削除: ロットの行と成績表シートを消す。入力記録は消さずに状態を「削除」にして残す
+// lotId: ロットID か { lotId, devId }
 function deleteLot(lotId) {
+  const who = typeof lotId === 'object' && lotId ? lotId : null;
+  if (who) lotId = who.lotId;
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
     const lot = findLot_(lotId);
+    checkClaim_(lot.lotId, who, false);
     if (lot.status === STATUS_DONE) throw new Error('完了したロットは削除できません（成績表を保存済み）: ' + lot.lotId);
     const ss = getSpreadsheet_();
     const sh = ss.getSheetByName(lot.sheetName);

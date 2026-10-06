@@ -629,6 +629,54 @@ function check(name, ok, detail) {
     check('ボタンでOKしてから候補タップで保存', c.getLot(L.lotId).entries['00106'] === 16.7);
     await p4.close();
   }
+  // ---- 入力中のロットは、別のiPadでは見るだけ
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const L = c.createLot({ prefix: 'LK', start: '00101', kind: '20kg' });
+    const L2 = c.createLot({ prefix: 'LK', start: '00201', kind: '20kg' });
+    const A = { devId: 'devA', worker: '佐藤', device: 'iPad-2' };
+    c.recordEntry(Object.assign({ lotId: L.lotId, serial: '00101', mass: 16.7 }, A));
+    let err = '';
+    try { c.recordEntry({ lotId: L.lotId, serial: '00102', mass: 16.7, devId: 'devB', worker: '山田' }); } catch (e) { err = e.message; }
+    check('使用中: 別のiPadからは入力できない（誰が入力中か出す）', err.includes('佐藤・iPad-2 が入力中') && c.getLot(L.lotId).entries['00102'] === undefined, err);
+    check('使用中: 入力したiPadは続けて入力できる', c.recordEntry(Object.assign({ lotId: L.lotId, serial: '00102', mass: 16.8 }, A)).serial === '00102');
+    check('使用中: 別のロットは別のiPadで入力できる', c.recordEntry({ lotId: L2.lotId, serial: '00201', mass: 16.7, devId: 'devB' }).serial === '00201');
+    check('使用中: 印が変わっても入力者と端末名が同じなら同じiPad', c.recordEntry({ lotId: L.lotId, serial: '00105', mass: 16.7, devId: 'devA2', worker: '佐藤', device: 'iPad-2' }).serial === '00105');
+    const tryB = (fn, arg) => { try { c[fn](arg); return ''; } catch (e) { return e.message; } };
+    check('使用中: 別のiPadからは消す・完了・機種変更・削除もできない',
+      tryB('clearEntry', { lotId: L.lotId, serial: '00101', devId: 'devB' }).includes('見るだけ') &&
+      tryB('completeLot', { lotId: L.lotId, send: false, devId: 'devB' }).includes('見るだけ') &&
+      tryB('changeLotKind', { lotId: L.lotId, kind: '50kg', devId: 'devB' }).includes('見るだけ') &&
+      tryB('deleteLot', { lotId: L.lotId, devId: 'devB' }).includes('見るだけ') && c.findLot_(L.lotId).status === '入力中');
+    const cl = c.getClaims('devB');
+    check('使用中の一覧: 自分のものと他のiPadのものを見分ける', cl[L.lotId] && !cl[L.lotId].mine && cl[L.lotId].worker === '佐藤' && cl[L2.lotId].mine);
+    c.createLot({ prefix: 'LK', start: '00301', kind: '20kg' });
+    // 別のiPadの画面: 番号を入れても入力バーは開かず、見るだけと出る
+    const p5 = await browser.newPage({ viewport: { width: 820, height: 1180 } });
+    p5.on('pageerror', e => check('ページでJSエラーなし(使用中)', false, e.message));
+    await p5.exposeFunction('__gas', (fn, arg) => {
+      try { const v = c[fn](JSON.parse(arg)); return JSON.stringify({ v: JSON.parse(JSON.stringify(v === undefined ? null : v)) }); }
+      catch (e) { return JSON.stringify({ err: e.message }); }
+    });
+    await p5.setContent(html); await p5.waitForTimeout(600);
+    check('使用中: ホームのカードに入力中と出て、完了・削除のボタンは出ない', (await p5.textContent('#activeLots')).includes('🔒 佐藤・iPad-2 が入力中') && (await p5.$$('#activeLots .card')).length === 3 && (await p5.$$eval('#activeLots .card', cs => cs.filter(x => x.textContent.includes('🔒')).map(x => x.querySelectorAll('button').length)))[0] === 0);
+    await p5.selectOption('#fWorker', '山田'); await p5.fill('#fDevice', 'iPad-1');
+    await p5.click('#btnStart'); await p5.waitForTimeout(200);
+    const k5 = async (seq, w = 250) => { for (const ch of seq) await p5.keyboard.press(KEY[ch] || 'Numpad' + ch); await p5.waitForTimeout(w); return p5.textContent('#notice'); };
+    const n5 = await k5('103');
+    check('使用中: 別のiPadで番号を入れても入力できず、見るだけと出る', n5.includes('見るだけ') && n5.includes('佐藤') && !(await p5.isVisible('#btnDateOk')), n5);
+    check('使用中: 表と上のバーに🔒', (await p5.textContent('#gridSub')).includes('🔒') && (await p5.textContent('#tabs')).includes('🔒'));
+    const n6 = await k5('305');
+    check('使用中: 使われていないロットは入力できる', !n6.includes('見るだけ'), n6);
+    await p5.close();
+    // ホームに戻る・完了・10分たつと外れる
+    check('ホームに戻ると外れる', c.releaseLots(A) === 1 && c.recordEntry({ lotId: L.lotId, serial: '00103', mass: 16.7, devId: 'devB' }).serial === '00103');
+    const cache = c.CacheService.getScriptCache(), mm = JSON.parse(cache.get('LOT_CLAIMS'));
+    mm[L.lotId].at = Date.now() - 11 * 60 * 1000; cache.put('LOT_CLAIMS', JSON.stringify(mm));
+    check('10分入力がなければ外れる', c.recordEntry(Object.assign({ lotId: L.lotId, serial: '00104', mass: 16.7 }, A)).serial === '00104');
+    c.completeLot({ lotId: L.lotId, send: false, devId: 'devA' });
+    check('完了すると外れる', !c.getClaims('devA')[L.lotId]);
+  }
   // ---- 10kg（50本ごと・内容積24）・30kg把手（内容積71）
   {
     const m = load(), c = m.ctx; c.setup();

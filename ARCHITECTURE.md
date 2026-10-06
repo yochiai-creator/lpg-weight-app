@@ -246,6 +246,13 @@ clasp redeploy AKfycbyDM2IQ8NY6LgQpLb0gpQoK32fAQtWVBrdBQduZ6FOBWREFn61Qb55R9Q20Y
 - シートの整備（ensureSheets_）は CacheService で10分に1回だけ。版を変えたら ENSURE_VERSION を変えるとすぐ走る。
 - 入力画面の上のバーは、中身（表示中のロット・各ロットの本数）が変わったときだけ作り直す。
 
+### 入力中のロットは他のiPadでは見るだけ（v74）
+
+- gas/Claim.js: iPadが質量を入れたロットはそのiPadの「使用中」（CacheService の LOT_CLAIMS、{ロットID: {devId, worker, device, at}}）。ほかのiPadからの入力・消す・完了・機種変更・削除はサーバーで止める（checkClaim_）。
+- 外れるとき: ホームに戻る（releaseLots）・完了（finishLot_）・10分入力がない（CLAIM_IDLE_MS）。
+- iPadの見分けは画面が localStorage に持つ印（lpg.devId）。印が消えても入力者と端末名が同じなら同じiPadとみなす。印のない古い画面からの保存は確かめない。
+- 画面: 20秒ごとに getClaims。別のiPadが使用中のロットは上のバー・表・ホームのカードに🔒と「○○ が入力中（見るだけ）」。番号を入れても入力バーを開かない。カードの完了・機種変更・削除ボタンは出さない。
+
 ---
 
 ## 8. 制約・注意点

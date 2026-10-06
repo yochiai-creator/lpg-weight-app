@@ -28,13 +28,15 @@ class Range{constructor(sh,r,c,nr,nc){Object.assign(this,{sh,r,c,nr,nc})}
 let ssid=1;const SSS={};class SS{constructor(name){this.sheets=[];this.tz='America/Los_Angeles';this.id='SS'+(ssid++);this.name=name;SSS[this.id]=this} getSpreadsheetTimeZone(){return this.tz} setSpreadsheetTimeZone(z){this.tz=z} getId(){return this.id} getUrl(){return 'https://docs.google.com/spreadsheets/d/'+this.id} getSheetByName(n){return this.sheets.find(s=>s.name===n)||null}
  insertSheet(n){const s=new Sheet(this,n);this.sheets.push(s);return s} setActiveSheet(){} moveActiveSheet(){} getNumSheets(){return this.sheets.length} deleteSheet(sh){this.sheets=this.sheets.filter(x=>x!==sh)} getSheets(){return this.sheets.slice()}}
 function load(){
- const ss=new SS(); const props={};
+ const ss=new SS(); const props={}; const cache={};
  const tpl=ss.insertSheet('書式_成績表'); tpl.set(1,1,'高圧ガス容器検査成績表\n\n※容器の製造年月を目視確認の上、容器番号前にチェックを入れる'); tpl.set(5,2,'001'); tpl.set(5,4,3); tpl.set(5,6,',');
  const ctx={console,Date,Math,JSON,
   SpreadsheetApp:{BorderStyle:{SOLID_THICK:'thick',SOLID_MEDIUM:'medium'},getActiveSpreadsheet:()=>ss,openById:(id)=>SSS[id]||ss,create:(n)=>{const x=new SS(n);x.insertSheet('シート1');global.ARCHIVES.push(x);return x},flush(){},
    newTextStyle:()=>{const st={};const b={setFontSize(n){st.size=n;return b},setBold(x){st.bold=x;return b},build(){return st}};return b},
    newRichTextValue:()=>{const rv={runs:[]};const b={setText(t){rv.text=t;return b},setTextStyle(a,z,st){rv.runs.push({a,z,size:st.size,bold:st.bold});return b},build(){return rv}};return b}},
   PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k]||null,setProperty:(k,v)=>props[k]=v,deleteProperty:k=>{delete props[k]}})},
+  // 整備の10分おき（ENSURED_）はテストでは毎回走らせたいので覚えない
+  CacheService:{getScriptCache:()=>({get:k=>k.startsWith('ENSURED_')?null:(cache[k]===undefined?null:cache[k]),put:(k,v)=>{if(!k.startsWith('ENSURED_'))cache[k]=v},remove:k=>{delete cache[k]}})},
   LockService:{getScriptLock:()=>({waitLock(){},tryLock(){return true},releaseLock(){}})},
   Session:{getActiveUser:()=>({getEmail:()=>'tester@example.com'})},
   Utilities:{formatDate:(d,tz,f)=>{const p=n=>('0'+n).slice(-2);return String(f).replace(/yyyy|yy|MM|dd|HH|mm|ss/g,t=>({yyyy:d.getFullYear(),yy:p(d.getFullYear()%100),MM:p(d.getMonth()+1),dd:p(d.getDate()),HH:p(d.getHours()),mm:p(d.getMinutes()),ss:p(d.getSeconds())})[t])},newBlob:(c,t,n)=>({name:n,type:t,content:c,getName(){return n}})},
@@ -66,6 +68,7 @@ function load(){
  vm.runInContext(fs.readFileSync(GAS+'/Delivery.js','utf8'),ctx);
  vm.runInContext(fs.readFileSync(GAS+'/Archive.js','utf8'),ctx);
  vm.runInContext(fs.readFileSync(GAS+'/Saiban.js','utf8'),ctx);
+ vm.runInContext(fs.readFileSync(GAS+'/Claim.js','utf8'),ctx);
  ensure=vm.runInContext('ensureSheet_',ctx); ensure(ss,'ロット',vm.runInContext('LOT_HEADERS',ctx)); ensure(ss,'入力記録',vm.runInContext('LOG_HEADERS',ctx));
  const st=ensure(ss,'設定',['項目','値','説明']); vm.runInContext('SETTING_ROWS',ctx).forEach((r,i)=>{st.set(i+2,1,r[0]);st.set(i+2,2,r[1]);});
  st.set(2,2,'nouhin@example.com');

@@ -35,6 +35,8 @@
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
   .card h3 { margin: 0 0 4px; font-size: 18px; }
   .card .sub { color: var(--muted); font-size: 13px; }
+  .lock-note { color: #b25e00; font-weight: 700; font-size: 14px; }
+  .ln-lock { margin-right: 4px; font-size: .8em; }
   .bulk-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; margin-top: 10px; max-height: 420px; overflow-y: auto; }
   .bulk-list label { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: 15px; background: var(--card); }
   .bulk-list input { width: 22px; height: 22px; flex: none; }
@@ -261,7 +263,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v73（動きを軽く）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v74（入力中のロットは他のiPadでは見るだけ）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -453,6 +455,7 @@
     lastKey: null,
     lastByLot: {},
     overwrite: '',     // 上書きの理由: 'fix'（修正）/ 'dup'（ダブり）
+    claims: {},        // 使用中のロット { lotId: { worker, device, mine } }
     seal: false,       // シール違い
     typical: {},       // 容器区分ごとのいつもの質量（設定シート「標準質量」）     // ロットごとの最後に入れた質量（前回±0.1ボタン用）
     workers: [], mail: { to: '', cc: '', auto: true },
@@ -488,6 +491,33 @@
     return false;
   }
   function homeMsg(text, kind) { $('lotMsg').className = 'msg' + (kind ? ' ' + kind : ''); $('lotMsg').textContent = text; }
+  // このiPadの印（使用中のロットを見分ける）
+  const DEV_ID = (function() {
+    let id = store.get('lpg.devId');
+    if (!id) { id = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); store.set('lpg.devId', id); }
+    return id;
+  })();
+  // 別のiPadが使用中なら { worker, device }
+  function lockedBy(l) { const c = l && S.claims[l.lotId]; return c && !c.mine ? c : null; }
+  function lockText(c) { return [c.worker, c.device].filter(function(x) { return x; }).join('・') || '別のiPad'; }
+  function refuseLocked(l) {
+    const c = lockedBy(l);
+    if (!c) return false;
+    setNotice('🔒 ' + lockText(c) + ' が入力中のため、' + l.prefix + l.start + '〜' + l.end + ' は見るだけです', 'err');
+    beep(false); render();
+    return true;
+  }
+  let claimsTimer = null;
+  function pollClaims() {
+    clearTimeout(claimsTimer);
+    return call('getClaims', { devId: DEV_ID, worker: worker(), device: $('fDevice').value.trim() }).then(function(m) {
+      // まだ保存していない自分の入力があるロットは自分の使用中として扱う
+      Object.keys(S.claims).forEach(function(k) { if (S.claims[k].mine && !m[k] && S.queue.some(function(q) { return q.lotId === k; })) m[k] = S.claims[k]; });
+      const changed = JSON.stringify(m) !== JSON.stringify(S.claims);
+      S.claims = m || {};
+      if (changed) { if ($('entry').classList.contains('hidden')) renderHome(); else render(); }
+    }).catch(function() { /* 次で読み直す */ }).then(function() { claimsTimer = setTimeout(pollClaims, 20000); });
+  }
   function errText(e) { return (e && e.message) ? e.message : String(e); }
   function pad(n, w) { let s = String(n); while (s.length < w) s = '0' + s; return s; }
   function disp3(serial) { return ('00' + (Number(serial) % 1000)).slice(-3); }
@@ -627,6 +657,13 @@
       (done ? (l.sentAt ? '　送信済 ' + l.sentAt : (l.sentTo ? '　' + l.sentTo : '　未送信')) : '') +
       '';
     const row = div.querySelector('.row');
+    // 別のiPadが入力中のロットは見るだけ（完了・機種変更・削除のボタンを出さない）
+    const lk = !done && lockedBy(l);
+    if (lk) {
+      const n = document.createElement('div'); n.className = 'lock-note'; n.textContent = '🔒 ' + lockText(lk) + ' が入力中（見るだけ）';
+      row.appendChild(n);
+      return div;
+    }
     // 登録間違いの削除（最後に付ける）
     const addDelete = function() {
       const del = document.createElement('button');
@@ -640,7 +677,7 @@
           return;
         }
         del.disabled = true;
-        call('deleteLot', l.lotId).then(function() { homeMsg('削除しました: ' + name, 'ok'); return loadHome(); })
+        call('deleteLot', { lotId: l.lotId, devId: DEV_ID }).then(function() { homeMsg('削除しました: ' + name, 'ok'); return loadHome(); })
           .catch(function(e) { homeMsg(errText(e), 'err'); del.disabled = false; });
       };
       row.appendChild(del);
@@ -669,7 +706,7 @@
         cancel.onclick = function() { row.replaceChild(kb, wrap); };
         ok.onclick = function() {
           ok.disabled = true;
-          call('changeLotKind', { lotId: l.lotId, kind: sel.value }).then(loadHome)
+          call('changeLotKind', { lotId: l.lotId, kind: sel.value, devId: DEV_ID }).then(loadHome)
             .catch(function(e) { homeMsg(errText(e), 'err'); ok.disabled = false; });
         };
       };
@@ -873,6 +910,9 @@
   $('btnHome').onclick = function() {
     if (S.queue.length && !armed(this, 'もう一度押すと戻る')) { setNotice('まだ送信中の入力があります。一覧に戻っても送信は続きます', 'warn'); return; }
     $('entry').classList.add('hidden'); $('home').classList.remove('hidden'); $('btnHome').classList.add('hidden');
+    // ホームに戻ったらこのiPadの使用中を外す（まだ送信中の入力があるロットは送り終わると、また使用中になる）
+    Object.keys(S.claims).forEach(function(k) { if (S.claims[k].mine) delete S.claims[k]; });
+    call('releaseLots', { devId: DEV_ID, worker: worker(), device: $('fDevice').value.trim() }).catch(function() { /* 10分で外れる */ });
     loadHome();
   };
 
@@ -903,7 +943,7 @@
     if (miss && !armed($('dSave'), 'もう一度押すと完了')) { $('dlgMsg').className = 'msg err'; $('dlgMsg').textContent = miss.split(':')[0] + ' あります。このまま完了にするなら、もう一度押してください'; return; }
     const btn = $('dSave'); btn.disabled = true;
     $('dlgMsg').className = 'msg'; $('dlgMsg').textContent = 'PDFを作成中…' + ($('dSend').checked ? '（メール送信します）' : '');
-    call('completeLot', { lotId: doneLot.lotId, send: $('dSend').checked }).then(function(r) {
+    call('completeLot', { lotId: doneLot.lotId, send: $('dSend').checked, devId: DEV_ID }).then(function(r) {
       $('dlgDone').close(); homeMsg(doneResultText(r), r.mailError ? 'err' : 'ok');
       return loadHome();
     }).catch(function(e) {
@@ -1132,6 +1172,12 @@
   }
 
   function goMass(hit) {
+    const lk = lockedBy(hit.lot);
+    if (lk) {
+      S.viewLotId = hit.lot.lotId; beep(false);
+      resetEntry('🔒 ' + label(hit.lot, hit.serial) + ' のロットは ' + lockText(lk) + ' が入力中のため見るだけです → 次の容器番号', 'err');
+      return;
+    }
     const prev = hit.lot.entries[hit.serial];
     if (hit.lot.spec === SOKO) return markCircle(hit, prev);
     // 入力済みの容器でも警告は出さずに入力バーを開く（ダブりはバーの「ダブり」、入力ミスは質量を入れ直して訂正）
@@ -1201,6 +1247,8 @@
   let seq = 0;
   function enqueue(entry) {
     entry.clientId = 'c' + (++seq);
+    entry.devId = DEV_ID;
+    S.claims[entry.lotId] = { worker: entry.worker || '', device: entry.device || '', mine: true };
     const key = entry.lotId + '|' + entry.serial;
     S.pending[key] = (S.pending[key] || 0) + 1;
     delete S.errors[key];
@@ -1429,8 +1477,9 @@
   function clearEntryOf(lot, serial) {
     const key = lot.lotId + '|' + serial;
     if (S.pending[key]) { setNotice('保存中です。少し待ってからもう一度押してください', 'warn'); beep(false); render(); return; }
+    if (refuseLocked(lot)) return;
     setNotice('消しています…', 'info'); render();
-    call('clearEntry', { lotId: lot.lotId, serial: serial }).then(function() {
+    call('clearEntry', { lotId: lot.lotId, serial: serial, devId: DEV_ID }).then(function() {
       delete lot.entries[serial];
       if (lot.dups) delete lot.dups[label(lot, serial)];
       if (lot.seals) delete lot.seals[label(lot, serial)];
@@ -1591,7 +1640,7 @@
     const tabs = $('tabs');
     const shownLots = tabLots();
     // 中身が変わらないときは作り直さない（キーを押すたびに全部のタブを作り直すと重い）
-    const sig = S.viewLotId + '#' + shownLots.map(function(l) { const c = countOf(l); return l.lotId + ':' + (c.filled + c.missing) + '/' + c.size + (l.spec || '') + (l.kind || ''); }).join(',');
+    const sig = S.viewLotId + '#' + shownLots.map(function(l) { const c = countOf(l); return l.lotId + ':' + (c.filled + c.missing) + '/' + c.size + (l.spec || '') + (l.kind || '') + (lockedBy(l) ? 'L' : ''); }).join(',');
     if (sig === tabsSig && tabs.childNodes.length) return;
     tabsSig = sig;
     const keep = tabs.scrollLeft;
@@ -1607,7 +1656,7 @@
      g.lots.forEach(function(l) {
       const b = document.createElement('button');
       const c = countOf(l);
-      b.innerHTML = (l.spec === SOKO ? '<span class="ln-soko">底黒</span>' : '') + lotNumHtml(l, true) +
+      b.innerHTML = (lockedBy(l) ? '<span class="ln-lock">🔒</span>' : '') + (l.spec === SOKO ? '<span class="ln-soko">底黒</span>' : '') + lotNumHtml(l, true) +
         '<span class="ln-cnt">' + (c.filled + c.missing) + '/' + c.size + '</span>';
       b.tabIndex = -1;
       b.className = (l.lotId === S.viewLotId ? 'on' : '') + (c.filled + c.missing >= c.size ? ' done' : '');
@@ -1637,6 +1686,8 @@
       const ds = document.createElement('b'); ds.style.color = color; ds.textContent = '　' + name + ' ' + n + '件'; $('gridSub').appendChild(ds);
     };
     markText(l.dups, 'ダブり', 'var(--ng)'); markText(l.seals, 'シール違い', '#7a5bc4');
+    const lk = lockedBy(l);
+    if (lk) { const lb = document.createElement('b'); lb.className = 'lock-note'; lb.textContent = '　🔒 ' + lockText(lk) + ' が入力中（見るだけ）'; $('gridSub').appendChild(lb); }
     const rep = Object.keys(l.entries).filter(function(k) { return l.entries[k] === REPAIR; }).length;
     if (rep) { const rs = document.createElement('b'); rs.style.color = '#c77700'; rs.textContent = '　修正 ' + rep + '本'; $('gridSub').appendChild(rs); }
     $('gridCount').textContent = (c.filled + c.missing) + ' / ' + c.size;
@@ -1703,6 +1754,7 @@
 
   loadCachedBoot();
   loadHome();
+  pollClaims();
 })();
 </script>
 </body>
