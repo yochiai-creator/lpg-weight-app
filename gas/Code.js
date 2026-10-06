@@ -775,7 +775,7 @@ function recordEntry(payload) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    LAST_LOG_DAY_ = null; NEXT_LOG_ROW_ = 0; ENTRY_LOTS_ = {};
+    LAST_LOG_DAY_ = null; NEXT_LOG_ROW_ = 0; ENTRY_LOTS_ = {}; CLAIMS_EXEC_ = null;
     return recordOne_(payload);
   } finally {
     lock.releaseLock();
@@ -789,7 +789,7 @@ function recordEntries(list) {
   lock.waitLock(20000);
   const out = { results: [], error: '', errorClientId: '' };
   try {
-    LAST_LOG_DAY_ = null; NEXT_LOG_ROW_ = 0; ENTRY_LOTS_ = {};
+    LAST_LOG_DAY_ = null; NEXT_LOG_ROW_ = 0; ENTRY_LOTS_ = {}; CLAIMS_EXEC_ = null;
     for (let i = 0; i < (list || []).length; i++) {
       try {
         out.results.push(recordOne_(list[i]));
