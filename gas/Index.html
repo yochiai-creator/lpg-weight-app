@@ -261,7 +261,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v72（まとめて送信に採番表も）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v73（動きを軽く）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -1586,11 +1586,16 @@
   })();
 
   let lastTabLot = null;
+  let tabsSig = '';
   function renderTabs() {
     const tabs = $('tabs');
+    const shownLots = tabLots();
+    // 中身が変わらないときは作り直さない（キーを押すたびに全部のタブを作り直すと重い）
+    const sig = S.viewLotId + '#' + shownLots.map(function(l) { const c = countOf(l); return l.lotId + ':' + (c.filled + c.missing) + '/' + c.size + (l.spec || '') + (l.kind || ''); }).join(',');
+    if (sig === tabsSig && tabs.childNodes.length) return;
+    tabsSig = sig;
     const keep = tabs.scrollLeft;
     tabs.innerHTML = '';
-    const shownLots = tabLots();
     if (shownLots.length < 2) return;
     let active = null;
     const groups = groupByKind(shownLots);

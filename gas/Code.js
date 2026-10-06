@@ -83,7 +83,17 @@ function doGet() {
 }
 
 // シートの整備（タイムゾーン・列見出し・シート名・見出しの文字サイズ）。1つが失敗しても残りは必ず行う
+// 開くたびに全部確かめると起動が遅くなるので、整えたら10分は飛ばす（新しい版を入れたら ENSURE_VERSION を変えてすぐ行う）
+const ENSURE_VERSION = 'v73';
 function ensureSheets_() {
+  let cache = null;
+  try { cache = CacheService.getScriptCache(); } catch (e) { cache = null; }
+  const key = 'ENSURED_' + ENSURE_VERSION;
+  try { if (cache && cache.get(key)) return; } catch (e) { /* 確かめる */ }
+  ensureSheetsNow_();
+  try { if (cache) cache.put(key, '1', 600); } catch (e) { /* 次も確かめる */ }
+}
+function ensureSheetsNow_() {
   [ensureTokyoTime_, ensureLogHeaders_, ensureTitleFont_, ensureSettingRows_, ensureTypicalDefault_, ensureVolumes_, ensureVolumes3_, ensureTrim_, cleanDoneSheets_, ensureLogDayLines_].forEach(function(fn) {
     try { fn(); } catch (e) { console.error('シートの整備に失敗: ' + (fn.name || '') + ' ' + e.message); }
   });
@@ -500,22 +510,68 @@ function lotSize_(lot) {
 
 function getBootstrap() {
   ensureSheets_();
-  const lots = readLots_().filter(function(l) { return l.status === STATUS_ACTIVE; });
+  const all = readLots_();
+  const lots = all.filter(function(l) { return l.status === STATUS_ACTIVE; });
+  const done = all.filter(function(l) { return l.status === STATUS_DONE; }).slice(-10).reverse();
   const settings = readSettings_();
   const marks = readMarksAll_();
+  const grids = readGrids_(lots.concat(done));
+  const withP = function(l) { return withProgress_(l, marks, grids[l.sheetName]); };
   return {
     user: userEmail_(),
     workers: readWorkers_(),
     mail: { to: settings.to, cc: settings.cc, auto: settings.auto },
     typical: settings.typical,
-    lots: lots.map(function(l) { return withProgress_(l, marks); }),
-    recentDone: readLots_().filter(function(l) { return l.status === STATUS_DONE; })
-      .slice(-10).reverse().map(function(l) { return withProgress_(l, marks); })
+    lots: lots.map(withP),
+    recentDone: done.map(withP)
   };
 }
 
-function withProgress_(lot, marksMap) {
-  lot.entries = readProgress_(lot);
+// ロットの成績表の表を、まとめて1回で読む（シート1枚ずつ読むとロットの数だけ待つ）。{ シート名: getValues と同じ形 }
+// Sheets API（高度なサービス）が使えなければ1枚ずつ読む。成績表シートがないロットは入れない
+function readGrids_(lots) {
+  const ss = getSpreadsheet_();
+  const have = {};
+  ss.getSheets().forEach(function(sh) { have[sh.getName()] = sh; });
+  const names = [];
+  lots.forEach(function(l) { if (have[l.sheetName] && names.indexOf(l.sheetName) < 0) names.push(l.sheetName); });
+  const out = {};
+  if (!names.length) return out;
+  const width = BLOCK_WIDTH * BLOCKS;
+  const a1 = colLetter_(GRID_FIRST_COL) + GRID_FIRST_ROW + ':' + colLetter_(GRID_FIRST_COL + width - 1) + (GRID_FIRST_ROW + GRID_ROWS - 1);
+  try {
+    if (typeof Sheets === 'undefined') throw new Error('no Sheets');
+    const res = Sheets.Spreadsheets.Values.batchGet(ss.getId(), {
+      ranges: names.map(function(n) { return "'" + n.replace(/'/g, "''") + "'!" + a1; }),
+      valueRenderOption: 'UNFORMATTED_VALUE'
+    });
+    (res.valueRanges || []).forEach(function(vr, i) {
+      const rows = vr.values || [];
+      const grid = [];
+      for (let r = 0; r < GRID_ROWS; r++) {
+        const src = rows[r] || [], row = [];
+        for (let c = 0; c < width; c++) row.push(src[c] === undefined || src[c] === null ? '' : src[c]);
+        grid.push(row);
+      }
+      out[names[i]] = grid;
+    });
+    if (Object.keys(out).length === names.length) return out;
+  } catch (e) { /* 1枚ずつ読む */ }
+  names.forEach(function(n) {
+    out[n] = have[n].getRange(GRID_FIRST_ROW, GRID_FIRST_COL, GRID_ROWS, width).getValues();
+  });
+  return out;
+}
+
+function colLetter_(n) {
+  let s = '';
+  for (; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s;
+  return s;
+}
+
+// grid: readGrids_ で読んだ表（省略時はシートを読む）
+function withProgress_(lot, marksMap, grid) {
+  lot.entries = grid ? progressFromGrid_(lot, grid) : readProgress_(lot);
   const m = (marksMap || readMarksAll_())[lot.lotId] || {};
   lot.dups = m.dups || {};
   lot.seals = m.seals || {};
@@ -527,7 +583,15 @@ function withProgress_(lot, marksMap) {
 function readProgress_(lot) {
   const sh = getSpreadsheet_().getSheetByName(lot.sheetName);
   if (!sh) return progressFromLog_(lot);
-  const values = sh.getRange(GRID_FIRST_ROW, GRID_FIRST_COL, GRID_ROWS, BLOCK_WIDTH * BLOCKS).getValues();
+  return progressFromGrid_(lot, sh.getRange(GRID_FIRST_ROW, GRID_FIRST_COL, GRID_ROWS, BLOCK_WIDTH * BLOCKS).getValues());
+}
+
+function countGrid_(lot, values) {
+  return Object.keys(progressFromGrid_(lot, values)).length;
+}
+
+// 成績表の表（getValues の値）から入力状況を出す
+function progressFromGrid_(lot, values) {
   const result = {};
   const size = lotSize_(lot);
   const width = lot.start.length;
@@ -711,7 +775,7 @@ function recordEntry(payload) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    LAST_LOG_DAY_ = null;
+    LAST_LOG_DAY_ = null; NEXT_LOG_ROW_ = 0; ENTRY_LOTS_ = {};
     return recordOne_(payload);
   } finally {
     lock.releaseLock();
@@ -725,7 +789,7 @@ function recordEntries(list) {
   lock.waitLock(20000);
   const out = { results: [], error: '', errorClientId: '' };
   try {
-    LAST_LOG_DAY_ = null;
+    LAST_LOG_DAY_ = null; NEXT_LOG_ROW_ = 0; ENTRY_LOTS_ = {};
     for (let i = 0; i < (list || []).length; i++) {
       try {
         out.results.push(recordOne_(list[i]));
@@ -742,6 +806,9 @@ function recordEntries(list) {
 }
 
 let LOG_LAYOUT_CHECKED_ = false;
+// 1回の保存（まとめて保存を含む）の中で使い回す値。シートを読むと、その前の書き込みを待つので遅くなる
+let NEXT_LOG_ROW_ = 0;     // 入力記録の次に書く行
+let ENTRY_LOTS_ = {};      // ロットID → ロット（完了にすると status も同じものが変わる）
 
 // ---------- 日付が変わる所に線（入力記録・採番表の一覧） ----------
 const DAY_LINE_COLOR = '#1f2a5c';
@@ -778,7 +845,7 @@ function ensureLogDayLines_() {
 }
 function recordOne_(payload) {
   {
-    const lot = findLot_(payload.lotId);
+    const lot = ENTRY_LOTS_[payload.lotId] || (ENTRY_LOTS_[payload.lotId] = findLot_(payload.lotId));
     // 古いID（6桁）で送られてきた容器番号は、ロットの桁数にそろえる（099070 → 99070）
     if (String(payload.serial).length > lot.start.length && /^0/.test(String(payload.serial))) payload.serial = String(payload.serial).slice(String(payload.serial).length - lot.start.length);
     if (lot.status !== STATUS_ACTIVE) throw new Error('このロットは完了済みです: ' + lot.lotId);
@@ -800,11 +867,14 @@ function recordOne_(payload) {
 
     const sh = getSheet_(lot.sheetName);
     const pos = slotPosition_(index);
-    const range = sh.getRange(pos.row, pos.numberCol + 1, 1, 5);
-    const prev = parseMassCells_(range.getValues()[0]);
+    // 表全体を書く前に1回だけ読み、上書き前の値と入力済みの本数を出す（書いた後に読み直すと遅い）
+    const grid = sh.getRange(GRID_FIRST_ROW, GRID_FIRST_COL, GRID_ROWS, BLOCK_WIDTH * BLOCKS).getValues();
+    const filledBefore = countGrid_(lot, grid);
+    const pr = pos.row - GRID_FIRST_ROW, pc = pos.numberCol + 1 - GRID_FIRST_COL;
+    const prev = parseMassCells_(grid[pr].slice(pc, pc + 5));
     // 底黒: 〇が付いている容器がもう一度流れても二重には記録しない
     if (mass === CIRCLE && prev === CIRCLE) return { recordId: null, clientId: payload.clientId, serial: serial, mass: mass, prev: prev, already: true };
-    range.setValues([massCells_(mass)]);
+    sh.getRange(pos.row, pos.numberCol + 1, 1, 5).setValues([massCells_(mass)]);
 
     const recordId = 'R' + Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyMMddHHmmss') +
       Math.floor(Math.random() * 1000);
@@ -827,15 +897,17 @@ function recordOne_(payload) {
       '入力者': String(payload.worker || ''), '端末': String(payload.device || ''), '取消日時': '', '備考': note
     };
     const prevDay = lastLogDay_(logSh);
+    if (!NEXT_LOG_ROW_) NEXT_LOG_ROW_ = logSh.getLastRow() + 1;
+    const logRow = NEXT_LOG_ROW_++;
     logSh.appendRow(LOG_HEADERS.map(function(h) { return row[h]; }));
-    formatLogMass_(logSh, logSh.getLastRow(), 1);
+    formatLogMass_(logSh, logRow, 1);
     const today = Utilities.formatDate(row['入力日時'], 'Asia/Tokyo', 'yyyy-MM-dd');
-    if (prevDay && prevDay !== today) dayLine_(logSh, logSh.getLastRow(), LOG_HEADERS.length);
+    if (prevDay && prevDay !== today) dayLine_(logSh, logRow, LOG_HEADERS.length);
     LAST_LOG_DAY_ = today;
     const result = { recordId: recordId, clientId: payload.clientId, serial: serial, mass: mass, prev: prev, kind: kind, note: note };
 
     // 全数（欠番を含む）そろったら自動で完了・PDF作成・送信する
-    if (prev === null && countFilled_(lot) >= lotSize_(lot)) {
+    if (prev === null && filledBefore + 1 >= lotSize_(lot)) {
       result.full = true;
       // 自動で完了・送信するのは、送付先が入っていて「自動送信=する」のときだけ（送付先が空なら完了は手動で）
       const st = readSettings_();

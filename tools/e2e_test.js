@@ -711,6 +711,38 @@ function check(name, ok, detail) {
     check('v71の初期値のままの本文は採番表の行がある本文に置き換える', String(conf.getRange(2 + bi, 2).getValue()).includes('{採番表}'));
     check('まとめて送信の候補は完了ロットだけ（新しい順）', c.listDoneLots().filter(l => l.prefix === 'BM').length === 22 && c.listDoneLots()[0].lotId === ids[21]);
   }
+  // ---- 起動を軽く: 成績表はまとめて1回で読む・保存は書く前に1回だけ読む
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const A = c.createLot({ prefix: 'SP', start: '00101', kind: '20kg' });
+    const B = c.createLot({ prefix: 'SP', start: '00201', kind: '20kg' });
+    c.recordEntry({ lotId: A.lotId, serial: '00105', mass: 16.7 });
+    c.recordEntry({ lotId: A.lotId, serial: '00106', missing: true });
+    c.recordEntry({ lotId: B.lotId, serial: '00299', mass: 17.2 });
+    const plain = JSON.stringify(c.getBootstrap().lots.map(l => l.entries));
+    let calls = 0;
+    c.Sheets = { Spreadsheets: { Values: { batchGet: (id, o) => {
+      calls++;
+      return { valueRanges: o.ranges.map(r => {
+        const name = r.match(/^'(.*)'!/)[1].replace(/''/g, "'");
+        const v = m.ss.getSheetByName(name).getRange(5, 2, 20, 30).getValues().map(row => { const x = row.slice(); while (x.length && x[x.length - 1] === '') x.pop(); return x; });
+        while (v.length && !v[v.length - 1].length) v.pop();
+        return { range: r, values: v };
+      }) };
+    } } } };
+    const fast = JSON.stringify(c.getBootstrap().lots.map(l => l.entries));
+    check('起動: 成績表をまとめて1回で読み、1枚ずつ読んだときと同じ入力状況', calls === 1 && fast === plain && plain.includes('"00105":16.7') && plain.includes('"00106":"欠番"') && plain.includes('"00299":17.2'), plain + ' / ' + fast);
+    c.Sheets = { Spreadsheets: { Values: { batchGet: () => { throw new Error('API off'); } } } };
+    check('起動: まとめて読めないときは1枚ずつ読む', JSON.stringify(c.getBootstrap().lots.map(l => l.entries)) === plain);
+    // 1回のまとめて保存で、全数そろったら自動完了（書く前に読んだ本数で判断）
+    const C = c.createLot({ prefix: 'SP', start: '00301', kind: '20kg' });
+    const list = [];
+    for (let i = 301; i <= 400; i++) list.push({ lotId: C.lotId, serial: '00' + i, mass: 16.7, clientId: 'x' + i });
+    list.push({ lotId: C.lotId, serial: '00350', mass: 16.8, clientId: 'after' });
+    const out = c.recordEntries(list);
+    const lg = m.ss.getSheetByName('入力記録'), rows = lg.getRange(2, 1, lg.getLastRow() - 1, 18).getValues().filter(r => r[2] === C.lotId);
+    check('まとめて保存: 100本目で自動完了し、その後の入力は完了済みで止める', out.results.length === 100 && out.results[99].completed === true && !out.results.slice(0, 99).some(r => r.full) && out.error.includes('完了済み') && rows.length === 100 && rows.every(r => r[7] === 16.7), out.error + ' ' + rows.length);
+  }
   await browser.close();
 
   const failed = results.filter(r => !r.ok).length;
