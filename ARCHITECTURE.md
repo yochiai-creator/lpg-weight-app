@@ -253,6 +253,11 @@ clasp redeploy AKfycbyDM2IQ8NY6LgQpLb0gpQoK32fAQtWVBrdBQduZ6FOBWREFn61Qb55R9Q20Y
 - iPadの見分けは画面が localStorage に持つ印（lpg.devId）。印が消えても入力者と端末名が同じなら同じiPadとみなす。印のない古い画面からの保存は確かめない。
 - 画面: 20秒ごとに getClaims。別のiPadが使用中のロットは上のバー・表・ホームのカードに🔒と「○○ が入力中（見るだけ）」。番号を入れても入力バーを開かない。カードの完了・機種変更・削除ボタンは出さない。
 
+### 採番表PDFに時刻（v76）
+
+- 採番表PDFの各列を「流れた順番・容器番号・時刻（時:分、入力した時刻）」にした。スプレッドシートの採番表には前から「入力時刻」列がある。
+- saibanRedoStep_（runMaintenance、1回だけ、SAIBAN_TIME_REDONE）: 入力記録にある日のうち自動で作り終えた日（SAIBAN_DONE_UNTIL まで）の採番表を、時刻付きで3日分ずつ作り直す（残りは SAIBAN_TIME_TODO）。
+
 ---
 
 ## 8. 制約・注意点

@@ -59,7 +59,7 @@ function saibanHtml_(date, group, rows) {
   const pages = [];
   for (let p = 0; p * SAIBAN_PER_PAGE < rows.length; p++) {
     let t = '<table><tr>';
-    for (let c = 0; c < 4; c++) t += '<th class="no">流れた<br>順番</th><th class="num">容器番号　' + ((rows[0] && rows[0].number.length) || 5) + '桁</th>';
+    for (let c = 0; c < 4; c++) t += '<th class="no">流れた<br>順番</th><th class="num">容器番号　' + ((rows[0] && rows[0].number.length) || 5) + '桁</th><th class="tm">時刻</th>';
     t += '</tr>';
     for (let i = 0; i < SAIBAN_ROWS; i++) {
       t += '<tr>';
@@ -67,7 +67,8 @@ function saibanHtml_(date, group, rows) {
         const n = p * SAIBAN_PER_PAGE + c * SAIBAN_ROWS + i;   // 0始まり
         const r = rows[n];
         t += '<td class="no">' + (n + 1) + '</td><td class="num">' +
-          (r ? saibanEsc_(multi ? r.full + (r.group !== r.prefix ? '底黒' : '') : r.number) + (r.mark ? '<span class="mk">' + saibanEsc_(r.mark) + '</span>' : '') : '') + '</td>';
+          (r ? saibanEsc_(multi ? r.full + (r.group !== r.prefix ? '底黒' : '') : r.number) + (r.mark ? '<span class="mk">' + saibanEsc_(r.mark) + '</span>' : '') : '') + '</td>' +
+          '<td class="tm">' + (r && r.time instanceof Date ? Utilities.formatDate(r.time, 'Asia/Tokyo', 'HH:mm') : '') + '</td>';
       }
       t += '</tr>';
     }
@@ -84,7 +85,8 @@ function saibanHtml_(date, group, rows) {
     'table { width: 100%; border-collapse: collapse; table-layout: fixed; }' +
     'th, td { border: 0.6pt solid #000; font-size: 8.5pt; height: 4.9mm; padding: 0 1mm; }' +
     'th { font-size: 7pt; line-height: 1.1; background: #eee; } td.no { text-align: center; }' +
-    'th.no, td.no { width: 9%; } td.num { font-size: 10pt; letter-spacing: .5pt; }' +
+    'th.no, td.no { width: 6.5%; } th.tm, td.tm { width: 7%; } td.tm { font-size: 8pt; text-align: center; }' +
+    'td.num { font-size: ' + (multi ? '8.5pt' : '10pt') + '; letter-spacing: .5pt; white-space: nowrap; overflow: hidden; }' +
     '.mk { font-size: 6.5pt; margin-left: 1.5mm; color: #b00; }' +
     '.foot { font-size: 8pt; text-align: right; margin-top: 1mm; }' +
     '</style></head><body>' + pages.join('') + '</body></html>';
@@ -201,6 +203,34 @@ function saibanDatesForLots_(lotIds) {
     if (days.indexOf(d) < 0) days.push(d);
   });
   return out;
+}
+
+// 時刻の列を足す前（v75まで）に作った採番表を、1回だけ作り直す（1回に3日分。残りは次の呼び出しで）
+// 対象は入力記録にある日のうち、自動で作り終えた日まで（今日の分は夜に作る）
+function saibanRedoStep_() {
+  const props = sharedProps_();
+  if (props.getProperty('SAIBAN_TIME_REDONE') === '1') return 0;
+  let todo = props.getProperty('SAIBAN_TIME_TODO');
+  if (todo === null) {
+    const until = props.getProperty('SAIBAN_DONE_UNTIL') || '';
+    const log = getSpreadsheet_().getSheetByName(SHEET_LOG);
+    const days = [];
+    if (log && log.getLastRow() >= 2) {
+      const last = log.getLastRow(), from = Math.max(2, last - 30000);
+      log.getRange(from, LC_TIME + 1, last - from + 1, 1).getValues().forEach(function(r) {
+        if (!(r[0] instanceof Date)) return;
+        const d = tokyoDate_(r[0]);
+        if (d <= until && days.indexOf(d) < 0) days.push(d);
+      });
+    }
+    todo = days.sort().join(',');
+  }
+  const list = todo ? todo.split(',') : [];
+  let made = 0;
+  while (list.length && made < 3) { makeSaibanPdf({ date: list.shift() }); made++; }
+  if (list.length) props.setProperty('SAIBAN_TIME_TODO', list.join(','));
+  else { props.setProperty('SAIBAN_TIME_TODO', ''); props.setProperty('SAIBAN_TIME_REDONE', '1'); }
+  return list.length ? made : 0;
 }
 
 // 前日まででまだ作っていない日の採番表を作る（1回に3日分まで）。初回は昨日の分から

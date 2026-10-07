@@ -25,6 +25,8 @@ function runMaintenance() {
   try {
     // 前日までの採番表PDF。3日分ずつ作り、残りがあれば続けて呼ばせる
     if (saibanStep_() >= 3) out.archiveDone = false;
+    // 時刻の列がない採番表を作り直す（1回だけ・3日分ずつ）
+    if (out.archiveDone && saibanRedoStep_() > 0) out.archiveDone = false;
   } catch (e) { console.error('採番表の作成に失敗: ' + e.message); }
   return out;
 }
