@@ -122,11 +122,30 @@ function sendLotMail_(lot, pdfBlob) {
   return st.to;
 }
 
+// 「送らずに消す」: 完了したロットをメールで送らないことにし、最近完了したロットの一覧から外す（成績表PDFは残す）
+// 送信先の列に「送らない」と書く。あとでまとめて送信・再送信すると送信日時・送信先で上書きされる
+const NOT_SENT_MARK = '送らない';
+function isSkipped_(lot) { return !lot.sentAt && String(lot.sentTo || '').indexOf(NOT_SENT_MARK) === 0; }
+function skipLotMail(input) {
+  const lotId = typeof input === 'object' && input ? input.lotId : input;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const lot = findLot_(lotId);
+    if (lot.status !== STATUS_DONE) throw new Error('完了していないロットです: ' + lot.lotId);
+    if (lot.sentAt) throw new Error('送信済みのロットです: ' + lot.lotId);
+    getSheet_(SHEET_LOTS).getRange(lot.row, 17).setValue(NOT_SENT_MARK + '（' + Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd HH:mm') + '）');
+    return { lotId: lot.lotId };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // まとめて送信の候補（完了したロット。新しい順）
 function listDoneLots() {
   return readLots_().filter(function(l) { return l.status === STATUS_DONE; }).reverse().map(function(l) {
     return { lotId: l.lotId, prefix: l.prefix, start: l.start, end: l.end, kind: l.kind, sheetName: l.sheetName,
-      sentAt: l.sentAt, pdf: l.pdf, spec: l.spec };
+      sentAt: l.sentAt, pdf: l.pdf, spec: l.spec, skipped: isSkipped_(l) };
   });
 }
 

@@ -685,6 +685,39 @@ function check(name, ok, detail) {
     c.completeLot({ lotId: L.lotId, send: false, devId: 'devA' });
     check('完了すると外れる', !c.getClaims('devA')[L.lotId]);
   }
+  // ---- 完了したロットを送らずに消す
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const L = c.createLot({ prefix: 'SK', start: '00101', kind: '20kg' });
+    const S2 = c.createLot({ prefix: 'SK', start: '00201', kind: '20kg' });
+    c.recordEntry({ lotId: L.lotId, serial: '00101', mass: 16.7 });
+    c.completeLot({ lotId: L.lotId, send: false });
+    c.completeLot({ lotId: S2.lotId, send: true });
+    const p6 = await browser.newPage({ viewport: { width: 820, height: 1180 } });
+    p6.on('pageerror', e => check('ページでJSエラーなし(送らずに消す)', false, e.message));
+    await p6.exposeFunction('__gas', (fn, arg) => {
+      try { const v = c[fn](JSON.parse(arg)); return JSON.stringify({ v: JSON.parse(JSON.stringify(v === undefined ? null : v)) }); }
+      catch (e) { return JSON.stringify({ err: e.message }); }
+    });
+    await p6.setContent(html); await p6.waitForTimeout(600);
+    const cards = async () => p6.$$eval('#doneLots .card', cs => cs.map(x => ({ t: x.querySelector('h3').textContent, b: [...x.querySelectorAll('button')].map(b => b.textContent) })));
+    const c1 = await cards();
+    check('送らずに消す: 未送信の完了ロットにだけボタン', c1.length === 2 && c1.find(x => x.t.includes('SK00101')).b.includes('送らずに消す') && !c1.find(x => x.t.includes('SK00201')).b.includes('送らずに消す'), JSON.stringify(c1));
+    const btn = () => p6.$('#doneLots .card:has-text("SK00101") button:has-text("消す")');
+    await (await btn()).click(); await p6.waitForTimeout(150);
+    check('送らずに消す: 1回目の押しでは消さない', (await cards()).length === 2 && (await p6.textContent('#lotMsg')).includes('もう一度押すと消します'));
+    await (await btn()).click(); await p6.waitForTimeout(600);
+    const c2 = await cards();
+    check('送らずに消す: 2回目で一覧から消え、メールは送らない・PDFは残る', c2.length === 1 && c2[0].t.includes('SK00201') && !global.MAILS.some(x => x.sub.includes('SK00101')) && !!c.findLot_(L.lotId).pdf && c.findLot_(L.lotId).status === '完了', JSON.stringify(c2));
+    await p6.click('#btnBulkLoad'); await p6.waitForTimeout(300);
+    const bl = await p6.$$eval('#bulkList label', ls => ls.map(x => ({ t: x.textContent, on: x.querySelector('input').checked })));
+    check('送らずに消す: まとめて送信の一覧には「送らない」で残り、最初は選ばれない', bl.some(x => x.t.includes('SK00101') && x.t.includes('送らない') && !x.on), JSON.stringify(bl));
+    await p6.close();
+    c.sendLotsMail([L.lotId]);
+    check('送らずに消したロットも、後からまとめて送信すれば送信済みになる', !!c.findLot_(L.lotId).sentAt && !c.listDoneLots().find(x => x.lotId === L.lotId).skipped);
+    let e1 = ''; try { c.skipLotMail({ lotId: L.lotId }); } catch (e) { e1 = e.message; }
+    check('送信済みのロットは送らずに消せない', e1.includes('送信済み'), e1);
+  }
   // ---- 10kg（50本ごと・内容積24）・30kg把手（内容積71）
   {
     const m = load(), c = m.ctx; c.setup();

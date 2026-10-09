@@ -263,7 +263,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v76（採番表に時刻）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v77（完了ロットを送らずに消す）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -719,6 +719,19 @@
         call('reopenLot', l.lotId).then(loadHome).catch(function(e) { homeMsg(errText(e), 'err'); b.disabled = false; });
       };
       row.appendChild(b);
+      // 送らないロットは、送らずに一覧から消す（成績表PDFは残る。まとめて送信からは後でも送れる）
+      if (!l.sentAt) {
+        const sk = document.createElement('button');
+        sk.className = 'btn sec'; sk.textContent = '送らずに消す'; sk.style.color = 'var(--ng)'; sk.style.marginLeft = 'auto';
+        sk.onclick = function() {
+          const name = l.prefix + l.start + '〜' + l.prefix + l.end;
+          if (!armed(sk, 'もう一度押すと消す')) { homeMsg(name + ' をメールで送らずに一覧から消します（成績表PDFはドライブに残ります）。もう一度押すと消します', 'err'); return; }
+          sk.disabled = true;
+          call('skipLotMail', { lotId: l.lotId }).then(function() { homeMsg('送らずに消しました: ' + name, 'ok'); return loadHome(); })
+            .catch(function(e) { homeMsg(errText(e), 'err'); sk.disabled = false; });
+        };
+        setTimeout(function() { row.appendChild(sk); }, 0);
+      }
       const r = document.createElement('button');
       r.className = 'btn sec'; r.textContent = l.sentAt ? '再送信' : 'メールで送信';
       r.onclick = function() {
@@ -866,10 +879,10 @@
       if (!kindFilter) { const h = document.createElement('div'); h.className = 'bk-kind'; h.textContent = g.kind; list.appendChild(h); }
       g.lots.forEach(function(l) {
         const lab = document.createElement('label');
-        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = l.lotId; cb.checked = !l.sentAt; cb.onchange = bulkUpdate;
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = l.lotId; cb.checked = !l.sentAt && !l.skipped; cb.onchange = bulkUpdate;
         const t = document.createElement('span'); t.textContent = l.prefix + l.start + ' ～ ' + l.end;
-        const st = document.createElement('span'); st.className = 'bk-sent'; st.textContent = l.sentAt ? '送信済 ' + l.sentAt.replace(/^\d{4}[\/-]/, '').replace(/:\d\d$/, '') : '未送信';
-        if (!l.sentAt) st.style.color = 'var(--ng)';
+        const st = document.createElement('span'); st.className = 'bk-sent'; st.textContent = l.sentAt ? '送信済 ' + l.sentAt.replace(/^\d{4}[\/-]/, '').replace(/:\d\d$/, '') : l.skipped ? '送らない' : '未送信';
+        if (!l.sentAt && !l.skipped) st.style.color = 'var(--ng)';
         lab.appendChild(cb); lab.appendChild(t); lab.appendChild(st);
         list.appendChild(lab);
       });
@@ -887,7 +900,7 @@
   $('bulkSaiban').onchange = function() { store.set('lpg.bulkSaiban', this.checked ? '1' : '0'); };
   $('btnBulkUnsent').onclick = function() {
     Array.prototype.forEach.call($('bulkList').querySelectorAll('input'), function(x) {
-      const l = bulkLots.find(function(y) { return y.lotId === x.value; }); x.checked = !!l && !l.sentAt;
+      const l = bulkLots.find(function(y) { return y.lotId === x.value; }); x.checked = !!l && !l.sentAt && !l.skipped;
     });
     bulkUpdate();
   };
