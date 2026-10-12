@@ -433,6 +433,14 @@ function check(name, ok, detail) {
     { const hh = c.Utilities.formatDate(new Date(), 'Asia/Tokyo', 'HH:mm').slice(0, 2);
       const times = [...html.matchAll(/<td class="tm">([^<]*)<\/td>/g)].map(x => x[1]).filter(x => x);
       check('採番表PDF: 容器番号の横に入力時刻（時:分）', html.includes('<th class="tm">時刻</th>') && times.length === 252 && times.every(t => /^\d\d:\d\d$/.test(t)) && times.some(t => t.startsWith(hh)), times.slice(0, 3).join(',')); }
+    { // 削除したロットの記録・取り消した入力は載せない（作業者にも出さない）
+      const D = c.createLot({ prefix: 'DEL', start: '00101', kind: '20kg' });
+      c.recordEntry({ lotId: D.lotId, serial: '00101', mass: 16.7, worker: '石井' });
+      c.deleteLot(D.lotId);
+      const us = order[5], U = c.recordEntry({ lotId: c.readLots_().find(l => +l.start <= +us && +us <= +l.end).lotId, serial: us, mass: 16.9, overwrite: 'dup', worker: '石井' }); c.undoEntry(U.recordId);
+      const r2 = c.makeSaibanPdf({ date: today });
+      const h2 = global.PDFBLOBS[Object.keys(global.PDFBLOBS).find(k => k.endsWith('/採番表_' + today + '.pdf'))].html;
+      check('採番表: 削除したロット・取り消した入力は載せず、その人は作業者に出さない', r2.count === 252 && !h2.includes('DEL00101') && !h2.includes('石井') && h2.includes('作業者：<b>山崎・田中</b>'), r2.count); }
     check('採番表PDF: 修正に印・ダブりは載せない', html.includes('HXF' + freeS + '<span class="mk">修正</span>') && !html.includes('>W<'));
     const d = today.split('-');
     check('採番表PDF: 保存先は 採番表/年/月', !!key && key.startsWith('/LPG容器 質量入力/採番表/' + d[0] + '年/' + d[1] + '月/'), key);
@@ -448,10 +456,10 @@ function check(name, ok, detail) {
     const beforeBlob = global.PDFBLOBS[key];
     c.nightlyJob();
     // 時刻の列がない採番表は1回だけ作り直す（作り終えた日まで・3日分ずつ）
-    c.sharedProps_().setProperty('SAIBAN_DONE_UNTIL', today); c.sharedProps_().setProperty('SAIBAN_TIME_REDONE', '');
+    c.sharedProps_().setProperty('SAIBAN_DONE_UNTIL', today); c.sharedProps_().setProperty('SAIBAN_REDONE_VER', '');
     const pdfBefore = global.PDFBLOBS[key];
     const redo1 = c.saibanRedoStep_();
-    check('時刻の列のない採番表を作り直す（1回だけ）', redo1 === 0 && global.PDFBLOBS[key] !== pdfBefore && c.sharedProps_().getProperty('SAIBAN_TIME_REDONE') === '1' && c.saibanRedoStep_() === 0, JSON.stringify([redo1, global.PDFBLOBS[key] !== pdfBefore, c.sharedProps_().getProperty('SAIBAN_TIME_REDONE'), c.sharedProps_().getProperty('SAIBAN_TIME_TODO')]));
+    check('時刻の列のない採番表を作り直す（1回だけ）', redo1 === 0 && global.PDFBLOBS[key] !== pdfBefore && c.sharedProps_().getProperty('SAIBAN_REDONE_VER') === 'v78' && c.saibanRedoStep_() === 0, JSON.stringify([redo1, global.PDFBLOBS[key] !== pdfBefore, c.sharedProps_().getProperty('SAIBAN_REDONE_VER')]));
     check('毎晩の自動処理: その日の採番表PDFを作る', global.PDFBLOBS[key] !== beforeBlob && global.PDFS.filter(p => p.endsWith('/採番表_' + today + '.pdf')).length === 1 && c.sharedProps_().getProperty('SAIBAN_DONE_UNTIL') === today);
   }
   // ---- ドライブのフォルダを「LPG容器 質量入力」に全部まとめる（v52までの並びからの整理）

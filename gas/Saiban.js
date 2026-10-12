@@ -18,7 +18,8 @@ function saibanRows_(date) {
   readLots_().forEach(function(l) { lots[l.lotId] = l; });
   return log.getRange(from, 1, last - from + 1, LOG_HEADERS.length).getValues().filter(function(r) {
     const t = r[LC_TIME];
-    return t instanceof Date && tokyoDate_(t) === date && r[LC_STATUS] !== '取消' &&
+    // 有効な記録だけ（取消・削除したロットの記録は載せない）
+    return t instanceof Date && tokyoDate_(t) === date && r[LC_STATUS] === '有効' &&
       r[LC_KIND] !== MISSING && r[LC_KIND] !== KIND_FIX && r[LC_KIND] !== KIND_DUP;
   }).sort(function(a, b) { return a[LC_TIME] - b[LC_TIME]; }).map(function(r) {
     const lot = lots[String(r[LC_LOT])];
@@ -197,7 +198,7 @@ function saibanDatesForLots_(lotIds) {
   log.getRange(2, 1, log.getLastRow() - 1, LOG_HEADERS.length).getValues().forEach(function(r) {
     const days = out[String(r[LC_LOT])];
     const t = r[LC_TIME];
-    if (!days || !(t instanceof Date) || r[LC_STATUS] === '取消' ||
+    if (!days || !(t instanceof Date) || r[LC_STATUS] !== '有効' ||
       r[LC_KIND] === MISSING || r[LC_KIND] === KIND_FIX || r[LC_KIND] === KIND_DUP) return;
     const d = tokyoDate_(t);
     if (days.indexOf(d) < 0) days.push(d);
@@ -205,12 +206,14 @@ function saibanDatesForLots_(lotIds) {
   return out;
 }
 
-// 時刻の列を足す前（v75まで）に作った採番表を、1回だけ作り直す（1回に3日分。残りは次の呼び出しで）
+// 作り方を変えたとき、これまでの採番表を1回だけ作り直す（1回に3日分。残りは次の呼び出しで）
+// v76: 時刻の列を足した / v78: 削除したロットの記録を載せない（10/10 に作業者が連名になった）。変えたら SAIBAN_REDO_VER を上げる
+const SAIBAN_REDO_VER = 'v78';
 // 対象は入力記録にある日のうち、自動で作り終えた日まで（今日の分は夜に作る）
 function saibanRedoStep_() {
   const props = sharedProps_();
-  if (props.getProperty('SAIBAN_TIME_REDONE') === '1') return 0;
-  let todo = props.getProperty('SAIBAN_TIME_TODO');
+  if (props.getProperty('SAIBAN_REDONE_VER') === SAIBAN_REDO_VER) return 0;
+  let todo = props.getProperty('SAIBAN_REDO_TODO_' + SAIBAN_REDO_VER);
   if (todo === null) {
     const until = props.getProperty('SAIBAN_DONE_UNTIL') || '';
     const log = getSpreadsheet_().getSheetByName(SHEET_LOG);
@@ -228,8 +231,8 @@ function saibanRedoStep_() {
   const list = todo ? todo.split(',') : [];
   let made = 0;
   while (list.length && made < 3) { makeSaibanPdf({ date: list.shift() }); made++; }
-  if (list.length) props.setProperty('SAIBAN_TIME_TODO', list.join(','));
-  else { props.setProperty('SAIBAN_TIME_TODO', ''); props.setProperty('SAIBAN_TIME_REDONE', '1'); }
+  if (list.length) props.setProperty('SAIBAN_REDO_TODO_' + SAIBAN_REDO_VER, list.join(','));
+  else { props.setProperty('SAIBAN_REDO_TODO_' + SAIBAN_REDO_VER, ''); props.setProperty('SAIBAN_REDONE_VER', SAIBAN_REDO_VER); }
   return list.length ? made : 0;
 }
 
