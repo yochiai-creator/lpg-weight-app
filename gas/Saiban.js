@@ -42,16 +42,38 @@ function saibanRows_(date) {
 
 function saibanEsc_(s) { return String(s).replace(/[&<>"]/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
-// 1日分のHTML（A4縦、1ページ200本）。容器記号が2つ以上ある日は番号に記号を付ける
-function saibanHtml_(date, group, rows) {
-  const multi = rows.some(function(r) { return r.group !== (rows[0] && rows[0].group); });
-  const kinds = [], workers = [];
+// 機種（容器区分）の並び。採番表は機種ごとにページと流れた順番を分ける
+const SAIBAN_KIND_ORDER = ['5kg', '8kg', '10kg', '20kg', '20kg三部制', '30kg', '30kg把手', '50kg', '50kg S付'];
+function saibanKindRank_(k) { const i = SAIBAN_KIND_ORDER.indexOf(String(k || '')); return i < 0 ? SAIBAN_KIND_ORDER.length : i; }
+// 流れた順（時刻順）の行を機種ごとに分け、機種の中で1から番号（seq）を振る → [{ kind, rows }]
+function saibanByKind_(rows) {
+  const map = {}, kinds = [];
   rows.forEach(function(r) {
-    if (r.kind && kinds.indexOf(r.kind) < 0) kinds.push(r.kind);
-    if (r.worker && workers.indexOf(r.worker) < 0) workers.push(r.worker);
+    const k = r.kind || '';
+    if (!map[k]) { map[k] = []; kinds.push(k); }
+    r.seq = map[k].length + 1;
+    map[k].push(r);
   });
-  const kg = kinds.length ? kinds.map(function(k) { return k.replace(/kg.*$/, ''); })
-    .filter(function(k, i, a) { return a.indexOf(k) === i; }).join('・') + 'kg容器' : '容器';
+  kinds.sort(function(a, b) { return saibanKindRank_(a) - saibanKindRank_(b) || (a < b ? -1 : a > b ? 1 : 0); });
+  return kinds.map(function(k) { return { kind: k, rows: map[k] }; });
+}
+
+// 1日分のHTML（A4縦、1ページ200本）。機種ごとにページを分け、流れた順番も機種ごとに1から
+function saibanHtml_(date, group, rows) {
+  const pages = [];
+  saibanByKind_(rows).forEach(function(g) { Array.prototype.push.apply(pages, saibanKindPages_(date, g.kind, g.rows)); });
+  return saibanPageHtml_(pages);
+}
+
+// 1機種分のページ。容器記号が2つ以上あるときは番号に記号を付ける
+function saibanKindPages_(date, kind, rows) {
+  const multi = rows.some(function(r) { return r.group !== (rows[0] && rows[0].group); });
+  const workers = [];
+  rows.forEach(function(r) { if (r.worker && workers.indexOf(r.worker) < 0) workers.push(r.worker); });
+  const kg = (kind || '') + '容器';
+  const groups = [];
+  rows.forEach(function(r) { if (groups.indexOf(r.group) < 0) groups.push(r.group); });
+  const group = groups.map(function(g) { return g || '（なし）'; }).join('・');
   const d = date.split('-');
   const head = '<div class="head"><div class="title">' + saibanEsc_(kg) + '　採番表</div>' +
     '<div class="meta"><span>容器記号：<b>' + saibanEsc_(group || '（なし）') + '</b></span>' +
@@ -67,16 +89,20 @@ function saibanHtml_(date, group, rows) {
       for (let c = 0; c < 4; c++) {
         const n = p * SAIBAN_PER_PAGE + c * SAIBAN_ROWS + i;   // 0始まり
         const r = rows[n];
-        t += '<td class="no">' + (n + 1) + '</td><td class="num">' +
+        t += '<td class="no">' + (r ? r.seq : n + 1) + '</td><td class="num' + (multi ? ' sm' : '') + '">' +
           (r ? saibanEsc_(multi ? r.full + (r.group !== r.prefix ? '底黒' : '') : r.number) + (r.mark ? '<span class="mk">' + saibanEsc_(r.mark) + '</span>' : '') : '') + '</td>' +
           '<td class="tm">' + (r && r.time instanceof Date ? Utilities.formatDate(r.time, 'Asia/Tokyo', 'HH:mm') : '') + '</td>';
       }
       t += '</tr>';
     }
     t += '</table>';
-    pages.push('<div class="page">' + head + t + '<div class="foot">' + (p + 1) + ' / ' +
+    pages.push('<div class="page">' + head + t + '<div class="foot">' + saibanEsc_(kind || '') + '　' + (p + 1) + ' / ' +
       Math.ceil(rows.length / SAIBAN_PER_PAGE) + '　（全 ' + rows.length + ' 本）</div></div>');
   }
+  return pages;
+}
+
+function saibanPageHtml_(pages) {
   return '<html><head><meta charset="utf-8"><style>' +
     '@page { size: A4; margin: 8mm; }' +
     'body { font-family: sans-serif; margin: 0; }' +
@@ -87,7 +113,7 @@ function saibanHtml_(date, group, rows) {
     'th, td { border: 0.6pt solid #000; font-size: 8.5pt; height: 4.9mm; padding: 0 1mm; }' +
     'th { font-size: 7pt; line-height: 1.1; background: #eee; } td.no { text-align: center; }' +
     'th.no, td.no { width: 6.5%; } th.tm, td.tm { width: 7%; } td.tm { font-size: 8pt; text-align: center; }' +
-    'td.num { font-size: ' + (multi ? '8.5pt' : '10pt') + '; letter-spacing: .5pt; white-space: nowrap; overflow: hidden; }' +
+    'td.num { font-size: 10pt; letter-spacing: .5pt; white-space: nowrap; overflow: hidden; } td.num.sm { font-size: 8.5pt; }' +
     '.mk { font-size: 6.5pt; margin-left: 1.5mm; color: #b00; }' +
     '.foot { font-size: 8pt; text-align: right; margin-top: 1mm; }' +
     '</style></head><body>' + pages.join('') + '</body></html>';
@@ -144,10 +170,20 @@ function writeSaibanSheet_(date, rows) {
   if (rows.length) {
     const start = sh.getLastRow() + 1;
     sh.getRange(start, 1, rows.length, SAIBAN_HEADERS.length).setValues(rows.map(function(r, i) {
-      return ["'" + date, i + 1, r.group, "'" + r.number, r.kind, r.groupNo === '' ? '' : r.groupNo, r.time, r.worker, r.mark, r.lotId];
+      return ["'" + date, r.seq || i + 1, r.group, "'" + r.number, r.kind, r.groupNo === '' ? '' : r.groupNo, r.time, r.worker, r.mark, r.lotId];
     }));
     sh.getRange(start, 7, rows.length, 1).setNumberFormat('HH:mm:ss');
-    if (sh.getLastRow() > 2) sh.getRange(2, 1, sh.getLastRow() - 1, SAIBAN_HEADERS.length).sort([{ column: 1 }, { column: 2 }]);
+    // 作業日 → 機種 → 流れた順番 に並べ直す（機種ごとに順番が1から）
+    if (sh.getLastRow() > 2) {
+      const all = sh.getRange(2, 1, sh.getLastRow() - 1, SAIBAN_HEADERS.length);
+      const v = all.getValues();
+      v.sort(function(a, b) {
+        const da = String(a[0]), db = String(b[0]);
+        return (da < db ? -1 : da > db ? 1 : 0) || saibanKindRank_(a[4]) - saibanKindRank_(b[4]) ||
+          (String(a[4]) < String(b[4]) ? -1 : String(a[4]) > String(b[4]) ? 1 : 0) || Number(a[1]) - Number(b[1]);
+      });
+      all.setValues(v.map(function(r) { return ["'" + r[0], r[1], r[2], "'" + r[3]].concat(r.slice(4)); }));
+    }
     // 日付が変わる所に線（並べ直したので引き直す）
     const n = sh.getLastRow() - 1;
     sh.getRange(2, 1, n, SAIBAN_HEADERS.length).setBorder(false, null, null, null, null, false);
@@ -166,6 +202,7 @@ function makeSaibanPdf(input) {
   const out = { date: date, count: rows.length, groups: [], pdfUrl: '', sheetUrl: '' };
   if (!rows.length) return out;
   rows.forEach(function(r) { if (out.groups.indexOf(r.group) < 0) out.groups.push(r.group); });
+  out.kinds = saibanByKind_(rows).map(function(g) { return g.kind; });   // 機種ごとの流れた順番（seq）もここで振る
   out.sheetUrl = writeSaibanSheet_(date, rows);
   const folder = saibanFolder_(date);
   const name = '採番表_' + date + '.pdf';
@@ -207,8 +244,9 @@ function saibanDatesForLots_(lotIds) {
 }
 
 // 作り方を変えたとき、これまでの採番表を1回だけ作り直す（1回に3日分。残りは次の呼び出しで）
-// v76: 時刻の列を足した / v78: 削除したロットの記録を載せない（10/10 に作業者が連名になった）。変えたら SAIBAN_REDO_VER を上げる
-const SAIBAN_REDO_VER = 'v78';
+// v76: 時刻の列を足した / v78: 削除したロットの記録を載せない（10/10 に作業者が連名になった）
+// v79: 機種ごとにページと流れた順番を分けた。変えたら SAIBAN_REDO_VER を上げる
+const SAIBAN_REDO_VER = 'v79';
 // 対象は入力記録にある日のうち、自動で作り終えた日まで（今日の分は夜に作る）
 function saibanRedoStep_() {
   const props = sharedProps_();
