@@ -110,6 +110,15 @@ function ensureSettingRows_() {
   if (i >= 0 && String(sh.getRange(2 + i, 2).getValue()) === BULK_BODY_OLD_DEFAULT) {
     sh.getRange(2 + i, 2).setValue(SETTING_ROWS.filter(function(x) { return x[0] === '本文（まとめて送信）'; })[0][1]);
   }
+  // v80: メールにCSVを付けなくなったので、本文の「質量データ（CSV）」の言葉を消す
+  if (sh.getLastRow() >= 2) {
+    sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues().forEach(function(r, i) {
+      const k = String(r[0]).trim(), v = String(r[1]);
+      if ((k === '本文' || k === '本文（まとめて送信）') && v.indexOf('質量データ（CSV）') >= 0) {
+        sh.getRange(2 + i, 2).setValue(v.replace('、質量データ（CSV）各{ロット数}件', '{ロット数}件').replace('、質量データ（CSV）', '').replace('質量データ（CSV）', ''));
+      }
+    });
+  }
 }
 
 // ---------- シートを小さく保つ ----------

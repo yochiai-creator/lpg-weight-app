@@ -268,7 +268,7 @@ function check(name, ok, detail) {
   check('宛先・件名', mail.to === 'nouhin@example.com' && (mail.sub || '').includes('HEP36001～HEP36100'));
   check('本文に本数と欠番', (mail.body || '').includes('本数：99本（欠番 1・修正 0）'));
   check('本文に空の差し込み行が残らない', !(mail.body || '').includes('耐圧試験日'));
-  check('PDFとCSVを添付', JSON.stringify(mail.att) === JSON.stringify(['成績表_HEP36001-36100.pdf', '成績表_HEP36001-36100.csv']));
+  check('成績表PDFだけを添付（CSVは付けない）', JSON.stringify(mail.att) === JSON.stringify(['成績表_HEP36001-36100.pdf']) && !mail.body.includes('CSV'), JSON.stringify(mail.att));
   check('ロットに送信日時・送信先', lots()[1][6] === '完了' && lots()[1][15] !== '' && lots()[1][16] === 'nouhin@example.com');
 
   // ---- 範囲を入れてまとめて登録
@@ -337,7 +337,7 @@ function check(name, ok, detail) {
     check('まとめて送信: 1回目の押しでは送らない', global.MAILS.length === before && (await page.textContent('#bulkMsg')).includes('もう一度押すと送信'));
     await page.click('#btnBulkSend'); await page.waitForTimeout(600);
     const m = global.MAILS[before];
-    check('まとめて送信: 選んだロットのPDFとCSVを1通で（採番表も付ける）', global.MAILS.length === before + 1 && n === 1 && m && m.att.slice(0, 2).join(',') === '成績表_HEP36001-36100.pdf,成績表_HEP36001-36100.csv' && m.att.slice(2).every(a => /^採番表_\d{4}-\d\d-\d\d\.pdf$/.test(a)) && m.sub.includes('1ロット分'), JSON.stringify(m));
+    check('まとめて送信: 選んだロットのPDFを1通で（採番表も付ける・CSVは付けない）', global.MAILS.length === before + 1 && n === 1 && m && m.att[0] === '成績表_HEP36001-36100.pdf' && m.att.slice(1).every(a => /^採番表_\d{4}-\d\d-\d\d\.pdf$/.test(a)) && m.sub.includes('1ロット分'), JSON.stringify(m));
     check('まとめて送信: 送信後に送信済みと表示', (await page.textContent('#bulkMsg')).includes('送信しました'));
   }
 
@@ -797,19 +797,21 @@ function check(name, ok, detail) {
     const before = global.MAILS.length;
     const r = c.sendLotsMail(ids.slice(0, 3).reverse());
     const mm = global.MAILS[before];
-    check('まとめて送信: 3ロットを番号順に1通で（PDF・CSV各3）', r.mails === 1 && r.lots === 3 && mm.att.length === 6 && mm.att[0] === '成績表_BM10001-10100.pdf' && mm.att[4] === '成績表_BM10201-10300.pdf' && mm.sub.includes('3ロット分') && mm.sub.includes('BM10001～BM10300') && mm.body.includes('・BM10101～BM10200（20kg）1本'), JSON.stringify(mm));
+    check('まとめて送信: 3ロットを番号順に1通で（PDF3つ）', r.mails === 1 && r.lots === 3 && mm.att.length === 3 && mm.att[0] === '成績表_BM10001-10100.pdf' && mm.att[2] === '成績表_BM10201-10300.pdf' && !mm.body.includes('CSV') && mm.sub.includes('3ロット分') && mm.sub.includes('BM10001～BM10300') && mm.body.includes('・BM10101～BM10200（20kg）1本'), JSON.stringify(mm));
     check('まとめて送信: 送ったロットに送信日時', ids.slice(0, 3).every(id => c.findLot_(id).sentAt) && !c.findLot_(ids[3]).sentAt);
     const r2 = c.sendLotsMail(ids);
-    check('まとめて送信: 20ロットを超えたら分けて送る', r2.mails === 2 && global.MAILS.length === before + 3 && global.MAILS[before + 1].att.length === 40 && global.MAILS[before + 2].att.length === 4);
+    check('まとめて送信: 20ロットを超えたら分けて送る', r2.mails === 2 && global.MAILS.length === before + 3 && global.MAILS[before + 1].att.length === 20 && global.MAILS[before + 2].att.length === 2);
     const b3 = global.MAILS.length;
     const r3 = c.sendLotsMail({ lotIds: [ids[0], ids[1]], saiban: true });
     const m3 = global.MAILS[b3], today = c.tokyoDate_(new Date());
-    check('まとめて送信: 採番表も付ける（流れた日の分を1つ）・本文に日付', r3.saiban === 1 && m3.att.length === 5 && m3.att[4] === '採番表_' + today + '.pdf' && m3.body.includes('採番表（PDF）：' + today.slice(5).replace('-', '/')), JSON.stringify(m3));
+    check('まとめて送信: 採番表も付ける（流れた日の分を1つ）・本文に日付', r3.saiban === 1 && m3.att.length === 3 && m3.att[2] === '採番表_' + today + '.pdf' && m3.body.includes('採番表（PDF）：' + today.slice(5).replace('-', '/')), JSON.stringify(m3));
     check('まとめて送信: 採番表を付けないときは本文の採番表の行を省く', !global.MAILS[before].body.includes('採番表'));
     const conf = m.ss.getSheetByName('設定'), names = conf.getRange(2, 1, conf.getLastRow() - 1, 1).getValues().map(x => x[0]);
     const bi = names.indexOf('本文（まとめて送信）');
     conf.getRange(2 + bi, 2).setValue('ご担当者様\n\nいつもお世話になっております。\n高圧ガス容器検査成績表を{ロット数}ロット分まとめてお送りします。\n\n{一覧}\n\n添付：検査成績表（PDF）、質量データ（CSV）各{ロット数}件\n\nよろしくお願いいたします。'); c.ensureSettingRows_();
     check('v71の初期値のままの本文は採番表の行がある本文に置き換える', String(conf.getRange(2 + bi, 2).getValue()).includes('{採番表}'));
+    { const ni = names.indexOf('本文'); conf.getRange(2 + ni, 2).setValue('ご担当者様\n\n添付：検査成績表（PDF）、質量データ（CSV）\n\nよろしく'); c.ensureSettingRows_();
+      check('設定シートの本文から「質量データ（CSV）」の言葉を消す', String(conf.getRange(2 + ni, 2).getValue()) === 'ご担当者様\n\n添付：検査成績表（PDF）\n\nよろしく' && !String(conf.getRange(2 + bi, 2).getValue()).includes('CSV'), conf.getRange(2 + ni, 2).getValue()); }
     check('まとめて送信の候補は完了ロットだけ（新しい順）', c.listDoneLots().filter(l => l.prefix === 'BM').length === 22 && c.listDoneLots()[0].lotId === ids[21]);
   }
   // ---- 起動を軽く: 成績表はまとめて1回で読む・保存は書く前に1回だけ読む

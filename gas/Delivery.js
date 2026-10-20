@@ -1,4 +1,4 @@
-// 納品メール（全数そろったら検査成績表PDF＋入力データCSVを自動送信）と、設定・入力者シートの読み込み
+// 納品メール（全数そろったら検査成績表PDFを自動送信。v80からCSVは付けない）と、設定・入力者シートの読み込み
 
 const SHEET_SETTINGS = '設定';
 const SHEET_WORKERS = '入力者';
@@ -14,7 +14,7 @@ const SETTING_ROWS = [
   ['本文',
     'ご担当者様\n\nいつもお世話になっております。\n高圧ガス容器検査成績表をお送りします。\n\n' +
     '組容器番号：{組容器番号}\n容器区分：{容器区分}\n本数：{本数}（欠番 {欠番}・修正 {修正}）\n\n' +
-    '添付：検査成績表（PDF）、質量データ（CSV）\n\nよろしくお願いいたします。',
+    '添付：検査成績表（PDF）\n\nよろしくお願いいたします。',
     '改行はそのまま使えます'],
   ['標準質量', '5kg=6.8, 8kg=9.6, 10kg=11.3, 20kg=16.7, 20kg三部制=17.5, 30kg=23.5, 30kg把手=24.0, 50kg=34.8, 50kg S付=36.3',
     'ロットの1本目から候補ボタンを出すときの真ん中の値（容器区分=kg）。5本以上入るとそのロットの実際の中央値を使う'],
@@ -26,7 +26,7 @@ const SETTING_ROWS = [
     'ホーム画面の「まとめてメール送信」の件名。{ロット数} {本数} {組容器番号}（最初～最後）が使えます'],
   ['本文（まとめて送信）',
     'ご担当者様\n\nいつもお世話になっております。\n高圧ガス容器検査成績表を{ロット数}ロット分まとめてお送りします。\n\n' +
-    '{一覧}\n\n添付：検査成績表（PDF）、質量データ（CSV）各{ロット数}件\n採番表（PDF）：{採番表}\n\nよろしくお願いいたします。',
+    '{一覧}\n\n添付：検査成績表（PDF）{ロット数}件\n採番表（PDF）：{採番表}\n\nよろしくお願いいたします。',
     '{一覧} にロットごとの「組容器番号（容器区分）本数」が1行ずつ入ります。{採番表} は付けた採番表の日付（付けないときはその行ごと省く）']
 ];
 
@@ -114,7 +114,7 @@ function sendLotMail_(lot, pdfBlob) {
   const vars = lotMailVars_(lot);
   const options = {
     name: st.senderName,
-    attachments: [pdfBlob, buildLotCsv_(lot)]
+    attachments: [pdfBlob]
   };
   if (st.cc) options.cc = st.cc;
   MailApp.sendEmail(st.to, fillMail_(st.subject, vars), fillMail_(st.body, vars), options);
@@ -149,7 +149,7 @@ function listDoneLots() {
   });
 }
 
-// 選んだ完了ロットの成績表PDF＋CSVを、1通（多いときは BULK_MAIL_MAX_LOTS ロットずつ）にまとめて送る
+// 選んだ完了ロットの成績表PDFを、1通（多いときは BULK_MAIL_MAX_LOTS ロットずつ）にまとめて送る
 // input: [lotId, ...] または { lotIds: [...], saiban: true }（saiban: そのロットの容器が流れた日の採番表PDFも付ける）
 function sendLotsMail(input) {
   const st = readSettings_();
@@ -165,7 +165,6 @@ function sendLotsMail(input) {
   });
   // 番号順にそろえる
   lots.sort(function(a, b) { return a.prefix.localeCompare(b.prefix) || Number(a.start) - Number(b.start); });
-  const logRows = logDisplayRows_();
   const lotDays = withSaiban ? saibanDatesForLots_(lots.map(function(l) { return l.lotId; })) : {};
   const saibanBlobs = {};   // 日付 → PDF（分けて送るときに同じ日を作り直さない）
   let mails = 0, saibanCount = 0;
@@ -174,7 +173,7 @@ function sendLotsMail(input) {
     const attachments = [], lines = [];
     let total = 0;
     part.forEach(function(lot) {
-      attachments.push(lotPdf_(lot).blob, buildLotCsv_(lot, logRows));
+      attachments.push(lotPdf_(lot).blob);
       const v = lotMailVars_(lot);
       total += parseInt(v['本数'], 10) || 0;
       lines.push('・' + v['組容器番号'] + '（' + v['容器区分'] + '）' + v['本数'] +
@@ -213,7 +212,7 @@ function logDisplayRows_() {
     log.getRange(2, 1, log.getLastRow() - 1, Math.min(log.getLastColumn(), LOG_HEADERS.length)).getDisplayValues();
 }
 
-// ロットの最新の有効な入力（容器ごと）をCSVに。Excelで開けるようBOM付きUTF-8
+// ロットの最新の有効な入力（容器ごと）をCSVに（v80からメールには付けない。必要になったとき用に残す）。Excelで開けるようBOM付きUTF-8
 // logRows: まとめて送信のとき、1度読んだ入力記録を使い回す
 function buildLotCsv_(lot, logRows) {
   const latest = {};
