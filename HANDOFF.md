@@ -351,3 +351,8 @@ v52までの並びは ensureFolderLayout_ が1回だけ整理（runMaintenance �
 - 6時台（6:30ごろ）に morningJob が runMaintenance（整理・採番表の取りこぼし）を済ませ、getBootstrap を1回読んでおく。済んだら _システム の MAINT_DAY に日付。
 - 画面からの runMaintenance は、MAINT_DAY が今日なら何もしない（開いたときの裏の処理をなくして起動を軽くする）。朝の処理が失敗した日は、従来どおり画面を開いたときに動く。
 - 朝のトリガーは、最初に裏の処理が動いたとき ensureMorningTrigger_ が1回だけ作る（MORNING_TRIGGER）。メニュー「毎晩の自動処理を設定」でも夜・朝の両方を作り直す。
+
+## v89: 速くする（結果は変えない）
+- 保存: まとめて保存する間、成績表の表はロットごとに1回だけ読み（ENTRY_GRIDS_）、書いた分はメモリにも入れる。1本ごとに読むと書き込みの反映待ちになり遅かった。
+- 起動: 印（ダブり・シール違い）は入力記録の使う6列だけを Sheets API で1回に読む（readLogCols_）。使えなければ従来どおり全列。
+- 画面: doGet をテンプレートなし（createHtmlOutputFromFile）にした。Index.html に <? ?> は使わない。

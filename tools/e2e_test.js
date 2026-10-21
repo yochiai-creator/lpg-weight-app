@@ -127,6 +127,18 @@ function check(name, ok, detail) {
   check('ダブったマスは赤枠＋「W」', (await page.getAttribute('#grid .cell[data-serial="37023"]', 'class')).includes('dup') && (await page.textContent('#grid .cell[data-serial="37023"]')).includes('W'));
   check('表の見出しにダブり件数', (await page.textContent('#gridSub')).includes('ダブり 1件'));
   check('開き直してもダブりが残る（サーバー記録）', ctx.getBootstrap().lots.find(l => l.lotId === 'HEP37001').dups['HEP37023'] === 1);
+  {
+    // 印の読み込み: Sheets API で使う列だけ読んでも、全列の表示値を読んだときと同じ結果になる
+    const plain = JSON.stringify(ctx.readMarksAll_());
+    let calls = 0;
+    ctx.Sheets = { Spreadsheets: { Values: { batchGet: (id, o) => { calls++; return { valueRanges: o.ranges.map(r => {
+      const m = r.match(/^'(.+)'!(.+)$/); const v = ss.getSheetByName(m[1].replace(/''/g, "'")).getRange(m[2]).getDisplayValues();
+      return { values: [v.map(x => x[0])] };
+    }) }; } } } };
+    const viaApi = JSON.stringify(ctx.readMarksAll_());
+    delete ctx.Sheets;
+    check('印の読み込み: 使う列だけ読んでも結果は同じ（1回の通信）', calls === 1 && viaApi === plain && plain.includes('HEP37023'), viaApi + ' / ' + plain);
+  }
   // 修正（入力ミスを直す）
   check('訂正: 入力済みの番号に質量を入れ直すと訂正', (await keys('7024', 150)).includes('入力済み'));
   await keys('0', 400);
@@ -753,6 +765,10 @@ function check(name, ok, detail) {
     check('入力日時: 未来・読めないIDは届いた時刻', Math.abs(fut - Date.now()) < 2000 && Math.abs(old - Date.now()) < 2000);
     const many = c.recordEntries(Array.from({ length: 40 }, (_, k) => ({ lotId: L.lotId, serial: String(110 + k).padStart(5, '0'), mass: 16.5, clientId: 'dX-zz' + k + '-' + k, devId: 'dX' }))).results;
     check('記録IDは同じ秒に何本書いても重ならない', new Set(many.map(r => r.recordId)).size === 40, many.length);
+    const same = c.recordEntries([
+      { lotId: L.lotId, serial: '00190', mass: 16.5, clientId: 'dX-q1-1', devId: 'dX' },
+      { lotId: L.lotId, serial: '00190', mass: 16.6, clientId: 'dX-q1-2', devId: 'dX' }]).results;
+    check('1回の保存の中で同じ容器が2回来たら、2回目はダブり（上書き前は1回目の質量）', same[0].kind === '通常' && same[1].kind === 'ダブり' && same[1].prev === 16.5 && c.getLot(L.lotId).entries['00190'] === 16.6, JSON.stringify(same));
     const yest = Date.now() - 26 * 3600 * 1000;
     c.recordEntries([{ lotId: L.lotId, serial: '00103', mass: 16.6, clientId: 'dX-' + yest.toString(36) + '-7', devId: 'dX' }]);
     const stale = c.sharedProps_().getProperty('SAIBAN_STALE');
@@ -887,6 +903,9 @@ function check(name, ok, detail) {
     const plain = JSON.stringify(c.getBootstrap().lots.map(l => l.entries));
     let calls = 0;
     c.Sheets = { Spreadsheets: { Values: { batchGet: (id, o) => {
+      if (o.majorDimension === 'COLUMNS') return { valueRanges: o.ranges.map(r => {   // 入力記録の列（印の読み込み）
+        const mm = r.match(/^'(.+)'!(.+)$/); return { values: [m.ss.getSheetByName(mm[1]).getRange(mm[2]).getDisplayValues().map(x => x[0])] };
+      }) };
       calls++;
       return { valueRanges: o.ranges.map(r => {
         const name = r.match(/^'(.*)'!/)[1].replace(/''/g, "'");

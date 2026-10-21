@@ -77,7 +77,7 @@ function doGet() {
       .addMetaTag('viewport', 'width=device-width, initial-scale=1')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
-  return HtmlService.createTemplateFromFile('Index').evaluate()
+  return HtmlService.createHtmlOutputFromFile('Index')   // テンプレートの処理がない分速い（Index.html に <? ?> は使わない）
     .setTitle('LPG容器 質量入力')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -785,7 +785,7 @@ function recordEntry(payload) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    LAST_LOG_DAY_ = null; NEXT_LOG_ROW_ = 0; ENTRY_LOTS_ = {}; CLAIMS_EXEC_ = null;
+    LAST_LOG_DAY_ = null; NEXT_LOG_ROW_ = 0; ENTRY_LOTS_ = {}; ENTRY_GRIDS_ = {}; CLAIMS_EXEC_ = null;
     return recordOne_(payload);
   } finally {
     lock.releaseLock();
@@ -824,7 +824,7 @@ function saveLog_(list, out) {
 
 function recordEntriesLocked_(list, out) {
   {
-    LAST_LOG_DAY_ = null; NEXT_LOG_ROW_ = 0; ENTRY_LOTS_ = {}; CLAIMS_EXEC_ = null;
+    LAST_LOG_DAY_ = null; NEXT_LOG_ROW_ = 0; ENTRY_LOTS_ = {}; ENTRY_GRIDS_ = {}; CLAIMS_EXEC_ = null;
     for (let i = 0; i < (list || []).length; i++) {
       try {
         out.results.push(recordOne_(list[i]));
@@ -842,6 +842,7 @@ let LOG_LAYOUT_CHECKED_ = false;
 // 1回の保存（まとめて保存を含む）の中で使い回す値。シートを読むと、その前の書き込みを待つので遅くなる
 let NEXT_LOG_ROW_ = 0;     // 入力記録の次に書く行
 let ENTRY_LOTS_ = {};      // ロットID → ロット（完了にすると status も同じものが変わる）
+let ENTRY_GRIDS_ = {};     // 成績表シート名 → 表（まとめて保存する間は1回だけ読み、書いた分はここにも入れる。読むたびに書き込みの反映待ちになって遅い）
 
 // ---------- 日付が変わる所に線（入力記録・採番表の一覧） ----------
 const DAY_LINE_COLOR = '#1f2a5c';
@@ -944,7 +945,8 @@ function recordOne_(payload) {
     const sh = getSheet_(lot.sheetName);
     const pos = slotPosition_(index);
     // 表全体を書く前に1回だけ読み、上書き前の値と入力済みの本数を出す（書いた後に読み直すと遅い）
-    const grid = sh.getRange(GRID_FIRST_ROW, GRID_FIRST_COL, GRID_ROWS, BLOCK_WIDTH * BLOCKS).getValues();
+    const grid = ENTRY_GRIDS_[lot.sheetName] ||
+      (ENTRY_GRIDS_[lot.sheetName] = sh.getRange(GRID_FIRST_ROW, GRID_FIRST_COL, GRID_ROWS, BLOCK_WIDTH * BLOCKS).getValues());
     const filledBefore = countGrid_(lot, grid);
     const pr = pos.row - GRID_FIRST_ROW, pc = pos.numberCol + 1 - GRID_FIRST_COL;
     const prev = parseMassCells_(grid[pr].slice(pc, pc + 5));
@@ -952,7 +954,9 @@ function recordOne_(payload) {
     if (again && prev !== null && String(again.serial) === serial && again.mass === prev) { again.duplicateSend = true; return again; }
     // 底黒: 〇が付いている容器がもう一度流れても二重には記録しない
     if (mass === CIRCLE && prev === CIRCLE) return { recordId: null, clientId: payload.clientId, serial: serial, mass: mass, prev: prev, already: true };
-    sh.getRange(pos.row, pos.numberCol + 1, 1, 5).setValues([massCells_(mass)]);
+    const cells = massCells_(mass);
+    sh.getRange(pos.row, pos.numberCol + 1, 1, 5).setValues([cells]);
+    for (let k = 0; k < 5; k++) grid[pr][pc + k] = cells[k];
 
     const recordId = newRecordId_();
     const entered = enteredAt_(payload.clientId);
@@ -1072,6 +1076,29 @@ function clearEntry(input) {
 
 // 印（ダブり・シール違い）の数: { ロットID: { dups: {容器番号: 回数}, seals: {...} } }
 // 入力記録の直近5000行の有効な行から数える（区分が「通常」のままの上書きは以前の記録なのでダブり扱い）
+// 入力記録の from〜last 行の、使う列だけを読む（全列の表示値を読むより速い）。結果は全列の並びの配列で、読まない列は ''
+// Sheets API で1回にまとめて読む。使えなければ従来どおり全列の表示値を読む
+function readLogCols_(log, from, last, cols, width) {
+  const n = last - from + 1;
+  try {
+    if (typeof Sheets === 'undefined') throw new Error('no Sheets');
+    const name = "'" + log.getName().replace(/'/g, "''") + "'!";
+    const res = Sheets.Spreadsheets.Values.batchGet(getSpreadsheet_().getId(), {
+      ranges: cols.map(function(c) { const L = colLetter_(c + 1); return name + L + from + ':' + L + last; }),
+      valueRenderOption: 'FORMATTED_VALUE', majorDimension: 'COLUMNS'
+    });
+    const rows = [];
+    for (let i = 0; i < n; i++) { const r = []; for (let c = 0; c < width; c++) r.push(''); rows.push(r); }
+    (res.valueRanges || []).forEach(function(vr, k) {
+      const v = (vr.values && vr.values[0]) || [];
+      for (let i = 0; i < n && i < v.length; i++) rows[i][cols[k]] = v[i] === undefined || v[i] === null ? '' : String(v[i]);
+    });
+    return rows;
+  } catch (e) {
+    return log.getRange(from, 1, n, width).getDisplayValues();
+  }
+}
+
 function readMarksAll_() {
   const log = getSpreadsheet_().getSheetByName(SHEET_LOG);
   if (!log || log.getLastRow() < 2) return {};
@@ -1082,7 +1109,7 @@ function readMarksAll_() {
     const m = out[lotId] = out[lotId] || { dups: {}, seals: {} };
     m[key][serial] = (m[key][serial] || 0) + 1;
   };
-  log.getRange(from, 1, last - from + 1, width).getDisplayValues().forEach(function(r) {
+  readLogCols_(log, from, last, [LC_LOT, LC_SERIAL, LC_KIND, LC_PREV, LC_STATUS, LC_NOTE], width).forEach(function(r) {
     if (r[LC_STATUS] !== '有効') return;
     if (r[LC_KIND] === KIND_DUP || (r[LC_PREV] !== '' && r[LC_KIND] === '通常')) bump(r[LC_LOT], 'dups', r[LC_SERIAL]);
     if (r[LC_NOTE] === NOTE_SEAL) bump(r[LC_LOT], 'seals', r[LC_SERIAL]);
