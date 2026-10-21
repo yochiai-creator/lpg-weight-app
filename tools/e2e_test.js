@@ -741,6 +741,12 @@ function check(name, ok, detail) {
     check('二重送信: 2回目は書かず1回目の結果を返す（ダブりにしない）', rows.length === 1 && rows[0][8] === '通常' && r2.recordId === r1.recordId && r2.duplicateSend === true && !Object.keys(c.getLot(L.lotId).dups).length, JSON.stringify([rows.length, r1, r2]));
     const r3 = c.recordEntries([{ lotId: L.lotId, serial: '00101', mass: 16.7, clientId: 'dX-abc-2', devId: 'dX' }]).results[0];
     check('二重送信: 別の入力（別のID）で同じ容器ならダブり', r3.kind === 'ダブり');
+    const past = Date.now() - 2 * 3600 * 1000;
+    c.recordEntries([{ lotId: L.lotId, serial: '00102', mass: 16.6, clientId: 'dX-' + past.toString(36) + '-3', devId: 'dX' }]);
+    const tr = lg.getRange(2, 1, lg.getLastRow() - 1, 18).getValues().filter(r => r[2] === L.lotId && String(r[4]).endsWith('00102'))[0];
+    check('入力日時はiPadで入れた時刻（遅れて届いても）', tr && Math.abs(tr[1].getTime() - past) < 1000, tr && tr[1]);
+    const fut = c.enteredAt_('dX-' + (Date.now() + 3600e3).toString(36) + '-1').getTime(), old = c.enteredAt_('c12').getTime();
+    check('入力日時: 未来・読めないIDは届いた時刻', Math.abs(fut - Date.now()) < 2000 && Math.abs(old - Date.now()) < 2000);
     // 「保存済み」の記録があっても成績表に入っていなければ、ふつうに書く（返事だけ返して書かないことがないように）
     c.CacheService.getScriptCache().put('SAVED_dX-zzz-9', JSON.stringify({ recordId: 'Rfake', serial: '00150', mass: 16.7 }), 600);
     const r4 = c.recordEntries([{ lotId: L.lotId, serial: '00150', mass: 16.7, clientId: 'dX-zzz-9', devId: 'dX' }]).results[0];

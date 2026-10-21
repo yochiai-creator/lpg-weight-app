@@ -20,6 +20,7 @@ function runMaintenance() {
       props.setProperty('RESTORED_HEP59701', '1');
     }
   } catch (e) { console.error('ロットの復元に失敗: ' + e.message); }
+  try { retime20261021_(); } catch (e) { console.error('10/21の時刻の付け直しに失敗: ' + e.message); }
   try { out.trimmed = trimLogColumns_(); } catch (e) { console.error('列の削除に失敗: ' + e.message); }
   try { Object.assign(out, archiveLogStep_()); } catch (e) { console.error('入力記録の移動に失敗: ' + e.message); }
   try {
@@ -165,4 +166,51 @@ function restoreArchivedLot_(lot) {
     }
   });
   return moved;
+}
+
+// 2026-10-21: v80のiPadで送信が止まり、夜（18:44〜）にまとめて送り直したため、入力日時が届いた時刻になった。
+// v80はiPadで入れた時刻を送っていないので、作業日報の作業時間（8:36〜12:50・13:40〜15:45）に流れた順番のまま均等に割り振る（推定）。
+// 流れていない9ロット（備考「採番なし」）は動かさない。1回だけ。終わったらその日の採番表を作り直す
+const RETIME_1021_SKIP = ['HEP75301', 'HEP75801', 'HEP75901', 'HEP76001', 'HEP76101', 'HEP76201', 'HEP76301', 'HEP76701', 'HEP76901'];
+function retime20261021_() {
+  const props = sharedProps_();
+  if (props.getProperty('RETIMED_20261021') === '1') return;
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return;
+  try {
+    const log = getSpreadsheet_().getSheetByName(SHEET_LOG);
+    if (!log || log.getLastRow() < 2) return;
+    const last = log.getLastRow(), from = Math.max(2, last - 30000);
+    const vals = log.getRange(from, 1, last - from + 1, LOG_HEADERS.length).getValues();
+    // 10/21の送り直しがあったスプレッドシートだけ（9ロットの記録がなければ何もしない）
+    if (!vals.some(function(r) { return RETIME_1021_SKIP.indexOf(String(r[LC_LOT])) >= 0; })) { props.setProperty('RETIMED_20261021', '1'); return; }
+    const cut = new Date('2026-10-21T18:44:00+09:00').getTime(), end = new Date('2026-10-22T00:00:00+09:00').getTime();
+    const idx = [];
+    vals.forEach(function(r, i) {
+      const t = r[LC_TIME];
+      if (t instanceof Date && t.getTime() >= cut && t.getTime() < end && RETIME_1021_SKIP.indexOf(String(r[LC_LOT])) < 0) idx.push(i);
+    });
+    if (idx.length) {
+      idx.sort(function(a, b) { return (vals[a][LC_TIME] - vals[b][LC_TIME]) || (a - b); });
+      const spans = [['08:36', '12:50'], ['13:40', '15:45']].map(function(p) {
+        return [new Date('2026-10-21T' + p[0] + ':00+09:00').getTime(), new Date('2026-10-21T' + p[1] + ':00+09:00').getTime()];
+      });
+      const total = spans.reduce(function(s, p) { return s + p[1] - p[0]; }, 0);
+      const step = total / idx.length;
+      idx.forEach(function(i, k) {
+        let off = Math.round(k * step);
+        let t = spans[0][0] + off;
+        if (off >= spans[0][1] - spans[0][0]) t = spans[1][0] + off - (spans[0][1] - spans[0][0]);
+        vals[i][LC_TIME] = new Date(t);
+      });
+      const lo = Math.min.apply(null, idx), hi = Math.max.apply(null, idx);
+      log.getRange(from + lo, LC_TIME + 1, hi - lo + 1, 1).setValues(vals.slice(lo, hi + 1).map(function(r) { return [r[LC_TIME]]; }));
+      SpreadsheetApp.flush();
+    }
+    props.setProperty('RETIMED_20261021', '1');
+    console.log('10/21の時刻を付け直した: ' + idx.length + '行');
+  } finally {
+    lock.releaseLock();
+  }
+  makeSaibanPdf({ date: '2026-10-21' });
 }

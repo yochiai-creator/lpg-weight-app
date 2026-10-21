@@ -888,6 +888,15 @@ function rememberSaved_(clientId, result) {
   try { CacheService.getScriptCache().put(SAVED_ID_PREFIX + clientId, JSON.stringify(result), 6 * 3600); } catch (e) { /* 覚えられなくても保存は済んでいる */ }
 }
 
+// 入力日時はiPadで入れた時刻にする（clientId = 端末ID-時刻(36進)-連番）。止まっていた分を後で送っても、採番表の時刻と順番がずれない
+// 読めない・3日より前・未来（iPadの時計ずれ）のときは届いた時刻
+function enteredAt_(clientId) {
+  const now = Date.now();
+  const parts = String(clientId || '').split('-');
+  const t = parts.length === 3 ? parseInt(parts[1], 36) : NaN;
+  return t > 0 && t <= now && now - t < 3 * 24 * 3600 * 1000 ? new Date(t) : new Date(now);
+}
+
 function recordOne_(payload) {
   {
     const again = savedResult_(payload.clientId);
@@ -938,7 +947,7 @@ function recordOne_(payload) {
     const logSh = getSheet_(SHEET_LOG);
     if (!LOG_LAYOUT_CHECKED_) { moveLogColumns_(logSh, true); LOG_LAYOUT_CHECKED_ = true; }   // 古い並びのまま新しい並びの行を書かないように
     const row = {
-      '記録ID': recordId, '入力日時': new Date(), 'ロットID': lot.lotId, 'グループNo': groupNoOf_(lot.kind, serial),
+      '記録ID': recordId, '入力日時': enteredAt_(payload.clientId), 'ロットID': lot.lotId, 'グループNo': groupNoOf_(lot.kind, serial),
       '容器番号': "'" + lot.prefix + serial, '容器区分': lot.kind || '', '表示番号': "'" + displayNumber_(serial),
       '質量(kg)': typeof mass === 'number' ? mass : '', '区分': kind,
       '一致結果': payload.ngInput ? 'NG' : 'OK', '入力番号(NG時)': payload.ngInput ? "'" + payload.ngInput : '',
