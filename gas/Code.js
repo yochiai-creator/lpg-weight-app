@@ -798,6 +798,31 @@ function recordEntries(list) {
   lock.waitLock(20000);
   const out = { results: [], error: '', errorClientId: '' };
   try {
+    try { return recordEntriesLocked_(list, out); } finally { saveLog_(list, out); }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// 保存の記録（調べるため）。隠しシート「_保存ログ」に1回の保存ごとに1行。新しい2000行だけ残す
+function saveLog_(list, out) {
+  try {
+    const ss = getSpreadsheet_();
+    let sh = ss.getSheetByName('_保存ログ');
+    if (!sh) {
+      sh = ss.insertSheet('_保存ログ');
+      sh.getRange(1, 1, 1, 7).setValues([['日時', 'アカウント', '件数', '入力（ロット/番号/質量/ID）', '結果', 'エラー', '版']]);
+      try { sh.hideSheet(); } catch (e) { /* 隠せなくても動く */ }
+    }
+    const items = (list || []).map(function(e) { return [e.lotId, e.serial, e.mass === null ? (e.missing ? '欠番' : e.repair ? '修正' : '') : e.mass, e.clientId].join('/'); }).join(' ; ');
+    const res = (out.results || []).map(function(r) { return (r.recordId || '-') + (r.duplicateSend ? '(二重)' : '') + (r.already ? '(済)' : ''); }).join(' ; ');
+    sh.appendRow([new Date(), userEmail_(), (list || []).length, items.slice(0, 5000), res.slice(0, 5000), out.error || '', 'v82']);
+    if (sh.getLastRow() > 2200) sh.deleteRows(2, sh.getLastRow() - 2001);
+  } catch (e) { console.error('保存ログに失敗: ' + e.message); }
+}
+
+function recordEntriesLocked_(list, out) {
+  {
     LAST_LOG_DAY_ = null; NEXT_LOG_ROW_ = 0; ENTRY_LOTS_ = {}; CLAIMS_EXEC_ = null;
     for (let i = 0; i < (list || []).length; i++) {
       try {
@@ -809,8 +834,6 @@ function recordEntries(list) {
       }
     }
     return out;
-  } finally {
-    lock.releaseLock();
   }
 }
 
@@ -867,7 +890,6 @@ function rememberSaved_(clientId, result) {
 function recordOne_(payload) {
   {
     const again = savedResult_(payload.clientId);
-    if (again) { again.duplicateSend = true; return again; }
     const lot = ENTRY_LOTS_[payload.lotId] || (ENTRY_LOTS_[payload.lotId] = findLot_(payload.lotId));
     // 古いID（6桁）で送られてきた容器番号は、ロットの桁数にそろえる（099070 → 99070）
     if (String(payload.serial).length > lot.start.length && /^0/.test(String(payload.serial))) payload.serial = String(payload.serial).slice(String(payload.serial).length - lot.start.length);
@@ -896,6 +918,8 @@ function recordOne_(payload) {
     const filledBefore = countGrid_(lot, grid);
     const pr = pos.row - GRID_FIRST_ROW, pc = pos.numberCol + 1 - GRID_FIRST_COL;
     const prev = parseMassCells_(grid[pr].slice(pc, pc + 5));
+    // 二重送信: 1回目が本当に成績表に入っているときだけ、書かずに1回目の結果を返す（入っていなければふつうに書く）
+    if (again && prev !== null && String(again.serial) === serial && again.mass === prev) { again.duplicateSend = true; return again; }
     // 底黒: 〇が付いている容器がもう一度流れても二重には記録しない
     if (mass === CIRCLE && prev === CIRCLE) return { recordId: null, clientId: payload.clientId, serial: serial, mass: mass, prev: prev, already: true };
     sh.getRange(pos.row, pos.numberCol + 1, 1, 5).setValues([massCells_(mass)]);

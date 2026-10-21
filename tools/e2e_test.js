@@ -741,6 +741,12 @@ function check(name, ok, detail) {
     check('二重送信: 2回目は書かず1回目の結果を返す（ダブりにしない）', rows.length === 1 && rows[0][8] === '通常' && r2.recordId === r1.recordId && r2.duplicateSend === true && !Object.keys(c.getLot(L.lotId).dups).length, JSON.stringify([rows.length, r1, r2]));
     const r3 = c.recordEntries([{ lotId: L.lotId, serial: '00101', mass: 16.7, clientId: 'dX-abc-2', devId: 'dX' }]).results[0];
     check('二重送信: 別の入力（別のID）で同じ容器ならダブり', r3.kind === 'ダブり');
+    // 「保存済み」の記録があっても成績表に入っていなければ、ふつうに書く（返事だけ返して書かないことがないように）
+    c.CacheService.getScriptCache().put('SAVED_dX-zzz-9', JSON.stringify({ recordId: 'Rfake', serial: '00150', mass: 16.7 }), 600);
+    const r4 = c.recordEntries([{ lotId: L.lotId, serial: '00150', mass: 16.7, clientId: 'dX-zzz-9', devId: 'dX' }]).results[0];
+    check('二重送信: 成績表に入っていなければ「保存済み」の記録があっても書く', r4.recordId !== 'Rfake' && !r4.duplicateSend && c.getLot(L.lotId).entries['00150'] === 16.7, JSON.stringify(r4));
+    const slog = m.ss.getSheetByName('_保存ログ');
+    check('保存ログ: 保存のたびに1行（入力と結果）', !!slog && slog.getLastRow() >= 5 && String(slog.getRange(slog.getLastRow(), 4).getValue()).includes('00150/16.7/dX-zzz-9'));
   }
   // ---- 10kg（50本ごと・内容積24）・30kg把手（内容積71）
   {
