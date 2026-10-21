@@ -888,6 +888,26 @@ function rememberSaved_(clientId, result) {
   try { CacheService.getScriptCache().put(SAVED_ID_PREFIX + clientId, JSON.stringify(result), 6 * 3600); } catch (e) { /* 覚えられなくても保存は済んでいる */ }
 }
 
+// 記録ID。同じ秒に何本も書くので、秒＋4桁の乱数にして、この実行の中では重ならないようにする
+// （以前は秒＋0〜999の乱数で、10/21に同じIDが3組できた。取消で別の容器を消すおそれがある）
+const USED_RECORD_IDS_ = {};
+function newRecordId_() {
+  const head = 'R' + Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyMMddHHmmss');
+  let id;
+  do { id = head + String(1000 + Math.floor(Math.random() * 9000)); } while (USED_RECORD_IDS_[id]);
+  USED_RECORD_IDS_[id] = true;
+  return id;
+}
+
+// 前の日の入力が後から届いたら、その日の採番表を夜に作り直す（作り済みのPDFが古いままにならないように）
+function markSaibanStale_(entered) {
+  const d = tokyoDate_(entered);
+  if (d >= tokyoDate_(new Date())) return;
+  const props = sharedProps_();
+  const list = (props.getProperty('SAIBAN_STALE') || '').split(',').filter(String);
+  if (list.indexOf(d) < 0) { list.push(d); props.setProperty('SAIBAN_STALE', list.join(',')); }
+}
+
 // 入力日時はiPadで入れた時刻にする（clientId = 端末ID-時刻(36進)-連番）。止まっていた分を後で送っても、採番表の時刻と順番がずれない
 // 読めない・3日より前・未来（iPadの時計ずれ）のときは届いた時刻
 function enteredAt_(clientId) {
@@ -934,8 +954,9 @@ function recordOne_(payload) {
     if (mass === CIRCLE && prev === CIRCLE) return { recordId: null, clientId: payload.clientId, serial: serial, mass: mass, prev: prev, already: true };
     sh.getRange(pos.row, pos.numberCol + 1, 1, 5).setValues([massCells_(mass)]);
 
-    const recordId = 'R' + Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyMMddHHmmss') +
-      Math.floor(Math.random() * 1000);
+    const recordId = newRecordId_();
+    const entered = enteredAt_(payload.clientId);
+    markSaibanStale_(entered);
     // 区分: 新規=通常 / 欠番 / 入力済みの上書き=修正（入力ミスを直した）かダブり（2回流れた）
     // 別の端末が先に同じ容器を入れていた場合など、理由の指定がない上書きはダブりとする
     let kind = '通常';
@@ -947,7 +968,7 @@ function recordOne_(payload) {
     const logSh = getSheet_(SHEET_LOG);
     if (!LOG_LAYOUT_CHECKED_) { moveLogColumns_(logSh, true); LOG_LAYOUT_CHECKED_ = true; }   // 古い並びのまま新しい並びの行を書かないように
     const row = {
-      '記録ID': recordId, '入力日時': enteredAt_(payload.clientId), 'ロットID': lot.lotId, 'グループNo': groupNoOf_(lot.kind, serial),
+      '記録ID': recordId, '入力日時': entered, 'ロットID': lot.lotId, 'グループNo': groupNoOf_(lot.kind, serial),
       '容器番号': "'" + lot.prefix + serial, '容器区分': lot.kind || '', '表示番号': "'" + displayNumber_(serial),
       '質量(kg)': typeof mass === 'number' ? mass : '', '区分': kind,
       '一致結果': payload.ngInput ? 'NG' : 'OK', '入力番号(NG時)': payload.ngInput ? "'" + payload.ngInput : '',

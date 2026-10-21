@@ -747,6 +747,13 @@ function check(name, ok, detail) {
     check('入力日時はiPadで入れた時刻（遅れて届いても）', tr && Math.abs(tr[1].getTime() - past) < 1000, tr && tr[1]);
     const fut = c.enteredAt_('dX-' + (Date.now() + 3600e3).toString(36) + '-1').getTime(), old = c.enteredAt_('c12').getTime();
     check('入力日時: 未来・読めないIDは届いた時刻', Math.abs(fut - Date.now()) < 2000 && Math.abs(old - Date.now()) < 2000);
+    const many = c.recordEntries(Array.from({ length: 40 }, (_, k) => ({ lotId: L.lotId, serial: String(110 + k).padStart(5, '0'), mass: 16.5, clientId: 'dX-zz' + k + '-' + k, devId: 'dX' }))).results;
+    check('記録IDは同じ秒に何本書いても重ならない', new Set(many.map(r => r.recordId)).size === 40, many.length);
+    const yest = Date.now() - 26 * 3600 * 1000;
+    c.recordEntries([{ lotId: L.lotId, serial: '00103', mass: 16.6, clientId: 'dX-' + yest.toString(36) + '-7', devId: 'dX' }]);
+    const stale = c.sharedProps_().getProperty('SAIBAN_STALE');
+    c.saibanStep_();
+    check('前の日の入力が後から届いたら、その日の採番表を作り直す', stale === c.tokyoDate_(new Date(yest)) && !c.sharedProps_().getProperty('SAIBAN_STALE'), stale);
     // 「保存済み」の記録があっても成績表に入っていなければ、ふつうに書く（返事だけ返して書かないことがないように）
     c.CacheService.getScriptCache().put('SAVED_dX-zzz-9', JSON.stringify({ recordId: 'Rfake', serial: '00150', mass: 16.7 }), 600);
     const r4 = c.recordEntries([{ lotId: L.lotId, serial: '00150', mass: 16.7, clientId: 'dX-zzz-9', devId: 'dX' }]).results[0];

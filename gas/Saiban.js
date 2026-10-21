@@ -279,6 +279,12 @@ function saibanRedoStep_() {
 // 前日まででまだ作っていない日の採番表を作る（1回に3日分まで）。初回は昨日の分から
 function saibanStep_() {
   const props = sharedProps_();
+  // 後から届いた入力がある日を作り直す
+  const stale = (props.getProperty('SAIBAN_STALE') || '').split(',').filter(String);
+  if (stale.length) {
+    props.setProperty('SAIBAN_STALE', '');
+    stale.forEach(function(d) { makeSaibanPdf({ date: d }); });
+  }
   const today = tokyoDate_(new Date());
   const day = 24 * 3600 * 1000;
   let doneUntil = props.getProperty('SAIBAN_DONE_UNTIL');
