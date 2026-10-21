@@ -1057,13 +1057,12 @@ function clearEntry(input) {
     const label = lot.prefix + serial;
     let marked = 0;
     if (log.getLastRow() >= 2) {
-      const last = log.getLastRow(), from = Math.max(2, last - 5000);
-      const v = log.getRange(from, 1, last - from + 1, LOG_HEADERS.length).getDisplayValues();
       const now = new Date();
-      v.forEach(function(r, i) {
+      logRowsMatching_(log, LC_SERIAL, label).forEach(function(row) {
+        const r = log.getRange(row, 1, 1, LOG_HEADERS.length).getDisplayValues()[0];
         if (r[LC_LOT] === lot.lotId && r[LC_SERIAL] === label && r[LC_STATUS] === '有効') {
-          log.getRange(from + i, LC_STATUS + 1).setValue('取消');
-          log.getRange(from + i, LC_UNDO + 1).setValue(now);
+          log.getRange(row, LC_STATUS + 1).setValue('取消');
+          log.getRange(row, LC_UNDO + 1).setValue(now);
           marked++;
         }
       });
@@ -1074,8 +1073,21 @@ function clearEntry(input) {
   }
 }
 
+// 入力記録で、col 列が text と一致する行（全部の行から探す。直近の何行かだけだと、入力が多い日のあとに古い行を取りこぼす）
+function logRowsMatching_(log, col, text) {
+  const last = log.getLastRow();
+  if (last < 2) return [];
+  const range = log.getRange(2, col + 1, last - 1, 1);
+  if (typeof range.createTextFinder === 'function') {
+    return range.createTextFinder(String(text)).matchEntireCell(true).findAll().map(function(c) { return c.getRow(); });
+  }
+  const rows = [];
+  range.getDisplayValues().forEach(function(r, i) { if (r[0] === String(text)) rows.push(i + 2); });
+  return rows;
+}
+
 // 印（ダブり・シール違い）の数: { ロットID: { dups: {容器番号: 回数}, seals: {...} } }
-// 入力記録の直近5000行の有効な行から数える（区分が「通常」のままの上書きは以前の記録なのでダブり扱い）
+// 入力記録の直近2万行の有効な行から数える（区分が「通常」のままの上書きは以前の記録なのでダブり扱い）
 // 入力記録の from〜last 行の、使う列だけを読む（全列の表示値を読むより速い）。結果は全列の並びの配列で、読まない列は ''
 // Sheets API で1回にまとめて読む。使えなければ従来どおり全列の表示値を読む
 function readLogCols_(log, from, last, cols, width) {
@@ -1102,7 +1114,7 @@ function readLogCols_(log, from, last, cols, width) {
 function readMarksAll_() {
   const log = getSpreadsheet_().getSheetByName(SHEET_LOG);
   if (!log || log.getLastRow() < 2) return {};
-  const last = log.getLastRow(), from = Math.max(2, last - 5000);
+  const last = log.getLastRow(), from = Math.max(2, last - 20000);   // 使う列だけ読むので広くとれる（10/21は1日で4000行）
   const width = Math.min(log.getLastColumn(), LOG_HEADERS.length);
   const out = {};
   const bump = function(lotId, key, serial) {
@@ -1227,10 +1239,9 @@ function deleteLot(lotId) {
     const log = ss.getSheetByName(SHEET_LOG);
     if (log) moveLogColumns_(log, true);
     if (log && log.getLastRow() >= 2) {
-      const last = log.getLastRow(), from = Math.max(2, last - 5000);
-      const v = log.getRange(from, 1, last - from + 1, LOG_HEADERS.length).getValues();
-      v.forEach(function(r, i) {
-        if (r[LC_LOT] === lot.lotId && r[LC_STATUS] === '有効') { log.getRange(from + i, LC_STATUS + 1).setValue('削除'); marked++; }
+      logRowsMatching_(log, LC_LOT, lot.lotId).forEach(function(row) {
+        const r = log.getRange(row, 1, 1, LOG_HEADERS.length).getValues()[0];
+        if (r[LC_LOT] === lot.lotId && r[LC_STATUS] === '有効') { log.getRange(row, LC_STATUS + 1).setValue('削除'); marked++; }
       });
     }
     return { lotId: lot.lotId, marked: marked };
