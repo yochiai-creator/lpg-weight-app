@@ -463,7 +463,7 @@ function check(name, ok, detail) {
     c.sharedProps_().setProperty('SAIBAN_DONE_UNTIL', today); c.sharedProps_().setProperty('SAIBAN_REDONE_VER', '');
     const pdfBefore = global.PDFBLOBS[key];
     const redo1 = c.saibanRedoStep_();
-    check('時刻の列のない採番表を作り直す（1回だけ）', redo1 === 0 && global.PDFBLOBS[key] !== pdfBefore && c.sharedProps_().getProperty('SAIBAN_REDONE_VER') === 'v84' && c.saibanRedoStep_() === 0, JSON.stringify([redo1, global.PDFBLOBS[key] !== pdfBefore, c.sharedProps_().getProperty('SAIBAN_REDONE_VER')]));
+    check('時刻の列のない採番表を作り直す（1回だけ）', redo1 === 0 && global.PDFBLOBS[key] !== pdfBefore && c.sharedProps_().getProperty('SAIBAN_REDONE_VER') === 'v79' && c.saibanRedoStep_() === 0, JSON.stringify([redo1, global.PDFBLOBS[key] !== pdfBefore, c.sharedProps_().getProperty('SAIBAN_REDONE_VER')]));
     check('毎晩の自動処理: その日の採番表PDFを作る', global.PDFBLOBS[key] !== beforeBlob && global.PDFS.filter(p => p.endsWith('/採番表_' + today + '.pdf')).length === 1 && c.sharedProps_().getProperty('SAIBAN_DONE_UNTIL') === today);
   }
   // ---- ドライブのフォルダを「LPG容器 質量入力」に全部まとめる（v52までの並びからの整理）

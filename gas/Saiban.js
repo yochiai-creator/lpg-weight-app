@@ -247,8 +247,9 @@ function saibanDatesForLots_(lotIds) {
 
 // 作り方を変えたとき、これまでの採番表を1回だけ作り直す（1回に3日分。残りは次の呼び出しで）
 // v76: 時刻の列を足した / v78: 削除したロットの記録を載せない（10/10 に作業者が連名になった）
-// v79: 機種ごとにページと流れた順番を分けた / v84: 備考「採番なし」の記録を載せない。変えたら SAIBAN_REDO_VER を上げる
-const SAIBAN_REDO_VER = 'v84';
+// v79: 機種ごとにページと流れた順番を分けた。変えたら SAIBAN_REDO_VER を上げる
+// （v84の「採番なし」は10/21だけなので上げない。上げるとアプリを開くたびに裏で全部の日を作り直して重くなる）
+const SAIBAN_REDO_VER = 'v79';
 // 対象は入力記録にある日のうち、自動で作り終えた日まで（今日の分は夜に作る）
 function saibanRedoStep_() {
   const props = sharedProps_();
