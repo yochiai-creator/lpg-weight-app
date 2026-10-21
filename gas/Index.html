@@ -263,7 +263,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v91（送信済みのロットも一覧から消せる）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v92（完了ではメールを送らない・まとめて送信は未送信だけ）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -419,11 +419,9 @@
 </main>
 
 <dialog id="dlgDone">
-  <h3 id="dlgTitle">完了・送信</h3>
+  <h3 id="dlgTitle">完了</h3>
   <div class="missing-list" id="dlgMissing"></div>
-  <label style="font-size:15px;color:var(--text)"><input type="checkbox" id="dSend" checked style="width:auto"> メールで納品する</label>
-  <p class="sub" id="dMailTo" style="font-size:13px;color:var(--muted)"></p>
-  <p class="sub" style="font-size:12px;color:var(--muted)">全数（欠番を含む）そろうと自動で完了・PDF作成・メール送信されます。未入力が残っていても完了にしたいときだけ使います。</p>
+  <p class="sub" style="font-size:12px;color:var(--muted)">完了にすると成績表PDFを作ってドライブに保存します（メールは送りません。ホームの「検査表をまとめてメール送信」でまとめて送ります）。全数（欠番を含む）そろうと自動で完了します。未入力が残っていても完了にしたいときだけ使います。</p>
   <div class="msg" id="dlgMsg"></div>
   <div class="row" style="justify-content:flex-end;margin-top:12px">
     <button class="btn sec" id="dCancel">閉じる</button>
@@ -745,15 +743,7 @@
         };
         setTimeout(function() { row.appendChild(hd); }, 0);
       }
-      const r = document.createElement('button');
-      r.className = 'btn sec'; r.textContent = l.sentAt ? '再送信' : 'メールで送信';
-      r.onclick = function() {
-        if (!armed(r, 'もう一度押すと送信')) { homeMsg((S.mail.to || '（送付先未設定）') + ' に送信します。もう一度押すと送信します', 'err'); return; }
-        r.disabled = true;
-        call('resendLot', l.lotId).then(function(x) { homeMsg('送信しました: ' + x.sentTo, 'ok'); return loadHome(); })
-          .catch(function(e) { homeMsg(errText(e), 'err'); r.disabled = false; });
-      };
-      row.appendChild(r);
+      // メールは1通ずつ送らない（ホームの「検査表をまとめてメール送信」で送る）
       if (l.pdf) {
         const a = document.createElement('a');
         a.href = l.pdf; a.target = '_blank'; a.textContent = 'PDFを開く'; a.style.marginLeft = '8px';
@@ -954,10 +944,6 @@
     }
     $('dlgMissing').textContent = miss.length ? '未入力 ' + miss.length + ' 本: ' + miss.join(', ') : '';
     $('dlgMsg').textContent = '';
-    $('dSend').checked = !!S.mail.to;
-    $('dSend').disabled = !S.mail.to;
-    $('dMailTo').textContent = S.mail.to ? '送付先: ' + S.mail.to + (S.mail.cc ? '　CC: ' + S.mail.cc : '')
-      : '送付先が未設定です（スプレッドシートの「設定」シートで設定）';
     $('dlgDone').showModal();
   }
   $('dCancel').onclick = function() { $('dlgDone').close(); };
@@ -968,8 +954,8 @@
     const miss = $('dlgMissing').textContent;
     if (miss && !armed($('dSave'), 'もう一度押すと完了')) { $('dlgMsg').className = 'msg err'; $('dlgMsg').textContent = miss.split(':')[0] + ' あります。このまま完了にするなら、もう一度押してください'; return; }
     const btn = $('dSave'); btn.disabled = true;
-    $('dlgMsg').className = 'msg'; $('dlgMsg').textContent = 'PDFを作成中…' + ($('dSend').checked ? '（メール送信します）' : '');
-    call('completeLot', { lotId: doneLot.lotId, send: $('dSend').checked, devId: DEV_ID }).then(function(r) {
+    $('dlgMsg').className = 'msg'; $('dlgMsg').textContent = 'PDFを作成中…';
+    call('completeLot', { lotId: doneLot.lotId, devId: DEV_ID }).then(function(r) {
       $('dlgDone').close(); homeMsg(doneResultText(r), r.mailError ? 'err' : 'ok');
       return loadHome();
     }).catch(function(e) {
@@ -1359,8 +1345,7 @@
     if (res.completed) {
       S.lots = S.lots.filter(function(x) { return x.lotId !== lotId; });
       if (S.viewLotId === lotId && S.lots.length) S.viewLotId = S.lots[0].lotId;
-      setNotice('★ ' + name + ' 全数そろいました。成績表PDFを作成' +
-        (res.sentTo ? 'し、' + res.sentTo + ' へ送信しました' : '') +
+      setNotice('★ ' + name + ' 全数そろいました。完了にして成績表PDFを作成しました（メールは「まとめてメール送信」で送ります）' +
         (res.mailError ? '（メール送信失敗: ' + res.mailError + '）' : ''), res.mailError ? 'err' : 'ok');
       if (!S.lots.length) setTimeout(function() { $('btnHome').click(); }, 2500);
     } else {

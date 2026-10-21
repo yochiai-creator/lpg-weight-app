@@ -994,11 +994,11 @@ function recordOne_(payload) {
     // 全数（欠番を含む）そろったら自動で完了・PDF作成・送信する
     if (prev === null && filledBefore + 1 >= lotSize_(lot)) {
       result.full = true;
-      // 自動で完了・送信するのは、送付先が入っていて「自動送信=する」のときだけ（送付先が空なら完了は手動で）
+      // 自動で完了するのは、送付先が入っていて「自動送信=する」のときだけ（送付先が空なら完了は手動で）。メールは送らない（まとめて送信で送る）
       const st = readSettings_();
       if (!lot.sentAt && st.auto && st.to) {
         try {
-          const done = finishLot_(lot, true);
+          const done = finishLot_(lot, false);
           result.completed = true;
           result.sentTo = done.sentTo;
           result.mailError = done.mailError;
@@ -1147,7 +1147,7 @@ function completeLot(input) {
   try {
     const lot = findLot_(input.lotId);
     checkClaim_(lot.lotId, input, false);
-    return finishLot_(lot, !!input.send);
+    return finishLot_(lot, false);   // 完了ではメールを送らない（まとめて送信で送る）
   } finally {
     lock.releaseLock();
   }
@@ -1180,6 +1180,7 @@ function finishLot_(lot, send) {
 
 // 完了済みロットをもう一度送る
 function resendLot(lotId) {
+  LOG_TAIL_CACHE_ = null;   // 本文の本数を最新の入力記録から数える
   const lot = findLot_(lotId);
   const pdf = lotPdf_(lot);
   return { lotId: lot.lotId, pdfUrl: pdf.url, sentTo: sendLotMail_(lot, pdf.blob) };
@@ -1389,6 +1390,11 @@ function reopenLot(lotId) {
   const lot = findLot_(lotId);
   getSheet_(SHEET_LOTS).getRange(lot.row, 7).setValue(STATUS_ACTIVE);
   lot.status = STATUS_ACTIVE;
+  // 送ったあとに再開したら、もう一度完了したときに「まとめて送信」に出るよう送信日時を消す（前回の送信は送信先の欄に残す）
+  if (lot.sentAt) {
+    getSheet_(SHEET_LOTS).getRange(lot.row, 16, 1, 2).setValues([['', '前回送信 ' + lot.sentAt + ' ' + (lot.sentTo || '')]]);
+    lot.sentAt = '';
+  }
   restoreArchivedLot_(lot);   // 年替わりで移した記録があれば入力記録へ戻す
   if (!getSpreadsheet_().getSheetByName(lot.sheetName)) rebuildReportSheet_(lot);
   return withProgress_(lot);

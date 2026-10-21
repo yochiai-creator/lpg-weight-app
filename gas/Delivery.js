@@ -162,9 +162,9 @@ function hideDoneLot(input) {
   }
 }
 
-// まとめて送信の候補（完了したロット。新しい順）
+// まとめて送信の候補（完了してまだ送っていないロット。新しい順）
 function listDoneLots() {
-  return readLots_().filter(function(l) { return l.status === STATUS_DONE; }).reverse().map(function(l) {
+  return readLots_().filter(function(l) { return l.status === STATUS_DONE && !l.sentAt; }).reverse().map(function(l) {   // 送ったものは出さない
     return { lotId: l.lotId, prefix: l.prefix, start: l.start, end: l.end, kind: l.kind, sheetName: l.sheetName,
       sentAt: l.sentAt, pdf: l.pdf, spec: l.spec, skipped: isSkipped_(l) };
   });
@@ -173,6 +173,7 @@ function listDoneLots() {
 // 選んだ完了ロットの成績表PDFを、1通（多いときは BULK_MAIL_MAX_LOTS ロットずつ）にまとめて送る
 // input: [lotId, ...] または { lotIds: [...], saiban: true }（saiban: そのロットの容器が流れた日の採番表PDFも付ける）
 function sendLotsMail(input) {
+  LOG_TAIL_CACHE_ = null;   // 本文の本数を最新の入力記録から数える
   const st = readSettings_();
   if (!st.to) throw new Error('設定シートの「送付先」が空です');
   const lotIds = Array.isArray(input) ? input : (input && input.lotIds);

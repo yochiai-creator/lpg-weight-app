@@ -254,18 +254,18 @@ function check(name, ok, detail) {
   await page.click('#btnHome'); await page.waitForTimeout(300);
   await page.locator('#activeLots .card', { hasText: 'HEP37001' }).locator('button:has-text("完了にする")').click();
   check('完了ダイアログに未入力本数', (await page.textContent('#dlgMissing')).includes('未入力'));
-  await page.uncheck('#dSend'); await page.click('#dSave'); await page.waitForTimeout(150);
+  await page.click('#dSave'); await page.waitForTimeout(150);
   check('未入力があると完了は2回押し', (await page.textContent('#dlgMsg')).includes('もう一度押して'));
   await page.click('#dSave'); await page.waitForTimeout(400);
   const lots = () => ss.getSheetByName('ロット').getRange(2, 1, 2, 17).getDisplayValues();
   check('手動完了で状態=完了・PDF保存', lots()[0][6] === '完了' && lots()[0][13] !== '');
-  check('送信しない指定ではメールなし', global.MAILS.length === 0);
+  check('完了ではメールを送らない', global.MAILS.length === 0);
   check('完了してPDFを保存したら成績表シートを消す', !ss.getSheetByName('成績表_HEP37001-37100'));
   { const y = String(new Date().getFullYear()), mo = ('0' + (new Date().getMonth() + 1)).slice(-2);
     check('PDFは年・月・機種のフォルダに保存', global.PDFS.some(p => p === '/LPG容器 質量入力/成績表PDF/' + y + '年/' + mo + '月/50kg/成績表_HEP37001-37100.pdf'), global.PDFS.join(',')); }
   check('シートを消した完了ロットも入力状況は入力記録から出る', Object.keys(ctx.getBootstrap().recentDone.find(l => l.lotId === 'HEP37001').entries).length >= 15);
 
-  // ---- 全数そろったら自動完了・送信
+  // ---- 全数そろったら自動完了（メールは送らない）
   await page.click('#btnStart'); await page.waitForTimeout(100);
   check('番号が重ならなければ入力桁数は下3桁', (await page.textContent('#numHint')).includes('下3桁'));
   for (let i = 1; i <= 100; i++) {
@@ -274,11 +274,13 @@ function check(name, ok, detail) {
     else for (const c of (i <= 5 ? '347' : '7')) await page.keyboard.press('Numpad' + c);
   }
   await page.waitForTimeout(3000);
-  check('全数そろうと画面に送信完了', (await page.textContent('#notice')).includes('全数そろいました'));
+  check('全数そろうと画面に完了の知らせ', (await page.textContent('#notice')).includes('全数そろいました'));
+  check('自動完了ではメールを送らない', global.MAILS.length === 0 && lots()[1][6] === '完了' && lots()[1][15] === '');
+  ctx.resendLot('HEP36001');   // 1通ずつの文面（サーバーには残してある）
   const mail = global.MAILS[0] || {};
   check('メールを1通送信', global.MAILS.length === 1);
   check('宛先・件名', mail.to === 'nouhin@example.com' && (mail.sub || '').includes('HEP36001～HEP36100'));
-  check('本文に本数と欠番', (mail.body || '').includes('本数：99本（欠番 1・修正 0）'));
+  check('本文に本数と欠番', (mail.body || '').includes('本数：99本（欠番 1・修正 0）'), mail.body);
   check('本文に空の差し込み行が残らない', !(mail.body || '').includes('耐圧試験日'));
   check('成績表PDFだけを添付（CSVは付けない）', JSON.stringify(mail.att) === JSON.stringify(['成績表_HEP36001-36100.pdf']) && !mail.body.includes('CSV'), JSON.stringify(mail.att));
   check('ロットに送信日時・送信先', lots()[1][6] === '完了' && lots()[1][15] !== '' && lots()[1][16] === 'nouhin@example.com');
@@ -337,20 +339,22 @@ function check(name, ok, detail) {
   await page.click('#btnHome'); await page.waitForTimeout(300);
   // ---- 検査表をまとめてメール送信（ホーム画面）
   {
+    ctx.completeLot({ lotId: 'HEP37001' });
     await page.click('#btnBulkLoad'); await page.waitForTimeout(300);
     const items = await page.$$eval('#bulkList input', xs => xs.map(x => ({ id: x.value, on: x.checked })));
     const done = ctx.readLots_().filter(l => l.status === '完了');
-    check('まとめて送信: 完了したロットが並び、未送信だけ最初から選ばれている', items.length === done.length && items.every(x => x.on === !done.find(l => l.lotId === x.id).sentAt), JSON.stringify(items));
+    check('まとめて送信: 送っていない完了ロットだけが並び、最初から選ばれている（送ったものは出ない）', items.length === done.filter(l => !l.sentAt).length && items.length > 0 && items.every(x => x.on) && !items.some(x => x.id === 'HEP36001'), JSON.stringify(items));
     await page.click('#btnBulkUnsent'); await page.click('#btnBulkNone');
-    await page.check('#bulkList input[value="HEP36001"]');
+    await page.check('#bulkList input[value="HEP37001"]');
     const n = (await page.$$eval('#bulkList input:checked', xs => xs.length));
     const before = global.MAILS.length;
     await page.click('#btnBulkSend'); await page.waitForTimeout(100);
     check('まとめて送信: 1回目の押しでは送らない', global.MAILS.length === before && (await page.textContent('#bulkMsg')).includes('もう一度押すと送信'));
     await page.click('#btnBulkSend'); await page.waitForTimeout(600);
     const m = global.MAILS[before];
-    check('まとめて送信: 選んだロットのPDFを1通で（採番表も付ける・CSVは付けない）', global.MAILS.length === before + 1 && n === 1 && m && m.att[0] === '成績表_HEP36001-36100.pdf' && m.att.slice(1).every(a => /^採番表_\d{4}-\d\d-\d\d\.pdf$/.test(a)) && m.sub.includes('1ロット分'), JSON.stringify(m));
+    check('まとめて送信: 選んだロットのPDFを1通で（採番表も付ける・CSVは付けない）', global.MAILS.length === before + 1 && n === 1 && m && m.att[0] === '成績表_HEP37001-37100.pdf' && m.att.slice(1).every(a => /^採番表_\d{4}-\d\d-\d\d\.pdf$/.test(a)) && m.sub.includes('1ロット分'), JSON.stringify(m));
     check('まとめて送信: 送信後に送信済みと表示', (await page.textContent('#bulkMsg')).includes('送信しました'));
+    check('まとめて送信: 送ったロットは一覧から消える', !(await page.$('#bulkList input[value="HEP37001"]')), await page.textContent('#bulkList'));
   }
 
   fs.mkdirSync(path.join(__dirname, 'out'), { recursive: true });
@@ -720,7 +724,7 @@ function check(name, ok, detail) {
     const S2 = c.createLot({ prefix: 'SK', start: '00201', kind: '20kg' });
     c.recordEntry({ lotId: L.lotId, serial: '00101', mass: 16.7 });
     c.completeLot({ lotId: L.lotId, send: false });
-    c.completeLot({ lotId: S2.lotId, send: true });
+    c.completeLot({ lotId: S2.lotId }); c.resendLot(S2.lotId);
     const p6 = await browser.newPage({ viewport: { width: 820, height: 1180 } });
     p6.on('pageerror', e => check('ページでJSエラーなし(送らずに消す)', false, e.message));
     await p6.exposeFunction('__gas', (fn, arg) => {
@@ -746,10 +750,13 @@ function check(name, ok, detail) {
     await p6.click('#btnBulkLoad'); await p6.waitForTimeout(300);
     const bl = await p6.$$eval('#bulkList label', ls => ls.map(x => ({ t: x.textContent, on: x.querySelector('input').checked })));
     check('送らずに消す: まとめて送信の一覧には「送らない」で残り、最初は選ばれない', bl.some(x => x.t.includes('SK00101') && x.t.includes('送らない') && !x.on), JSON.stringify(bl));
-    check('一覧から消したロットも、まとめて送信の一覧には残る', bl.some(x => x.t.includes('SK00201')), JSON.stringify(bl));
+    check('送ったロットは、まとめて送信の一覧に出ない', !bl.some(x => x.t.includes('SK00201')), JSON.stringify(bl));
     await p6.close();
     c.sendLotsMail([L.lotId]);
-    check('送らずに消したロットも、後からまとめて送信すれば送信済みになる', !!c.findLot_(L.lotId).sentAt && !c.listDoneLots().find(x => x.lotId === L.lotId).skipped);
+    check('送らずに消したロットも、後からまとめて送信すれば送信済みになり、一覧から消える', !!c.findLot_(L.lotId).sentAt && !c.listDoneLots().find(x => x.lotId === L.lotId));
+    c.reopenLot(L.lotId); c.completeLot({ lotId: L.lotId });
+    check('送ったあと再開してもう一度完了したら、まとめて送信の一覧にまた出る', !!c.listDoneLots().find(x => x.lotId === L.lotId && !x.skipped) && String(c.findLot_(L.lotId).sentTo).startsWith('前回送信'), JSON.stringify(c.findLot_(L.lotId)));
+    c.sendLotsMail([L.lotId]);
     let e1 = ''; try { c.skipLotMail({ lotId: L.lotId }); } catch (e) { e1 = e.message; }
     check('送信済みのロットは送らずに消せない', e1.includes('送信済み'), e1);
   }
@@ -897,7 +904,8 @@ function check(name, ok, detail) {
     check('v71の初期値のままの本文は採番表の行がある本文に置き換える', String(conf.getRange(2 + bi, 2).getValue()).includes('{採番表}'));
     { const ni = names.indexOf('本文'); conf.getRange(2 + ni, 2).setValue('ご担当者様\n\n添付：検査成績表（PDF）、質量データ（CSV）\n\nよろしく'); c.ensureSettingRows_();
       check('設定シートの本文から「質量データ（CSV）」の言葉を消す', String(conf.getRange(2 + ni, 2).getValue()) === 'ご担当者様\n\n添付：検査成績表（PDF）\n\nよろしく' && !String(conf.getRange(2 + bi, 2).getValue()).includes('CSV'), conf.getRange(2 + ni, 2).getValue()); }
-    check('まとめて送信の候補は完了ロットだけ（新しい順）', c.listDoneLots().filter(l => l.prefix === 'BM').length === 22 && c.listDoneLots()[0].lotId === ids[21]);
+    { const sentN = ids.filter(id => !!c.findLot_(id).sentAt).length, cand = c.listDoneLots().filter(l => l.prefix === 'BM');
+      check('まとめて送信の候補は送っていない完了ロットだけ', sentN > 0 && cand.length === 22 - sentN && cand.every(l => !l.sentAt), sentN + '/' + cand.length); }
   }
   // ---- 起動を軽く: 成績表はまとめて1回で読む・保存は書く前に1回だけ読む
   {
