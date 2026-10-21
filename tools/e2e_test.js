@@ -456,7 +456,11 @@ function check(name, ok, detail) {
     check('採番表: 作り直すと同じ日の行・PDFは置き換える', ssh.getLastRow() - 1 === 252 && global.PDFS.filter(p => p.endsWith('/採番表_' + today + '.pdf')).length === 1);
     check('採番表: 流れていない日は作らない', c.makeSaibanPdf({ date: '2000-01-01' }).count === 0);
     c.installNightlyTrigger(); c.installNightlyTrigger();
-    check('毎晩の自動処理: 22時台の時間指定が1つだけ', global.TRIGGERS.length === 1 && global.TRIGGERS[0].o.hour === 22 && global.TRIGGERS[0].o.tz === 'Asia/Tokyo');
+    const nt = global.TRIGGERS.filter(t => t.getHandlerFunction() === 'nightlyJob'), mt = global.TRIGGERS.filter(t => t.getHandlerFunction() === 'morningJob');
+    check('毎晩の自動処理: 22時台の時間指定が1つだけ', nt.length === 1 && nt[0].o.hour === 22 && nt[0].o.tz === 'Asia/Tokyo');
+    check('毎朝の準備: 6時台の時間指定が1つだけ', mt.length === 1 && mt[0].o.hour === 6 && global.TRIGGERS.length === 2);
+    c.morningJob();
+    check('毎朝の準備が済んだ日は、画面を開いたときの裏の処理を飛ばす', c.sharedProps_().getProperty('MAINT_DAY') === today && c.runMaintenance().trimmed === false);
     const beforeBlob = global.PDFBLOBS[key];
     c.nightlyJob();
     // 時刻の列がない採番表は1回だけ作り直す（作り終えた日まで・3日分ずつ）

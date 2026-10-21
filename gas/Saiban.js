@@ -315,17 +315,41 @@ function nightlyJob() {
   sharedProps_().setProperty('SAIBAN_DONE_UNTIL', today);
   const until = Date.now() + 4 * 60 * 1000;        // 実行時間の上限（6分）に余裕を持たせる
   let r;
-  do { r = runMaintenance(); } while (r.archiveDone === false && Date.now() < until);
+  do { r = runMaintenance({ scheduled: true }); } while (r.archiveDone === false && Date.now() < until);
   try { cleanDoneSheets_(); } catch (e) { console.error('完了済みシートの片付けに失敗: ' + e.message); }
+}
+
+// ---------- 毎朝の準備（6時台）: 整理などの裏の処理を作業前に済ませ、表を1回読んでおく ----------
+// 済んだ日は、画面を開いたときの裏の処理（runMaintenance）を飛ばすので、起動が軽くなる
+const MORNING_HOUR = 6;
+function morningJob() {
+  if (isOldProject_()) return;
+  const until = Date.now() + 4 * 60 * 1000;
+  let r;
+  do { r = runMaintenance({ scheduled: true }); } while (r.archiveDone === false && Date.now() < until);
+  if (r.archiveDone !== false) sharedProps_().setProperty('MAINT_DAY', tokyoDate_(new Date()));
+  try { getBootstrap(); } catch (e) { console.error('朝の読み込みに失敗: ' + e.message); }
+}
+
+// 朝の自動処理がなければ1回だけ作る（メニューを押さなくても入るように）
+function ensureMorningTrigger_() {
+  const props = sharedProps_();
+  if (props.getProperty('MORNING_TRIGGER') === '1') return;
+  if (isOldProject_()) return;
+  const has = ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === 'morningJob'; });
+  if (!has) ScriptApp.newTrigger('morningJob').timeBased().everyDays(1).atHour(MORNING_HOUR).nearMinute(30).inTimezone('Asia/Tokyo').create();
+  props.setProperty('MORNING_TRIGGER', '1');
 }
 
 // メニュー「毎晩の自動処理を設定」: 毎日22時台に nightlyJob を動かす（何度押しても1つだけ）
 function installNightlyTrigger() {
   ScriptApp.getProjectTriggers().forEach(function(t) {
-    if (t.getHandlerFunction() === 'nightlyJob') ScriptApp.deleteTrigger(t);
+    if (t.getHandlerFunction() === 'nightlyJob' || t.getHandlerFunction() === 'morningJob') ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('nightlyJob').timeBased().everyDays(1).atHour(NIGHTLY_HOUR).inTimezone('Asia/Tokyo').create();
-  const msg = '毎晩 ' + NIGHTLY_HOUR + '時台に、その日の採番表PDFを作ります（入力記録の整理・完了済みシートの片付けも一緒に行います）。';
+  ScriptApp.newTrigger('morningJob').timeBased().everyDays(1).atHour(MORNING_HOUR).nearMinute(30).inTimezone('Asia/Tokyo').create();
+  sharedProps_().setProperty('MORNING_TRIGGER', '1');
+  const msg = '毎晩 ' + NIGHTLY_HOUR + '時台に、その日の採番表PDFを作ります（入力記録の整理・完了済みシートの片付けも一緒に行います）。毎朝 ' + MORNING_HOUR + '時台に、作業前の準備をします。';
   try { SpreadsheetApp.getUi().alert(msg); } catch (e) { console.log(msg); }
   return msg;
 }

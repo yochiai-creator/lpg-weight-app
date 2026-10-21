@@ -8,8 +8,13 @@ const ARCHIVE_PREFIX = 'LPG容器 入力記録_';
 const ARCHIVE_CHUNK = 8000;   // 1回に調べる行数（入力の待ち時間を短くするため小分けにする）
 
 // 入力画面の読み込み後に裏で呼ばれる（画面は待たない）
-function runMaintenance() {
+// opts.scheduled: 朝・夜の自動処理から。画面からの呼び出しは、その日の朝の自動処理が済んでいれば何もしない（起動を軽くする）
+function runMaintenance(opts) {
   const out = { trimmed: false, archived: 0, archiveDone: true };
+  if (!(opts && opts.scheduled)) {
+    try { if (sharedProps_().getProperty('MAINT_DAY') === tokyoDate_(new Date())) return out; } catch (e) { console.error(e.message); }
+  }
+  try { ensureMorningTrigger_(); } catch (e) { console.error('朝の自動処理の設定に失敗: ' + e.message); }
   try { mergeRootFolders_(); ensureFolderLayout_(); ensurePdfKindFolders_(); } catch (e) { console.error('フォルダの整理に失敗: ' + e.message); }
   try { fixPaddedLots_(); } catch (e) { console.error('ロット番号の修正に失敗: ' + e.message); }
   // 2026-09-29: 完了済みなのに「最近完了したロット」の削除ボタンで消えてしまった HEP59701 を1回だけ戻す
