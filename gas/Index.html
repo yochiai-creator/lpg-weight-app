@@ -263,7 +263,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v82（保存の確かめを強く）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v83（送信が止まったら自動で送り直す）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -1269,10 +1269,36 @@
     pump();
   }
 
+  // 送信の見張り: iPadがスリープしたり電波が途切れたりすると、送信の返事が戻らず止まることがある（10/21に午前の入力が届かなかった）。
+  // 30秒返事がなければ送り直す（同じ入力が2回届いてもサーバーが見分ける）。3回だめなら赤く出して「再送」を待つ
+  const SEND_TIMEOUT_MS = window.__sendTimeoutMs || 30000;
+  let sendSeq = 0, sendTimer = null, sendStarted = 0, sendTimeouts = 0;
+  function sendTimedOut(tok) {
+    if (tok !== sendSeq || !S.sending) return;
+    sendSeq++; S.sending = false; clearTimeout(sendTimer);
+    sendTimeouts++;
+    if (sendTimeouts < 3) { renderQueue(); pump(); return; }
+    sendTimeouts = 0;
+    const e = S.queue[0];
+    S.sendError = '通信の返事がありません（電波・スリープ）。「再送」を押してください';
+    if (e) S.errors[e.lotId + '|' + e.serial] = true;
+    beep(false); render(); renderQueue();
+  }
+  // 画面に戻ったとき（スリープから復帰）、止まっている送信があればすぐ送り直す
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible' && S.sending && Date.now() - sendStarted > 5000) sendTimedOut(sendSeq);
+    else if (document.visibilityState === 'visible') pump();
+  });
+  setInterval(function() { if (S.sending && Date.now() - sendStarted > SEND_TIMEOUT_MS) sendTimedOut(sendSeq); else pump(); }, 15000);
+
   function pump() {
     renderQueue();
     if (S.sending || !S.queue.length || S.sendError) return;
     S.sending = true;
+    const tok = ++sendSeq;
+    sendStarted = Date.now();
+    clearTimeout(sendTimer);
+    sendTimer = setTimeout(function() { sendTimedOut(tok); }, SEND_TIMEOUT_MS);
     // たまっている分はまとめて1回で送る（通信の待ち時間を1本ずつ払わない）
     const batch = S.queue.slice(0, 20);
     const done1 = function(e, res) {
@@ -1297,12 +1323,16 @@
       beep(false);
     };
     call('recordEntries', batch).then(function(out) {
+      if (tok !== sendSeq) return;   // 見張りで送り直した後に届いた古い返事は使わない（送り直した方の返事を使う）
+      clearTimeout(sendTimer); sendTimeouts = 0;
       S.sending = false;
       (out.results || []).forEach(function(res, i) { done1(batch[i], res); });
       if (out.error) fail(out.error);
       render(); renderQueue();
       if (!out.error) pump();
     }).catch(function(err) {
+      if (tok !== sendSeq) return;
+      clearTimeout(sendTimer);
       S.sending = false;
       fail(errText(err));
       render(); renderQueue();

@@ -748,6 +748,33 @@ function check(name, ok, detail) {
     const slog = m.ss.getSheetByName('_保存ログ');
     check('保存ログ: 保存のたびに1行（入力と結果）', !!slog && slog.getLastRow() >= 5 && String(slog.getRange(slog.getLastRow(), 4).getValue()).includes('00150/16.7/dX-zzz-9'));
   }
+  // ---- 送信の返事が戻らない（スリープ・電波）ときは自動で送り直す。2回届いても1回分だけ
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const L = c.createLot({ prefix: 'TO', start: '00101', kind: '20kg' });
+    const p7 = await browser.newPage({ viewport: { width: 1180, height: 820 } });
+    p7.on('pageerror', e => check('ページでJSエラーなし(送信の見張り)', false, e.message));
+    let hung = 0, lateRun = null;
+    await p7.exposeFunction('__gas', (fn, arg) => {
+      const run = () => { try { const v = c[fn](JSON.parse(arg)); return JSON.stringify({ v: JSON.parse(JSON.stringify(v === undefined ? null : v)) }); } catch (e) { return JSON.stringify({ err: e.message }); } };
+      if (fn === 'recordEntries' && hung === 0) { hung++; lateRun = run; return new Promise(() => {}); }   // 1回目は返事が戻らない（サーバーには届いている）
+      return run();
+    });
+    await p7.setContent(html.replace('<head>', '<head><script>window.__sendTimeoutMs = 600;</script>')); await p7.waitForTimeout(500);
+    await p7.evaluate(() => { const c = document.getElementById('dateOkMode'); c.checked = false; c.dispatchEvent(new Event('change')); });
+    await p7.selectOption('#fWorker', '山田'); await p7.fill('#fDevice', 'x');
+    await p7.click('#btnStart'); await p7.waitForTimeout(200);
+    for (const ch of '105') await p7.keyboard.press('Numpad' + ch);
+    await p7.waitForTimeout(150);
+    for (const ch of '167') await p7.keyboard.press('Numpad' + ch);
+    lateRun && lateRun();   // 1回目の要求はサーバーに届いて書かれた（返事だけ失われた）
+    await p7.waitForTimeout(150);
+    await p7.waitForTimeout(1500);
+    const q7 = await p7.textContent('#queue');
+    const lg = m.ss.getSheetByName('入力記録'), rows = lg.getRange(2, 1, lg.getLastRow() - 1, 18).getValues().filter(r => r[2] === L.lotId);
+    check('送信の見張り: 返事が戻らなくても送り直して保存・二重にならない', hung === 1 && q7.includes('すべて保存済み') && c.getLot(L.lotId).entries['00105'] === 16.7 && rows.length === 1 && !Object.keys(c.getLot(L.lotId).dups).length, q7 + ' rows=' + rows.length);
+    await p7.close();
+  }
   // ---- 10kg（50本ごと・内容積24）・30kg把手（内容積71）
   {
     const m = load(), c = m.ctx; c.setup();
