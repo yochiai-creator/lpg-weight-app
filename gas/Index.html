@@ -263,7 +263,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v83（送信が止まったら自動で送り直す）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v91（送信済みのロットも一覧から消せる）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -731,6 +731,19 @@
             .catch(function(e) { homeMsg(errText(e), 'err'); sk.disabled = false; });
         };
         setTimeout(function() { row.appendChild(sk); }, 0);
+      }
+      // 送信済みのロットは、表示から消す（成績表PDF・送信の記録は残る。まとめて送信の一覧には出る）
+      if (l.sentAt) {
+        const hd = document.createElement('button');
+        hd.className = 'btn sec'; hd.textContent = '一覧から消す'; hd.style.color = 'var(--ng)'; hd.style.marginLeft = 'auto';
+        hd.onclick = function() {
+          const name = l.prefix + l.start + '〜' + l.prefix + l.end;
+          if (!armed(hd, 'もう一度押すと消す')) { homeMsg(name + ' を「最近完了したロット」から消します（成績表PDF・送信の記録は残ります）。もう一度押すと消します', 'err'); return; }
+          hd.disabled = true;
+          call('hideDoneLot', { lotId: l.lotId }).then(function() { homeMsg('一覧から消しました: ' + name, 'ok'); return loadHome(); })
+            .catch(function(e) { homeMsg(errText(e), 'err'); hd.disabled = false; });
+        };
+        setTimeout(function() { row.appendChild(hd); }, 0);
       }
       const r = document.createElement('button');
       r.className = 'btn sec'; r.textContent = l.sentAt ? '再送信' : 'メールで送信';

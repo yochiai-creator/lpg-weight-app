@@ -522,7 +522,8 @@ function getBootstrap() {
   ensureSheets_();
   const all = readLots_();
   const lots = all.filter(function(l) { return l.status === STATUS_ACTIVE; });
-  const done = all.filter(function(l) { return l.status === STATUS_DONE && !isSkipped_(l); }).slice(-10).reverse();
+  const hidden = hiddenDoneLots_();
+  const done = all.filter(function(l) { return l.status === STATUS_DONE && !isSkipped_(l) && hidden.indexOf(l.lotId) < 0; }).slice(-10).reverse();
   const settings = readSettings_();
   const marks = readMarksAll_();
   const grids = readGrids_(lots.concat(done));

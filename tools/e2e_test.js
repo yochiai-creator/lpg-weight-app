@@ -737,9 +737,16 @@ function check(name, ok, detail) {
     await (await btn()).click(); await p6.waitForTimeout(600);
     const c2 = await cards();
     check('送らずに消す: 2回目で一覧から消え、メールは送らない・PDFは残る', c2.length === 1 && c2[0].t.includes('SK00201') && !global.MAILS.some(x => x.sub.includes('SK00101')) && !!c.findLot_(L.lotId).pdf && c.findLot_(L.lotId).status === '完了', JSON.stringify(c2));
+    check('一覧から消す: 送信済みのロットにはボタン（送らずに消すではない）', c2[0].b.includes('一覧から消す') && !c2[0].b.includes('送らずに消す'), JSON.stringify(c2));
+    const hb = () => p6.$('#doneLots .card:has-text("SK00201") button:has-text("消す")');
+    await (await hb()).click(); await p6.waitForTimeout(150);
+    check('一覧から消す: 1回目の押しでは消さない', (await cards()).length === 1);
+    await (await hb()).click(); await p6.waitForTimeout(600);
+    check('一覧から消す: 2回目で消え、送信の記録・PDFは残る', (await cards()).length === 0 && !!c.findLot_(S2.lotId).sentAt && !!c.findLot_(S2.lotId).pdf && !c.getBootstrap().recentDone.some(x => x.lotId === S2.lotId));
     await p6.click('#btnBulkLoad'); await p6.waitForTimeout(300);
     const bl = await p6.$$eval('#bulkList label', ls => ls.map(x => ({ t: x.textContent, on: x.querySelector('input').checked })));
     check('送らずに消す: まとめて送信の一覧には「送らない」で残り、最初は選ばれない', bl.some(x => x.t.includes('SK00101') && x.t.includes('送らない') && !x.on), JSON.stringify(bl));
+    check('一覧から消したロットも、まとめて送信の一覧には残る', bl.some(x => x.t.includes('SK00201')), JSON.stringify(bl));
     await p6.close();
     c.sendLotsMail([L.lotId]);
     check('送らずに消したロットも、後からまとめて送信すれば送信済みになる', !!c.findLot_(L.lotId).sentAt && !c.listDoneLots().find(x => x.lotId === L.lotId).skipped);

@@ -141,6 +141,27 @@ function skipLotMail(input) {
   }
 }
 
+// 送信済みのロットを「最近完了したロット」から消す（表示だけ。成績表・送信の記録・まとめて送信の候補はそのまま）
+const HIDDEN_DONE_MAX = 500;
+function hiddenDoneLots_() {
+  try { return JSON.parse(sharedProps_().getProperty('HIDDEN_DONE') || '[]'); } catch (e) { return []; }
+}
+function hideDoneLot(input) {
+  const lotId = typeof input === 'object' && input ? input.lotId : input;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const lot = findLot_(lotId);
+    if (lot.status !== STATUS_DONE) throw new Error('完了していないロットです: ' + lot.lotId);
+    const list = hiddenDoneLots_().filter(function(id) { return id !== lot.lotId; });
+    list.push(lot.lotId);
+    sharedProps_().setProperty('HIDDEN_DONE', JSON.stringify(list.slice(-HIDDEN_DONE_MAX)));
+    return { lotId: lot.lotId };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // まとめて送信の候補（完了したロット。新しい順）
 function listDoneLots() {
   return readLots_().filter(function(l) { return l.status === STATUS_DONE; }).reverse().map(function(l) {
