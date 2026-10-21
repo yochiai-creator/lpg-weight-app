@@ -20,7 +20,8 @@ function saibanRows_(date) {
     const t = r[LC_TIME];
     // 有効な記録だけ（取消・削除したロットの記録は載せない）
     return t instanceof Date && tokyoDate_(t) === date && r[LC_STATUS] === '有効' &&
-      r[LC_KIND] !== MISSING && r[LC_KIND] !== KIND_FIX && r[LC_KIND] !== KIND_DUP;
+      r[LC_KIND] !== MISSING && r[LC_KIND] !== KIND_FIX && r[LC_KIND] !== KIND_DUP &&
+      r[LC_NOTE] !== NOTE_NO_SAIBAN;
   }).sort(function(a, b) { return a[LC_TIME] - b[LC_TIME]; }).map(function(r) {
     const lot = lots[String(r[LC_LOT])];
     const prefix = lot ? lot.prefix : '';
@@ -236,7 +237,8 @@ function saibanDatesForLots_(lotIds) {
     const days = out[String(r[LC_LOT])];
     const t = r[LC_TIME];
     if (!days || !(t instanceof Date) || r[LC_STATUS] !== '有効' ||
-      r[LC_KIND] === MISSING || r[LC_KIND] === KIND_FIX || r[LC_KIND] === KIND_DUP) return;
+      r[LC_KIND] === MISSING || r[LC_KIND] === KIND_FIX || r[LC_KIND] === KIND_DUP ||
+      r[LC_NOTE] === NOTE_NO_SAIBAN) return;
     const d = tokyoDate_(t);
     if (days.indexOf(d) < 0) days.push(d);
   });
@@ -245,8 +247,8 @@ function saibanDatesForLots_(lotIds) {
 
 // 作り方を変えたとき、これまでの採番表を1回だけ作り直す（1回に3日分。残りは次の呼び出しで）
 // v76: 時刻の列を足した / v78: 削除したロットの記録を載せない（10/10 に作業者が連名になった）
-// v79: 機種ごとにページと流れた順番を分けた。変えたら SAIBAN_REDO_VER を上げる
-const SAIBAN_REDO_VER = 'v79';
+// v79: 機種ごとにページと流れた順番を分けた / v84: 備考「採番なし」の記録を載せない。変えたら SAIBAN_REDO_VER を上げる
+const SAIBAN_REDO_VER = 'v84';
 // 対象は入力記録にある日のうち、自動で作り終えた日まで（今日の分は夜に作る）
 function saibanRedoStep_() {
   const props = sharedProps_();

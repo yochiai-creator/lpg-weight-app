@@ -27,6 +27,7 @@ const REPAIR = '修正';        // ラインで品質不良のため修正に回
 const KIND_FIX = '訂正';      // 入力ミスを直した上書き（印や件数は出さない）
 const KIND_DUP = 'ダブり';    // 同じ容器が2回流れてきた上書き
 const NOTE_SEAL = 'シール違い';
+const NOTE_NO_SAIBAN = '採番なし';  // 備考にこれがある記録は採番表に載せない（その日に流れていない容器）
 const SPEC_SOKO = '底黒';      // 再搬入（底黒仕様）: 質量は入れず、流れた容器の質量欄に〇を付ける
 const CIRCLE = '〇';
 
