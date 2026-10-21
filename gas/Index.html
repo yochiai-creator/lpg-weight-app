@@ -263,7 +263,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v80（メールにCSVを付けない）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v81（二重送信でダブりにしない）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -1259,7 +1259,7 @@
   // ---------- 送信キュー（入力を止めずに順番に保存） ----------
   let seq = 0;
   function enqueue(entry) {
-    entry.clientId = 'c' + (++seq);
+    entry.clientId = DEV_ID + '-' + Date.now().toString(36) + '-' + (++seq);   // 端末をまたいでも重ならない（サーバーで二重送信を見分ける）
     entry.devId = DEV_ID;
     S.claims[entry.lotId] = { worker: entry.worker || '', device: entry.device || '', mine: true };
     const key = entry.lotId + '|' + entry.serial;

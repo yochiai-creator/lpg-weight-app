@@ -852,8 +852,22 @@ function ensureLogDayLines_() {
   }
   props.setProperty('LOG_DAY_LINES', '1');
 }
+// 同じ入力が二重に届いたとき（保存できていたのに通信エラーと出て「再送」した等）は、2回目を書かずに1回目の結果を返す
+// iPadが入力ごとに付ける clientId（端末の印＋時刻＋連番）を CacheService に6時間覚えておく
+const SAVED_ID_PREFIX = 'SAVED_';
+function savedResult_(clientId) {
+  if (!/-/.test(String(clientId || ''))) return null;   // 古い画面の clientId（c1, c2…）は端末をまたいで重なるので使わない
+  try { const v = CacheService.getScriptCache().get(SAVED_ID_PREFIX + clientId); return v ? JSON.parse(v) : null; } catch (e) { return null; }
+}
+function rememberSaved_(clientId, result) {
+  if (!/-/.test(String(clientId || ''))) return;
+  try { CacheService.getScriptCache().put(SAVED_ID_PREFIX + clientId, JSON.stringify(result), 6 * 3600); } catch (e) { /* 覚えられなくても保存は済んでいる */ }
+}
+
 function recordOne_(payload) {
   {
+    const again = savedResult_(payload.clientId);
+    if (again) { again.duplicateSend = true; return again; }
     const lot = ENTRY_LOTS_[payload.lotId] || (ENTRY_LOTS_[payload.lotId] = findLot_(payload.lotId));
     // 古いID（6桁）で送られてきた容器番号は、ロットの桁数にそろえる（099070 → 99070）
     if (String(payload.serial).length > lot.start.length && /^0/.test(String(payload.serial))) payload.serial = String(payload.serial).slice(String(payload.serial).length - lot.start.length);
@@ -915,6 +929,7 @@ function recordOne_(payload) {
     if (prevDay && prevDay !== today) dayLine_(logSh, logRow, LOG_HEADERS.length);
     LAST_LOG_DAY_ = today;
     const result = { recordId: recordId, clientId: payload.clientId, serial: serial, mass: mass, prev: prev, kind: kind, note: note };
+    rememberSaved_(payload.clientId, result);
 
     // 全数（欠番を含む）そろったら自動で完了・PDF作成・送信する
     if (prev === null && filledBefore + 1 >= lotSize_(lot)) {

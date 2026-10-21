@@ -279,6 +279,11 @@ clasp redeploy AKfycbyDM2IQ8NY6LgQpLb0gpQoK32fAQtWVBrdBQduZ6FOBWREFn61Qb55R9Q20Y
 - 完了時の自動送信・再送信・まとめて送信とも、添付は成績表PDF（まとめて送信で採番表を付けるときは採番表PDFも）だけ。質量データCSVは付けない（buildLotCsv_ は必要になったとき用に残す）。
 - 設定シートの「本文」「本文（まとめて送信）」から「質量データ（CSV）」の言葉を消す（ensureSettingRows_、初期値も同じ）。
 
+### 二重送信でダブりにしない（v81）
+
+- 画面は入力ごとに clientId = 端末の印（DEV_ID）＋時刻＋連番 を付ける。サーバーは保存した clientId と結果を CacheService に6時間覚え（SAVED_<clientId>）、同じ clientId が届いたら書かずに1回目の結果を返す（duplicateSend: true）。保存できていたのに通信エラーと出て「再送」したとき、ダブり（W）・採番表の二重計上にならない。
+- 古い画面の clientId（c1, c2…）は端末をまたいで重なるので見分けに使わない。
+
 ---
 
 ## 8. 制約・注意点

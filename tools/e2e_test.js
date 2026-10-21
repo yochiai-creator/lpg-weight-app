@@ -730,6 +730,18 @@ function check(name, ok, detail) {
     let e1 = ''; try { c.skipLotMail({ lotId: L.lotId }); } catch (e) { e1 = e.message; }
     check('送信済みのロットは送らずに消せない', e1.includes('送信済み'), e1);
   }
+  // ---- 同じ入力が二重に届いても（保存できていたのに再送）、2回目はダブりにしない
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const L = c.createLot({ prefix: 'RS', start: '00101', kind: '20kg' });
+    const e = { lotId: L.lotId, serial: '00101', mass: 16.7, clientId: 'dX-abc-1', devId: 'dX' };
+    const r1 = c.recordEntries([e]).results[0];
+    const r2 = c.recordEntries([Object.assign({}, e)]).results[0];
+    const lg = m.ss.getSheetByName('入力記録'), rows = lg.getRange(2, 1, lg.getLastRow() - 1, 18).getValues().filter(r => r[2] === L.lotId);
+    check('二重送信: 2回目は書かず1回目の結果を返す（ダブりにしない）', rows.length === 1 && rows[0][8] === '通常' && r2.recordId === r1.recordId && r2.duplicateSend === true && !Object.keys(c.getLot(L.lotId).dups).length, JSON.stringify([rows.length, r1, r2]));
+    const r3 = c.recordEntries([{ lotId: L.lotId, serial: '00101', mass: 16.7, clientId: 'dX-abc-2', devId: 'dX' }]).results[0];
+    check('二重送信: 別の入力（別のID）で同じ容器ならダブり', r3.kind === 'ダブり');
+  }
   // ---- 10kg（50本ごと・内容積24）・30kg把手（内容積71）
   {
     const m = load(), c = m.ctx; c.setup();
