@@ -263,7 +263,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v92（完了ではメールを送らない・まとめて送信は未送信だけ）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v93（送信が止まっても自動で送り直す）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -1279,8 +1279,9 @@
     if (sendTimeouts < 3) { renderQueue(); pump(); return; }
     sendTimeouts = 0;
     const e = S.queue[0];
-    S.sendError = '通信の返事がありません（電波・スリープ）。「再送」を押してください';
+    S.sendError = '通信の返事がありません（電波・スリープ）。30秒ごとに自動で送り直します';
     if (e) S.errors[e.lotId + '|' + e.serial] = true;
+    autoRetryLater();
     beep(false); render(); renderQueue();
   }
   // 画面に戻ったとき（スリープから復帰）、止まっている送信があればすぐ送り直す
@@ -1304,6 +1305,7 @@
       const key = e.lotId + '|' + e.serial;
       S.queue.shift();
       S.pending[key]--; if (!S.pending[key]) delete S.pending[key];
+      delete S.errors[key];   // 送り直して保存できたら赤を消す
       if (res.recordId) S.saved.push({ recordId: res.recordId, lotId: e.lotId, serial: e.serial, mass: res.mass });
       if (S.saved.length > 50) S.saved.shift();
       const ml = lotById(e.lotId);
@@ -1334,6 +1336,7 @@
       clearTimeout(sendTimer);
       S.sending = false;
       fail(errText(err));
+      autoRetryLater();   // 通信エラー（電波など）は自動で送り直す。サーバーが断った入力（完了済みなど）は人が決める
       render(); renderQueue();
     });
   }
@@ -1354,13 +1357,20 @@
     beep(true); setTimeout(function() { beep(true); }, 150);
   }
 
-  function retry() { S.sendError = null; pump(); }
+  function retry() { clearTimeout(autoRetryTimer); S.sendError = null; pump(); }
+  // 通信で止まったときは、人が「再送」を押さなくても少し待って送り直す（10/22 昼に1時間止まって190件たまった）
+  let autoRetryTimer = null;
+  function autoRetryLater() {
+    clearTimeout(autoRetryTimer);
+    const err = S.sendError;
+    autoRetryTimer = setTimeout(function() { if (S.sendError && S.sendError === err) retry(); }, SEND_TIMEOUT_MS);
+  }
   function dropFailed() {
     const e = S.queue.shift();
     const key = e.lotId + '|' + e.serial;
     S.pending[key]--; if (!S.pending[key]) delete S.pending[key];
     delete S.errors[key];
-    S.sendError = null;
+    S.sendError = null; clearTimeout(autoRetryTimer);
     call('getLot', e.lotId).then(function(l) { const cur = lotById(l.lotId); if (cur) cur.entries = l.entries; render(); });
     pump();
   }

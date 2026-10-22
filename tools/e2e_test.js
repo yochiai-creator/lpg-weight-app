@@ -822,6 +822,31 @@ function check(name, ok, detail) {
     check('送信の見張り: 返事が戻らなくても送り直して保存・二重にならない', hung === 1 && q7.includes('すべて保存済み') && c.getLot(L.lotId).entries['00105'] === 16.7 && rows.length === 1 && !Object.keys(c.getLot(L.lotId).dups).length, q7 + ' rows=' + rows.length);
     await p7.close();
   }
+  // ---- 通信エラーで止まっても、「再送」を押さずに自動で送り直す。保存できたら赤が消える
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const L = c.createLot({ prefix: 'NE', start: '00101', kind: '20kg' });
+    const p8 = await browser.newPage({ viewport: { width: 1180, height: 820 } });
+    p8.on('pageerror', e => check('ページでJSエラーなし(自動の送り直し)', false, e.message));
+    let fails = 0;
+    await p8.exposeFunction('__gas', (fn, arg) => {
+      if (fn === 'recordEntries' && fails < 3) { fails++; return JSON.stringify({ err: 'NetworkError: Connection failure due to HTTP 0' }); }
+      try { const v = c[fn](JSON.parse(arg)); return JSON.stringify({ v: JSON.parse(JSON.stringify(v === undefined ? null : v)) }); } catch (e) { return JSON.stringify({ err: e.message }); }
+    });
+    await p8.setContent(html.replace('<head>', '<head><script>window.__sendTimeoutMs = 600;</script>')); await p8.waitForTimeout(500);
+    await p8.evaluate(() => { const c = document.getElementById('dateOkMode'); c.checked = false; c.dispatchEvent(new Event('change')); });
+    await p8.selectOption('#fWorker', '山田'); await p8.fill('#fDevice', 'x');
+    await p8.click('#btnStart'); await p8.waitForTimeout(200);
+    for (const ch of '105') await p8.keyboard.press('Numpad' + ch);
+    await p8.waitForTimeout(150);
+    for (const ch of '167') await p8.keyboard.press('Numpad' + ch);
+    await p8.waitForTimeout(250);
+    const red1 = await p8.locator('.cell.error').count(), q1 = await p8.textContent('#queue');
+    await p8.waitForTimeout(2600);
+    const q2 = await p8.textContent('#queue'), red2 = await p8.locator('.cell.error').count();
+    check('通信エラー: 赤く出たあと、押さなくても自動で送り直して保存し、赤が消える', red1 > 0 && q1.includes('失敗') && fails === 3 && q2.includes('すべて保存済み') && red2 === 0 && c.getLot(L.lotId).entries['00105'] === 16.7, [red1, q1, fails, q2, red2].join(' / '));
+    await p8.close();
+  }
   // ---- 10kg（50本ごと・内容積24）・30kg把手（内容積71）
   {
     const m = load(), c = m.ctx; c.setup();
