@@ -263,7 +263,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v93（送信が止まっても自動で送り直す）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v94（自動の送り直しでブザーを鳴らし続けない）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -1281,8 +1281,9 @@
     const e = S.queue[0];
     S.sendError = '通信の返事がありません（電波・スリープ）。30秒ごとに自動で送り直します';
     if (e) S.errors[e.lotId + '|' + e.serial] = true;
+    if (!autoRetrying) beep(false);   // 自動の送り直しが続けて失敗しても、ブザーは最初の1回だけ
     autoRetryLater();
-    beep(false); render(); renderQueue();
+    render(); renderQueue();
   }
   // 画面に戻ったとき（スリープから復帰）、止まっている送信があればすぐ送り直す
   document.addEventListener('visibilitychange', function() {
@@ -1321,11 +1322,11 @@
       const e = S.queue[0];
       S.sendError = msg;
       if (e) S.errors[e.lotId + '|' + e.serial] = true;
-      beep(false);
+      if (!autoRetrying) beep(false);
     };
     call('recordEntries', batch).then(function(out) {
       if (tok !== sendSeq) return;   // 見張りで送り直した後に届いた古い返事は使わない（送り直した方の返事を使う）
-      clearTimeout(sendTimer); sendTimeouts = 0;
+      clearTimeout(sendTimer); sendTimeouts = 0; autoRetrying = false;
       S.sending = false;
       (out.results || []).forEach(function(res, i) { done1(batch[i], res); });
       if (out.error) fail(out.error);
@@ -1357,13 +1358,13 @@
     beep(true); setTimeout(function() { beep(true); }, 150);
   }
 
-  function retry() { clearTimeout(autoRetryTimer); S.sendError = null; pump(); }
+  function retry() { clearTimeout(autoRetryTimer); autoRetrying = false; S.sendError = null; pump(); }
   // 通信で止まったときは、人が「再送」を押さなくても少し待って送り直す（10/22 昼に1時間止まって190件たまった）
-  let autoRetryTimer = null;
+  let autoRetryTimer = null, autoRetrying = false;
   function autoRetryLater() {
     clearTimeout(autoRetryTimer);
     const err = S.sendError;
-    autoRetryTimer = setTimeout(function() { if (S.sendError && S.sendError === err) retry(); }, SEND_TIMEOUT_MS);
+    autoRetryTimer = setTimeout(function() { if (S.sendError && S.sendError === err) { retry(); autoRetrying = true; } }, SEND_TIMEOUT_MS);
   }
   function dropFailed() {
     const e = S.queue.shift();

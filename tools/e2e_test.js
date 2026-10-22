@@ -830,10 +830,11 @@ function check(name, ok, detail) {
     p8.on('pageerror', e => check('ページでJSエラーなし(自動の送り直し)', false, e.message));
     let fails = 0;
     await p8.exposeFunction('__gas', (fn, arg) => {
-      if (fn === 'recordEntries' && fails < 3) { fails++; return JSON.stringify({ err: 'NetworkError: Connection failure due to HTTP 0' }); }
+      if (fn === 'recordEntries' && fails < 4) { fails++; return JSON.stringify({ err: 'NetworkError: Connection failure due to HTTP 0' }); }
       try { const v = c[fn](JSON.parse(arg)); return JSON.stringify({ v: JSON.parse(JSON.stringify(v === undefined ? null : v)) }); } catch (e) { return JSON.stringify({ err: e.message }); }
     });
-    await p8.setContent(html.replace('<head>', '<head><script>window.__sendTimeoutMs = 600;</script>')); await p8.waitForTimeout(500);
+    const beepMock = '<script>window.__sendTimeoutMs = 600; window.__ng = 0; window.AudioContext = function() { this.destination = {}; this.currentTime = 0; this.createGain = function() { return { gain: {}, connect() {} }; }; this.createOscillator = function() { const o = { frequency: {}, connect() {}, start() {}, stop() {} }; Object.defineProperty(o, "type", { set(v) { if (v === "square") window.__ng++; } }); return o; }; };</script>';
+    await p8.setContent(html.replace('<head>', '<head>' + beepMock)); await p8.waitForTimeout(500);
     await p8.evaluate(() => { const c = document.getElementById('dateOkMode'); c.checked = false; c.dispatchEvent(new Event('change')); });
     await p8.selectOption('#fWorker', '山田'); await p8.fill('#fDevice', 'x');
     await p8.click('#btnStart'); await p8.waitForTimeout(200);
@@ -842,9 +843,11 @@ function check(name, ok, detail) {
     for (const ch of '167') await p8.keyboard.press('Numpad' + ch);
     await p8.waitForTimeout(250);
     const red1 = await p8.locator('.cell.error').count(), q1 = await p8.textContent('#queue');
-    await p8.waitForTimeout(2600);
+    await p8.waitForTimeout(3400);
     const q2 = await p8.textContent('#queue'), red2 = await p8.locator('.cell.error').count();
-    check('通信エラー: 赤く出たあと、押さなくても自動で送り直して保存し、赤が消える', red1 > 0 && q1.includes('失敗') && fails === 3 && q2.includes('すべて保存済み') && red2 === 0 && c.getLot(L.lotId).entries['00105'] === 16.7, [red1, q1, fails, q2, red2].join(' / '));
+    const ng = await p8.evaluate(() => window.__ng);
+    check('通信エラー: 自動の送り直しが続けて失敗しても、ブザーは最初の1回だけ', ng === 1, 'ng=' + ng);
+    check('通信エラー: 赤く出たあと、押さなくても自動で送り直して保存し、赤が消える', red1 > 0 && q1.includes('失敗') && fails === 4 && q2.includes('すべて保存済み') && red2 === 0 && c.getLot(L.lotId).entries['00105'] === 16.7, [red1, q1, fails, q2, red2].join(' / '));
     await p8.close();
   }
   // ---- 10kg（50本ごと・内容積24）・30kg把手（内容積71）
