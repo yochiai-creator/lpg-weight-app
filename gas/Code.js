@@ -523,7 +523,10 @@ function getBootstrap() {
   const all = readLots_();
   const lots = all.filter(function(l) { return l.status === STATUS_ACTIVE; });
   const hidden = hiddenDoneLots_();
-  const done = all.filter(function(l) { return l.status === STATUS_DONE && !isSkipped_(l) && hidden.indexOf(l.lotId) < 0; }).slice(-10).reverse();
+  // 最近完了したロット: 送っていないものは全部、送ったものは新しい10件（多すぎると重いので合わせて40件まで）
+  const doneAll = all.filter(function(l) { return l.status === STATUS_DONE && !isSkipped_(l) && hidden.indexOf(l.lotId) < 0; }).reverse();
+  let sentN = 0;
+  const done = doneAll.filter(function(l) { return !l.sentAt || sentN++ < 10; }).slice(0, 40);
   const settings = readSettings_();
   const marks = readMarksAll_();
   const grids = readGrids_(lots.concat(done));

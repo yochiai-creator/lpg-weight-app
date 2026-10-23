@@ -22,6 +22,7 @@
 
   /* ホーム */
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+  #doneLots { max-height: 70vh; overflow-y: auto; }
   /* 入力中のロット一覧は枠の中でスクロール */
   .kinds { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; margin: 0 0 10px; padding-bottom: 4px; }
   .kinds button { flex: 0 0 auto; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 8px 16px;
@@ -263,7 +264,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v95（送った日の採番表は付けない）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v96（送っていない完了ロットは全部出す）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -310,7 +311,7 @@
     <div class="msg" id="lotMsg"></div>
   </div>
 
-  <h2>最近完了したロット</h2>
+  <h2>最近完了したロット <span class="sub" style="font-size:13px;font-weight:400">（送っていないものは全部・送ったものは新しい10件）</span></h2>
   <div class="cards" id="doneLots"></div>
 
   <h2>検査表をまとめてメール送信</h2>

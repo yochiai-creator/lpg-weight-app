@@ -910,6 +910,7 @@ function check(name, ok, detail) {
       c.completeLot({ lotId: L.lotId, send: false });
       ids.push(L.lotId);
     }
+    check('最近完了したロット: 送っていない完了ロットは10件を超えても全部出る', c.getBootstrap().recentDone.filter(l => l.prefix === 'BM').length === 22);
     const open = c.createLot({ prefix: 'BM', start: '20001', kind: '20kg' });
     let err = '';
     try { c.sendLotsMail([ids[0], open.lotId]); } catch (e) { err = e.message; }
@@ -921,6 +922,7 @@ function check(name, ok, detail) {
     check('まとめて送信: 送ったロットに送信日時', ids.slice(0, 3).every(id => c.findLot_(id).sentAt) && !c.findLot_(ids[3]).sentAt);
     const r2 = c.sendLotsMail(ids);
     check('まとめて送信: 20ロットを超えたら分けて送る', r2.mails === 2 && global.MAILS.length === before + 3 && global.MAILS[before + 1].att.length === 20 && global.MAILS[before + 2].att.length === 2);
+    check('最近完了したロット: 送ったものは新しい10件だけ', c.getBootstrap().recentDone.filter(l => l.prefix === 'BM').length === 10 && c.getBootstrap().recentDone[0].lotId === ids[21]);
     const b3 = global.MAILS.length;
     const r3 = c.sendLotsMail({ lotIds: [ids[0], ids[1]], saiban: true });
     const m3 = global.MAILS[b3], today = c.tokyoDate_(new Date());
