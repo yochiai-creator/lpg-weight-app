@@ -926,6 +926,23 @@ function check(name, ok, detail) {
     const m3 = global.MAILS[b3], today = c.tokyoDate_(new Date());
     check('まとめて送信: 採番表も付ける（流れた日の分を1つ）・本文に日付', r3.saiban === 1 && m3.att.length === 3 && m3.att[2] === '採番表_' + today + '.pdf' && m3.body.includes('採番表（PDF）：' + today.slice(5).replace('-', '/')), JSON.stringify(m3));
     check('まとめて送信: 採番表を付けないときは本文の採番表の行を省く', !global.MAILS[before].body.includes('採番表'));
+    {
+      // 前の日に流れた容器のロット: 1回目は前の日の採番表を付け、2回目（同じ日）は付けない。付け直しを選べば付ける
+      c.sharedProps_().setProperty('SAIBAN_SENT_UNTIL', '2000-01-01');   // テストの日付が切り替え日より前でも動くように
+      const yest = Date.now() - 26 * 3600 * 1000, yd = c.tokyoDate_(new Date(yest));
+      const mk = (st) => { const L = c.createLot({ prefix: 'SY', start: st, kind: '20kg' });
+        c.recordEntries([{ lotId: L.lotId, serial: st, mass: 16.7, clientId: 'dY-' + yest.toString(36) + '-' + st, devId: 'dY' }]);
+        c.completeLot({ lotId: L.lotId }); return L.lotId; };
+      const y1 = mk('30001'), y2 = mk('30101'), y3 = mk('30201');
+      const s1 = c.sendLotsMail({ lotIds: [y1], saiban: true }), a1 = global.MAILS[global.MAILS.length - 1].att;
+      const s2 = c.sendLotsMail({ lotIds: [y2], saiban: true }), a2 = global.MAILS[global.MAILS.length - 1];
+      const s3 = c.sendLotsMail({ lotIds: [y3], saiban: true, saibanAgain: true }), a3 = global.MAILS[global.MAILS.length - 1].att;
+      check('まとめて送信: 送った日の採番表は次から付けない（付け直しを選べば付ける）',
+        s1.saiban === 1 && a1.includes('採番表_' + yd + '.pdf') && s2.saiban === 0 && s2.saibanSkipped === 1 && a2.att.length === 1 && !a2.body.includes('採番表（PDF）') && s3.saiban === 1 && a3.includes('採番表_' + yd + '.pdf'),
+        JSON.stringify([s1, s2, s3, a1, a2.att, a3]));
+      const s4 = c.sendLotsMail({ lotIds: [ids[2]], saiban: true });
+      check('まとめて送信: 今日の採番表はまだ増えるので、何度送っても付ける', s4.saiban === 1 && r3.saiban === 1, JSON.stringify(s4));
+    }
     const conf = m.ss.getSheetByName('設定'), names = conf.getRange(2, 1, conf.getLastRow() - 1, 1).getValues().map(x => x[0]);
     const bi = names.indexOf('本文（まとめて送信）');
     conf.getRange(2 + bi, 2).setValue('ご担当者様\n\nいつもお世話になっております。\n高圧ガス容器検査成績表を{ロット数}ロット分まとめてお送りします。\n\n{一覧}\n\n添付：検査成績表（PDF）、質量データ（CSV）各{ロット数}件\n\nよろしくお願いいたします。'); c.ensureSettingRows_();

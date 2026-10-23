@@ -178,6 +178,9 @@ function sendLotsMail(input) {
   if (!st.to) throw new Error('設定シートの「送付先」が空です');
   const lotIds = Array.isArray(input) ? input : (input && input.lotIds);
   const withSaiban = !Array.isArray(input) && !!(input && input.saiban);
+  const saibanAgain = !Array.isArray(input) && !!(input && input.saibanAgain);   // 送った日の採番表も付け直す
+  const today = tokyoDate_(new Date());
+  const sentList = saibanSentDays_();
   const ids = (lotIds || []).map(String).filter(function(id, i, a) { return id && a.indexOf(id) === i; });
   if (!ids.length) throw new Error('送るロットを選んでください');
   const lots = ids.map(function(id) {
@@ -189,7 +192,7 @@ function sendLotsMail(input) {
   lots.sort(function(a, b) { return a.prefix.localeCompare(b.prefix) || Number(a.start) - Number(b.start); });
   const lotDays = withSaiban ? saibanDatesForLots_(lots.map(function(l) { return l.lotId; })) : {};
   const saibanBlobs = {};   // 日付 → PDF（分けて送るときに同じ日を作り直さない）
-  let mails = 0, saibanCount = 0;
+  let mails = 0, saibanCount = 0, saibanSkipped = 0;
   for (let i = 0; i < lots.length; i += BULK_MAIL_MAX_LOTS) {
     const part = lots.slice(i, i + BULK_MAIL_MAX_LOTS);
     const attachments = [], lines = [];
@@ -206,6 +209,7 @@ function sendLotsMail(input) {
     days.sort();
     const sentDays = [];
     days.forEach(function(d) {
+      if (!saibanAgain && isSaibanSent_(d, sentList)) { saibanSkipped++; return; }
       if (!(d in saibanBlobs)) saibanBlobs[d] = saibanPdfBlob_(d);
       if (saibanBlobs[d]) { attachments.push(saibanBlobs[d]); sentDays.push(d); }
     });
@@ -222,10 +226,24 @@ function sendLotsMail(input) {
     if (st.cc) options.cc = st.cc;
     MailApp.sendEmail(st.to, fillMail_(st.bulkSubject, vars), fillMail_(st.bulkBody, vars), options);
     part.forEach(function(lot) { markSent_(lot, st); });
+    // 前の日までの採番表は送り済みにする（今日の分はまだ増えるので、送り済みにしない）
+    sentDays.forEach(function(d) { if (d < today && sentList.indexOf(d) < 0) sentList.push(d); });
+    saveSaibanSentDays_(sentList);
     mails++;
   }
-  return { sentTo: st.to, lots: lots.length, mails: mails, saiban: saibanCount };
+  return { sentTo: st.to, lots: lots.length, mails: mails, saiban: saibanCount, saibanSkipped: saibanSkipped };
 }
+
+// 送り済みの採番表の日（まとめて送信で同じ日を2回送らない）。_システム の SAIBAN_SENT（日付の配列・新しい400日分）
+// SAIBAN_SENT_UNTIL までの日は、この仕組みを入れる前にもう送っているので送り済み扱い
+const SAIBAN_SENT_UNTIL = '2026-10-22';
+function saibanSentDays_() {
+  try { return JSON.parse(sharedProps_().getProperty('SAIBAN_SENT') || '[]'); } catch (e) { return []; }
+}
+function saveSaibanSentDays_(list) {
+  sharedProps_().setProperty('SAIBAN_SENT', JSON.stringify(list.sort().slice(-400)));
+}
+function isSaibanSent_(d, list) { return d <= (sharedProps_().getProperty('SAIBAN_SENT_UNTIL') || SAIBAN_SENT_UNTIL) || list.indexOf(d) >= 0; }
 
 // 入力記録（表示どおりの文字）
 function logDisplayRows_() {

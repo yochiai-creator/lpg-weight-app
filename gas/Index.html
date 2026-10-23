@@ -263,7 +263,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v94（自動の送り直しでブザーを鳴らし続けない）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v95（送った日の採番表は付けない）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -323,7 +323,8 @@
     <div class="bulk-list" id="bulkList"></div>
     <div class="row" style="margin-top:10px;gap:14px;align-items:center;flex-wrap:wrap">
       <button class="btn hidden" id="btnBulkSend" type="button">送信</button>
-      <label class="bulk-opt"><input type="checkbox" id="bulkSaiban">採番表も付ける（容器が流れた日の分）</label>
+      <label class="bulk-opt"><input type="checkbox" id="bulkSaiban">採番表も付ける（容器が流れた日の分。前の日までで送った日の分は付けない）</label>
+      <label class="bulk-opt"><input type="checkbox" id="bulkSaibanAgain">送った日の採番表も付け直す</label>
     </div>
     <div class="msg" id="bulkMsg">チェックした完了ロットの成績表PDFを、1通のメールにまとめて送付先へ送ります（20ロットを超えると20ロットずつ分けて送ります）。採番表を付けると、そのロットの容器が流れた日の採番表PDFも添付します（今日の分はその時点までで作ります）。</div>
   </div>
@@ -917,8 +918,10 @@
     const m = $('bulkMsg');
     if (!armed(b, 'もう一度押すと送信')) { m.className = 'msg err'; m.textContent = (S.mail.to || '（送付先未設定）') + ' に ' + ids.length + ' ロット分を送ります。もう一度押すと送信します'; return; }
     b.disabled = true; m.className = 'msg'; m.textContent = '送信中…（PDFを集めています。数十秒かかることがあります）';
-    call('sendLotsMail', { lotIds: ids, saiban: $('bulkSaiban').checked }).then(function(r) {
-      m.className = 'msg ok'; m.textContent = r.sentTo + ' に ' + r.lots + ' ロット分' + (r.saiban ? '＋採番表 ' + r.saiban + '日分' : '') + 'を送信しました' + (r.mails > 1 ? '（' + r.mails + '通）' : '');
+    call('sendLotsMail', { lotIds: ids, saiban: $('bulkSaiban').checked, saibanAgain: $('bulkSaibanAgain').checked }).then(function(r) {
+      $('bulkSaibanAgain').checked = false;
+      m.className = 'msg ok'; m.textContent = r.sentTo + ' に ' + r.lots + ' ロット分' + (r.saiban ? '＋採番表 ' + r.saiban + '日分' : '') + 'を送信しました' + (r.mails > 1 ? '（' + r.mails + '通）' : '') +
+        (r.saibanSkipped ? '（送り済みの日の採番表は付けていません）' : '');
       return Promise.all([loadBulk(), loadHome()]);
     }).catch(function(e) { b.disabled = false; m.className = 'msg err'; m.textContent = errText(e); });
   };
