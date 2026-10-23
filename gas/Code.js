@@ -994,22 +994,8 @@ function recordOne_(payload) {
     const result = { recordId: recordId, clientId: payload.clientId, serial: serial, mass: mass, prev: prev, kind: kind, note: note };
     rememberSaved_(payload.clientId, result);
 
-    // 全数（欠番を含む）そろったら自動で完了・PDF作成・送信する
-    if (prev === null && filledBefore + 1 >= lotSize_(lot)) {
-      result.full = true;
-      // 自動で完了するのは、送付先が入っていて「自動送信=する」のときだけ（送付先が空なら完了は手動で）。メールは送らない（まとめて送信で送る）
-      const st = readSettings_();
-      if (!lot.sentAt && st.auto && st.to) {
-        try {
-          const done = finishLot_(lot, false);
-          result.completed = true;
-          result.sentTo = done.sentTo;
-          result.mailError = done.mailError;
-        } catch (e) {
-          result.mailError = e.message;
-        }
-      }
-    }
+    // 全数（欠番を含む）そろったら知らせるだけ。完了は人が押す（v97: 自動で完了しない。10/23 に確認前のロットが勝手に完了になった）
+    if (prev === null && filledBefore + 1 >= lotSize_(lot)) result.full = true;
     return result;
   }
 }

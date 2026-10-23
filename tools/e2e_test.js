@@ -265,7 +265,7 @@ function check(name, ok, detail) {
     check('PDFは年・月・機種のフォルダに保存', global.PDFS.some(p => p === '/LPG容器 質量入力/成績表PDF/' + y + '年/' + mo + '月/50kg/成績表_HEP37001-37100.pdf'), global.PDFS.join(',')); }
   check('シートを消した完了ロットも入力状況は入力記録から出る', Object.keys(ctx.getBootstrap().recentDone.find(l => l.lotId === 'HEP37001').entries).length >= 15);
 
-  // ---- 全数そろったら自動完了（メールは送らない）
+  // ---- 全数そろったら知らせる（自動で完了しない）
   await page.click('#btnStart'); await page.waitForTimeout(100);
   check('番号が重ならなければ入力桁数は下3桁', (await page.textContent('#numHint')).includes('下3桁'));
   for (let i = 1; i <= 100; i++) {
@@ -275,7 +275,8 @@ function check(name, ok, detail) {
   }
   await page.waitForTimeout(3000);
   check('全数そろうと画面に完了の知らせ', (await page.textContent('#notice')).includes('全数そろいました'));
-  check('自動完了ではメールを送らない', global.MAILS.length === 0 && lots()[1][6] === '完了' && lots()[1][15] === '');
+  check('全数そろっても自動で完了しない・メールも送らない', global.MAILS.length === 0 && lots()[1][6] === '入力中' && (await page.textContent('#notice')).includes('完了にしてください'));
+  ctx.completeLot({ lotId: 'HEP36001' });
   ctx.resendLot('HEP36001');   // 1通ずつの文面（サーバーには残してある）
   const mail = global.MAILS[0] || {};
   check('メールを1通送信', global.MAILS.length === 1);
@@ -980,14 +981,14 @@ function check(name, ok, detail) {
     check('起動: 成績表をまとめて1回で読み、1枚ずつ読んだときと同じ入力状況', calls === 1 && fast === plain && plain.includes('"00105":16.7') && plain.includes('"00106":"欠番"') && plain.includes('"00299":17.2'), plain + ' / ' + fast);
     c.Sheets = { Spreadsheets: { Values: { batchGet: () => { throw new Error('API off'); } } } };
     check('起動: まとめて読めないときは1枚ずつ読む', JSON.stringify(c.getBootstrap().lots.map(l => l.entries)) === plain);
-    // 1回のまとめて保存で、全数そろったら自動完了（書く前に読んだ本数で判断）
+    // 1回のまとめて保存で、全数そろったら知らせる（書く前に読んだ本数で判断）。自動で完了しないので、その後の入力も入る
     const C = c.createLot({ prefix: 'SP', start: '00301', kind: '20kg' });
     const list = [];
     for (let i = 301; i <= 400; i++) list.push({ lotId: C.lotId, serial: '00' + i, mass: 16.7, clientId: 'x' + i });
     list.push({ lotId: C.lotId, serial: '00350', mass: 16.8, clientId: 'after' });
     const out = c.recordEntries(list);
     const lg = m.ss.getSheetByName('入力記録'), rows = lg.getRange(2, 1, lg.getLastRow() - 1, 18).getValues().filter(r => r[2] === C.lotId);
-    check('まとめて保存: 100本目で自動完了し、その後の入力は完了済みで止める', out.results.length === 100 && out.results[99].completed === true && !out.results.slice(0, 99).some(r => r.full) && out.error.includes('完了済み') && rows.length === 100 && rows.every(r => r[7] === 16.7), out.error + ' ' + rows.length);
+    check('まとめて保存: 100本目で全数の知らせ（完了はしない）、その後の入力も入る', out.results.length === 101 && out.results[99].full === true && !out.results[99].completed && !out.results.slice(0, 99).some(r => r.full) && !out.error && rows.length === 101 && c.findLot_(C.lotId).status === '入力中', out.error + ' ' + rows.length);
   }
   await browser.close();
 

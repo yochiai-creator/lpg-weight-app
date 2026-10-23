@@ -264,7 +264,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v96（送っていない完了ロットは全部出す）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v97（全数そろっても自動で完了しない）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -423,7 +423,7 @@
 <dialog id="dlgDone">
   <h3 id="dlgTitle">完了</h3>
   <div class="missing-list" id="dlgMissing"></div>
-  <p class="sub" style="font-size:12px;color:var(--muted)">完了にすると成績表PDFを作ってドライブに保存します（メールは送りません。ホームの「検査表をまとめてメール送信」でまとめて送ります）。全数（欠番を含む）そろうと自動で完了します。未入力が残っていても完了にしたいときだけ使います。</p>
+  <p class="sub" style="font-size:12px;color:var(--muted)">完了にすると成績表PDFを作ってドライブに保存します（メールは送りません。ホームの「検査表をまとめてメール送信」でまとめて送ります）。全数（欠番を含む）そろうとお知らせが出ます。確認して完了にしてください。</p>
   <div class="msg" id="dlgMsg"></div>
   <div class="row" style="justify-content:flex-end;margin-top:12px">
     <button class="btn sec" id="dCancel">閉じる</button>
