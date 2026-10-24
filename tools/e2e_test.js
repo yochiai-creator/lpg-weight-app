@@ -826,6 +826,23 @@ function check(name, ok, detail) {
     check('送信の見張り: 返事が戻らなくても送り直して保存・二重にならない', hung === 1 && q7.includes('すべて保存済み') && c.getLot(L.lotId).entries['00105'] === 16.7 && rows.length === 1 && !Object.keys(c.getLot(L.lotId).dups).length, q7 + ' rows=' + rows.length);
     await p7.close();
   }
+  // ---- 完了ロットの入力状況（シートを消したロット）: 入力記録の使う5列だけ読んでも、成績表と同じ
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const L = c.createLot({ prefix: 'PL', start: '00101', kind: '20kg' });
+    c.recordEntry({ lotId: L.lotId, serial: '00101', mass: 16.7 });
+    c.recordEntry({ lotId: L.lotId, serial: '00102', missing: true });
+    c.recordEntry({ lotId: L.lotId, serial: '00103', mass: 16.5 });
+    c.recordEntry({ lotId: L.lotId, serial: '00103', mass: 16.6, overwrite: 'fix' });
+    let calls = 0;
+    c.Sheets = { Spreadsheets: { Values: { batchGet: (id, o) => { calls++; return { valueRanges: o.ranges.map(r => {
+      const mm = r.match(/^'(.+)'!(.+)$/); return { values: [m.ss.getSheetByName(mm[1]).getRange(mm[2]).getDisplayValues().map(x => x[0])] };
+    }) }; } } } };
+    const fromLog = JSON.stringify(c.progressFromLog_(c.findLot_(L.lotId)));
+    delete c.Sheets;
+    const fromGrid = JSON.stringify(c.readProgress_(c.findLot_(L.lotId)));
+    check('完了ロットの入力状況: 入力記録の使う列だけ読んでも成績表と同じ（1回の通信）', calls === 1 && fromLog === fromGrid && fromLog.includes('"00103":16.6') && fromLog.includes('"00102":"欠番"'), fromLog + ' / ' + fromGrid);
+  }
   // ---- 通信エラーで止まっても、「再送」を押さずに自動で送り直す。保存できたら赤が消える
   {
     const m = load(), c = m.ctx; c.setup();

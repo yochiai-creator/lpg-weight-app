@@ -631,7 +631,8 @@ function progressFromLog_(lot, full) {
   else {
     if (!LOG_TAIL_CACHE_) {
       const last = log.getLastRow(), from = Math.max(2, last - 30000);
-      LOG_TAIL_CACHE_ = log.getRange(from, 1, last - from + 1, LOG_HEADERS.length).getValues();
+      // 使う5列だけ読む（全列を読むと起動が遅い。完了ロットの一覧はシートを消しているのでここを通る）
+      LOG_TAIL_CACHE_ = readLogCols_(log, from, last, [LC_LOT, LC_SERIAL, LC_KIND, LC_MASS, LC_STATUS], LOG_HEADERS.length);
     }
     v = LOG_TAIL_CACHE_;
   }
