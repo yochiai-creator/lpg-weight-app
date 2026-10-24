@@ -409,3 +409,6 @@ v52までの並びは ensureFolderLayout_ が1回だけ整理（runMaintenance �
 
 ## v102
 - 読むだけの呼び出し（getBootstrapLite / getHomeExtra / listDoneLots）は失敗時に2.5秒おいて2回までやり直す（callRead）。22時の夜間処理中に「ストレージからの読み取り中にサーバーエラー INTERNAL」が出たため。
+
+## v103
+- ensureSheets_ の重い整備（ensureSheetsNow_）は1日1回に（_システム ENSURED = ENSURE_VERSION|日付）。キャッシュも10分→6時間。morningJob の最初に ensureSheets_ を呼ぶので、日中に開いたときは整備しない。

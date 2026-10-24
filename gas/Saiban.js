@@ -325,6 +325,7 @@ const MORNING_HOUR = 6;
 function morningJob() {
   if (isOldProject_()) return;
   const until = Date.now() + 4 * 60 * 1000;
+  try { ensureSheets_(); } catch (e) { console.error('シートの整備に失敗: ' + e.message); }
   let r;
   do { r = runMaintenance({ scheduled: true }); } while (r.archiveDone === false && Date.now() < until);
   if (r.archiveDone !== false) sharedProps_().setProperty('MAINT_DAY', tokyoDate_(new Date()));

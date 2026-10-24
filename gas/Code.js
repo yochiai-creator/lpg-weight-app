@@ -91,8 +91,17 @@ function ensureSheets_() {
   try { cache = CacheService.getScriptCache(); } catch (e) { cache = null; }
   const key = 'ENSURED_' + ENSURE_VERSION;
   try { if (cache && cache.get(key)) return; } catch (e) { /* 確かめる */ }
-  ensureSheetsNow_();
-  try { if (cache) cache.put(key, '1', 600); } catch (e) { /* 次も確かめる */ }
+  // 整備は重い（シートを何枚も見る）ので1日1回。朝6:30の自動処理で済んでいれば、開いたときにはやらない
+  const mark = ENSURE_VERSION + '|' + tokyoDate_(new Date());
+  let props = null;
+  try { props = sharedProps_(); } catch (e) { props = null; }
+  let done = false;
+  try { done = !!props && props.getProperty('ENSURED') === mark; } catch (e) { done = false; }
+  if (!done) {
+    ensureSheetsNow_();
+    try { if (props) props.setProperty('ENSURED', mark); } catch (e) { /* 次も確かめる */ }
+  }
+  try { if (cache) cache.put(key, '1', 21600); } catch (e) { /* 次も確かめる */ }
 }
 function ensureSheetsNow_() {
   [ensureTokyoTime_, ensureLogHeaders_, ensureTitleFont_, ensureSettingRows_, ensureTypicalDefault_, ensureVolumes_, ensureVolumes3_, ensureTrim_, cleanDoneSheets_, ensureLogDayLines_].forEach(function(fn) {
