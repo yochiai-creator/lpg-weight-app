@@ -734,6 +734,9 @@ function check(name, ok, detail) {
     });
     await p6.setContent(html); await p6.waitForTimeout(600);
     const cards = async () => p6.$$eval('#doneLots .card', cs => cs.map(x => ({ t: x.querySelector('h3').textContent, b: [...x.querySelectorAll('button')].map(b => b.textContent) })));
+    const c0 = await cards();
+    check('最近完了したロット: 送ったものは最初は出さない', c0.length === 1 && c0[0].t.includes('SK00101'), JSON.stringify(c0));
+    await p6.check('#showSentDone'); await p6.waitForTimeout(200);
     const c1 = await cards();
     check('送らずに消す: 未送信の完了ロットにだけボタン', c1.length === 2 && c1.find(x => x.t.includes('SK00101')).b.includes('送らずに消す') && !c1.find(x => x.t.includes('SK00201')).b.includes('送らずに消す'), JSON.stringify(c1));
     const btn = () => p6.$('#doneLots .card:has-text("SK00101") button:has-text("消す")');

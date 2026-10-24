@@ -264,7 +264,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v98（送らないにしたロットはまとめて送信に出さない）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v99（最近完了したロットは送っていないものだけ）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -311,7 +311,8 @@
     <div class="msg" id="lotMsg"></div>
   </div>
 
-  <h2>最近完了したロット <span class="sub" style="font-size:13px;font-weight:400">（送っていないものは全部・送ったものは新しい10件）</span></h2>
+  <h2>最近完了したロット <span class="sub" style="font-size:13px;font-weight:400">（送っていないもの）</span>
+    <label class="bulk-opt" style="font-size:14px;font-weight:400;margin-left:12px"><input type="checkbox" id="showSentDone">送ったもの（新しい10件）も表示</label></h2>
   <div class="cards" id="doneLots"></div>
 
   <h2>検査表をまとめてメール送信</h2>
@@ -797,8 +798,11 @@
       g.lots.forEach(function(l) { act.appendChild(lotCard(l, false)); });
     });
     const dn = $('doneLots'); dn.innerHTML = '';
-    if (!S.done.length) dn.innerHTML = '<div class="sub">まだありません</div>';
-    S.done.forEach(function(l) { dn.appendChild(lotCard(l, true)); });
+    // 送ったロットは、チェックを入れたときだけ出す（いつも出すと見にくい）
+    const showSent = $('showSentDone').checked;
+    const doneShown = S.done.filter(function(l) { return showSent || !l.sentAt; });
+    if (!doneShown.length) dn.innerHTML = '<div class="sub">' + (S.done.length ? '送っていない完了ロットはありません' : 'まだありません') + '</div>';
+    doneShown.forEach(function(l) { dn.appendChild(lotCard(l, true)); });
     if (bulkLots && bulkLots.length) renderBulk();
     $('btnStart').disabled = !S.lots.length || (S.workers.length > 0 && !worker());
     $('btnStart').textContent = S.workers.length && !worker() ? '入力者を選ぶと入力できます' : '入力を始める';
@@ -901,6 +905,8 @@
       .catch(function(e) { b.disabled = false; $('bulkMsg').className = 'msg err'; $('bulkMsg').textContent = errText(e); });
   }
   $('btnBulkLoad').onclick = loadBulk;
+  $('showSentDone').checked = store.get('lpg.showSentDone') === '1';
+  $('showSentDone').onchange = function() { store.set('lpg.showSentDone', this.checked ? '1' : '0'); renderHome(); };
   $('bulkSaiban').checked = store.get('lpg.bulkSaiban') !== '0';
   $('bulkSaiban').onchange = function() { store.set('lpg.bulkSaiban', this.checked ? '1' : '0'); };
   $('btnBulkUnsent').onclick = function() {
