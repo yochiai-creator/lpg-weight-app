@@ -264,7 +264,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v101（入力者と入力中の検査表を先に出す）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v102（一時的なサーバーエラーは自動でやり直す）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -483,6 +483,14 @@
       google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](arg);
     });
   }
+  // 読むだけの呼び出しは、Google側の一時的なエラー（ストレージ読み取りの INTERNAL など）なら少し待って2回までやり直す
+  function callRead(fn, arg, tries) {
+    tries = tries == null ? 2 : tries;
+    return call(fn, arg).catch(function(e) {
+      if (tries <= 0) throw e;
+      return new Promise(function(r) { setTimeout(r, 2500); }).then(function() { return callRead(fn, arg, tries - 1); });
+    });
+  }
   // 確認は同じボタンの2回押しで行う（iPadの入力画面では confirm/alert のダイアログが出ないことがある）
   function armed(btn, text) {
     if (btn._armT && Date.now() - btn._armT < 5000) { btn._armT = 0; btn.innerHTML = btn._orig; return true; }
@@ -576,7 +584,7 @@
     } catch (e) { /* 保存できなくても動く */ }
   }
   function loadHomeExtra() {
-    return call('getHomeExtra').then(function(x) {
+    return callRead('getHomeExtra').then(function(x) {
       S.lots.forEach(function(l) { const m = x.marks[l.lotId] || {}; l.dups = m.dups || {}; l.seals = m.seals || {}; });
       S.done = x.recentDone;
       saveBoot();
@@ -585,7 +593,7 @@
   }
   function loadHome() {
     const t0 = Date.now();
-    return call('getBootstrapLite').then(function(b) {
+    return callRead('getBootstrapLite').then(function(b) {
       // 読み込み開始より前に保存済みの分は最新の一覧に入っている
       S.localOps = S.localOps.filter(function(op) { return op.t >= t0 || S.pending[op.lotId + '|' + op.serial]; });
       applyBoot(b);
@@ -920,8 +928,8 @@
   }
   function loadBulk() {
     const b = $('btnBulkLoad'); b.disabled = true;
-    return call('listDoneLots').then(function(r) { b.disabled = false; b.textContent = '一覧を更新'; bulkLots = r; renderBulk(); })
-      .catch(function(e) { b.disabled = false; $('bulkMsg').className = 'msg err'; $('bulkMsg').textContent = errText(e); });
+    return callRead('listDoneLots').then(function(r) { b.disabled = false; b.textContent = '一覧を更新'; bulkLots = r; renderBulk(); })
+      .catch(function(e) { b.disabled = false; $('bulkMsg').className = 'msg err'; $('bulkMsg').textContent = errText(e) + '（時間をおいて「完了したロットを表示」をもう一度押してください）'; });
   }
   $('btnBulkLoad').onclick = loadBulk;
   $('showSentDone').checked = store.get('lpg.showSentDone') === '1';

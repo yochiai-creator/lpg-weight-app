@@ -406,3 +406,6 @@ v52までの並びは ensureFolderLayout_ が1回だけ整理（runMaintenance �
 - getBootstrapLite: 入力者・設定・入力中ロット（成績表の表をまとめて読む）。印は付けない。
 - getHomeExtra: 印（入力記録の直近2万行）と最近完了したロット。画面は Lite で入力者・入力中ロットを出してから Extra を読み、印と完了ロットを足す（印は前の値を残しておく）。
 - getBootstrap は両方を合わせたもの（朝の準備・テスト用に残す）。
+
+## v102
+- 読むだけの呼び出し（getBootstrapLite / getHomeExtra / listDoneLots）は失敗時に2.5秒おいて2回までやり直す（callRead）。22時の夜間処理中に「ストレージからの読み取り中にサーバーエラー INTERNAL」が出たため。
