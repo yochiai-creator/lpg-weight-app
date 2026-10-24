@@ -162,9 +162,9 @@ function hideDoneLot(input) {
   }
 }
 
-// まとめて送信の候補（完了してまだ送っていないロット。新しい順）
+// まとめて送信の候補（完了してまだ送っていないロット。「送らずに消す」にしたものは出さない。新しい順）
 function listDoneLots() {
-  return readLots_().filter(function(l) { return l.status === STATUS_DONE && !l.sentAt; }).reverse().map(function(l) {   // 送ったものは出さない
+  return readLots_().filter(function(l) { return l.status === STATUS_DONE && !l.sentAt && !isSkipped_(l); }).reverse().map(function(l) {   // 送ったもの・「送らない」にしたものは出さない
     return { lotId: l.lotId, prefix: l.prefix, start: l.start, end: l.end, kind: l.kind, sheetName: l.sheetName,
       sentAt: l.sentAt, pdf: l.pdf, spec: l.spec, skipped: isSkipped_(l) };
   });

@@ -750,7 +750,7 @@ function check(name, ok, detail) {
     check('一覧から消す: 2回目で消え、送信の記録・PDFは残る', (await cards()).length === 0 && !!c.findLot_(S2.lotId).sentAt && !!c.findLot_(S2.lotId).pdf && !c.getBootstrap().recentDone.some(x => x.lotId === S2.lotId));
     await p6.click('#btnBulkLoad'); await p6.waitForTimeout(300);
     const bl = await p6.$$eval('#bulkList label', ls => ls.map(x => ({ t: x.textContent, on: x.querySelector('input').checked })));
-    check('送らずに消す: まとめて送信の一覧には「送らない」で残り、最初は選ばれない', bl.some(x => x.t.includes('SK00101') && x.t.includes('送らない') && !x.on), JSON.stringify(bl));
+    check('送らずに消す: まとめて送信の一覧にも出ない', !bl.some(x => x.t.includes('SK00101')), JSON.stringify(bl));
     check('送ったロットは、まとめて送信の一覧に出ない', !bl.some(x => x.t.includes('SK00201')), JSON.stringify(bl));
     await p6.close();
     c.sendLotsMail([L.lotId]);
