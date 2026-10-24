@@ -518,26 +518,52 @@ function lotSize_(lot) {
   return Number(lot.end) - Number(lot.start) + 1;
 }
 
+// 起動は2回に分ける（入力者と入力中の成績表を先に出す）:
+//  getBootstrapLite: 入力者・設定・入力中のロット（成績表の表から）。印（ダブり・シール違い）は付けない
+//  getHomeExtra: 印（入力記録を読む）と最近完了したロット（シートを消したロットは入力記録から）
 function getBootstrap() {
+  const b = getBootstrapLite();
+  const x = getHomeExtra();
+  b.lots.forEach(function(l) { const m = x.marks[l.lotId] || {}; l.dups = m.dups || {}; l.seals = m.seals || {}; });
+  b.recentDone = x.recentDone;
+  return b;
+}
+
+function getBootstrapLite() {
   ensureSheets_();
-  const all = readLots_();
-  const lots = all.filter(function(l) { return l.status === STATUS_ACTIVE; });
-  const hidden = hiddenDoneLots_();
-  // 最近完了したロット: 送っていないものは全部、送ったものは新しい10件（多すぎると重いので合わせて40件まで）
-  const doneAll = all.filter(function(l) { return l.status === STATUS_DONE && !isSkipped_(l) && hidden.indexOf(l.lotId) < 0; }).reverse();
-  let sentN = 0;
-  const done = doneAll.filter(function(l) { return !l.sentAt || sentN++ < 10; }).slice(0, 40);
+  const lots = readLots_().filter(function(l) { return l.status === STATUS_ACTIVE; });
   const settings = readSettings_();
-  const marks = readMarksAll_();
-  const grids = readGrids_(lots.concat(done));
-  const withP = function(l) { return withProgress_(l, marks, grids[l.sheetName]); };
+  const grids = readGrids_(lots);
   return {
     user: userEmail_(),
     workers: readWorkers_(),
     mail: { to: settings.to, cc: settings.cc, auto: settings.auto },
     typical: settings.typical,
-    lots: lots.map(withP),
-    recentDone: done.map(withP)
+    lots: lots.map(function(l) {
+      l.entries = grids[l.sheetName] ? progressFromGrid_(l, grids[l.sheetName]) : readProgress_(l);
+      delete l.row;
+      return l;
+    }),
+    recentDone: null
+  };
+}
+
+function getHomeExtra() {
+  const all = readLots_();
+  const active = {};
+  all.forEach(function(l) { if (l.status === STATUS_ACTIVE) active[l.lotId] = true; });
+  const hidden = hiddenDoneLots_();
+  // 最近完了したロット: 送っていないものは全部、送ったものは新しい10件（多すぎると重いので合わせて40件まで）
+  const doneAll = all.filter(function(l) { return l.status === STATUS_DONE && !isSkipped_(l) && hidden.indexOf(l.lotId) < 0; }).reverse();
+  let sentN = 0;
+  const done = doneAll.filter(function(l) { return !l.sentAt || sentN++ < 10; }).slice(0, 40);
+  const marks = readMarksAll_();
+  const grids = readGrids_(done);
+  const activeMarks = {};
+  Object.keys(marks).forEach(function(id) { if (active[id]) activeMarks[id] = marks[id]; });
+  return {
+    marks: activeMarks,
+    recentDone: done.map(function(l) { return withProgress_(l, marks, grids[l.sheetName]); })
   };
 }
 

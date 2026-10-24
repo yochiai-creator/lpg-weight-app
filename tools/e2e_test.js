@@ -364,9 +364,10 @@ function check(name, ok, detail) {
   {
     const p2 = await browser.newPage({ viewport: { width: 1180, height: 820 } });
     p2.on('pageerror', e => check('ページでJSエラーなし(再起動)', false, e.message));
-    let slow = 0;
+    let slow = 0, slowX = 0;
     await p2.exposeFunction('__gas', async (fn, arg) => {
-      if (fn === 'getBootstrap' && slow) await new Promise(r => setTimeout(r, slow));
+      if ((fn === 'getBootstrap' || fn === 'getBootstrapLite') && slow) await new Promise(r => setTimeout(r, slow));
+      if (fn === 'getHomeExtra' && slowX) await new Promise(r => setTimeout(r, slowX));
       try { const v = ctx[fn](JSON.parse(arg)); return JSON.stringify({ v: JSON.parse(JSON.stringify(v === undefined ? null : v)) }); }
       catch (e) { return JSON.stringify({ err: e.message }); }
     });
@@ -379,6 +380,15 @@ function check(name, ok, detail) {
     check('再起動: 更新中の表示が出る', await p2.isVisible('#staleMsg'));
     await p2.waitForTimeout(1600);
     check('再起動: 最新に更新されると表示が消える', !(await p2.isVisible('#staleMsg')) && (await p2.locator('#activeLots .card').count()) === n1);
+    // 印と最近完了したロットの読み込みが遅くても、入力者と入力中のロットは先に出る
+    slow = 0; slowX = 1500;
+    await p2.evaluate(() => localStorage.clear());
+    await p2.reload(); await p2.waitForTimeout(500);
+    const doneN = () => p2.evaluate(() => { try { return (JSON.parse(localStorage.getItem('lpg.boot')).recentDone || []).length; } catch (e) { return -1; } });
+    const early = { lots: await p2.locator('#activeLots .card').count(), workers: await p2.locator('#fWorker option').count(), done: await doneN() };
+    await p2.waitForTimeout(1600);
+    const late = await doneN();
+    check('起動: 入力者と入力中のロットが先に出て、最近完了したロットはあとから読む', early.lots === n1 && early.workers > 1 && early.done === 0 && late > 0, JSON.stringify([early, late]));
     await p2.close();
   }
   // ---- v43までの並びの入力記録を、グループNo→容器番号→容器区分の並びに移す

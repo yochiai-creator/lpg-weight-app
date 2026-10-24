@@ -264,7 +264,7 @@
 </head>
 <body>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v100（起動を軽く）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v101（入力者と入力中の検査表を先に出す）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -545,12 +545,16 @@
   const BOOT_KEY = 'lpg.boot';
   function applyBoot(b) {
     $('user').textContent = b.user;
-    S.done = b.recentDone; S.workers = b.workers; S.mail = b.mail; S.typical = b.typical || {};
+    if (b.recentDone) S.done = b.recentDone; else S.done = S.done || [];
+    S.workers = b.workers; S.mail = b.mail; S.typical = b.typical || {};
     // 既存のロットは同じ物を使い回して中身を最新にする（入力中の画面が参照しているため）
     const old = {};
     (S.lots || []).forEach(function(l) { old[l.lotId] = l; });
     S.lots = b.lots.map(function(l) {
       const cur = old[l.lotId];
+      // 先に来る軽い読み込みには印がない。前の印を残し、あとの読み込みで最新にする
+      if (!l.dups && cur) { l.dups = cur.dups || {}; l.seals = cur.seals || {}; }
+      if (!l.dups) { l.dups = {}; l.seals = {}; }
       if (!cur) return l;
       Object.keys(cur).forEach(function(k) { delete cur[k]; });
       return Object.assign(cur, l);
@@ -565,17 +569,32 @@
       if (r && r.archiveDone === false) setTimeout(runMaintenance, 3000);
     }).catch(function() { /* 次に開いたときにまた試す */ });
   }
+  // 入力者と入力中の成績表を先に出し（軽い）、印と最近完了したロットはあとから（入力記録を読むので重い）
+  function saveBoot() {
+    try {
+      localStorage.setItem(BOOT_KEY, JSON.stringify({ user: $('user').textContent, workers: S.workers, mail: S.mail, typical: S.typical, lots: S.lots, recentDone: S.done }));
+    } catch (e) { /* 保存できなくても動く */ }
+  }
+  function loadHomeExtra() {
+    return call('getHomeExtra').then(function(x) {
+      S.lots.forEach(function(l) { const m = x.marks[l.lotId] || {}; l.dups = m.dups || {}; l.seals = m.seals || {}; });
+      S.done = x.recentDone;
+      saveBoot();
+      if ($('entry').classList.contains('hidden')) renderHome(); else render();
+    }).catch(function() { /* 印は前のまま。次に開いたときにまた読む */ });
+  }
   function loadHome() {
     const t0 = Date.now();
-    return call('getBootstrap').then(function(b) {
-      try { localStorage.setItem(BOOT_KEY, JSON.stringify(b)); } catch (e) { /* 保存できなくても動く */ }
+    return call('getBootstrapLite').then(function(b) {
       // 読み込み開始より前に保存済みの分は最新の一覧に入っている
       S.localOps = S.localOps.filter(function(op) { return op.t >= t0 || S.pending[op.lotId + '|' + op.serial]; });
       applyBoot(b);
       S.stale = false; $('staleMsg').classList.add('hidden');
       renderWorkers();
       renderHome();
-      if (!maintStarted) { maintStarted = true; setTimeout(runMaintenance, 1500); }
+      saveBoot();
+      const extra = loadHomeExtra();
+      if (!maintStarted) { maintStarted = true; extra.then(function() { setTimeout(runMaintenance, 1500); }); }
       if (!$('entry').classList.contains('hidden')) {
         if (!lotById(S.viewLotId)) S.viewLotId = S.lots.length ? S.lots[0].lotId : null;
         if (S.target && !lotById(S.target.lot.lotId)) resetEntry('ロットが更新されました。容器番号を入力', 'info');
