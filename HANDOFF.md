@@ -412,3 +412,6 @@ v52までの並びは ensureFolderLayout_ が1回だけ整理（runMaintenance �
 
 ## v103
 - ensureSheets_ の重い整備（ensureSheetsNow_）は1日1回に（_システム ENSURED = ENSURE_VERSION|日付）。キャッシュも10分→6時間。morningJob の最初に ensureSheets_ を呼ぶので、日中に開いたときは整備しない。
+
+## v104
+- 開いたときのローディング画面（#splash：ラインを流れるLPGボンベのSVGアニメ）。前回の一覧（loadCachedBoot）か最新の一覧が出たら hideSplash（最低1秒、最長15秒）。pointer-events:none。
