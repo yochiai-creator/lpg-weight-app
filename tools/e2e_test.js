@@ -369,6 +369,15 @@ function check(name, ok, detail) {
 
   fs.mkdirSync(path.join(__dirname, 'out'), { recursive: true });
   await page.screenshot({ path: path.join(__dirname, 'out', 'home.png'), fullPage: true });
+  // スマホの幅で見た目を確かめる用（はみ出し・横スクロールがないこと）
+  await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(200);
+  await page.screenshot({ path: path.join(__dirname, 'out', 'phone_home.png'), fullPage: true });
+  check('スマホ幅: ホーム画面が横にはみ出さない', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), String(await page.evaluate(() => document.documentElement.scrollWidth)));
+  await page.click('#btnStart'); await page.waitForTimeout(200);
+  await page.screenshot({ path: path.join(__dirname, 'out', 'phone_entry.png'), fullPage: true });
+  check('スマホ幅: 入力画面が横にはみ出さない', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), String(await page.evaluate(() => document.documentElement.scrollWidth)));
+  await page.click('#btnHome'); await page.waitForTimeout(200);
+  await page.setViewportSize({ width: 1180, height: 820 }); await page.waitForTimeout(200);
   // ---- 起動高速化: 2回目の起動は前回の一覧をすぐ出し、裏で最新に更新する
   {
     const p2 = await browser.newPage({ viewport: { width: 1180, height: 820 } });

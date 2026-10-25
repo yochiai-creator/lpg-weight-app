@@ -80,6 +80,17 @@
   @media (max-width: 700px) {
     .input-layout { grid-template-columns: 1fr; }
     .input-layout > .panel:last-child { order: -1; }
+    /* スマホ: 見出しを1行に詰め、番号の表は枠の中でスクロール（入力欄とテンキーを下まで探さなくていいように） */
+    header { flex-wrap: wrap; padding: 8px 12px; gap: 4px 10px; }
+    header h1 { font-size: 16px; flex: 1 1 auto; }
+    header h1 span, header #user { display: none; }
+    main { padding: 8px; }
+    .input-layout .grid { max-height: 22vh; overflow-y: auto; position: relative; }
+    .input-layout .grid .cell { padding: 7px 6px; }
+    .input-layout .field { padding: 6px 10px; margin-bottom: 6px; }
+    .input-layout .match button, .input-layout .notice { padding-top: 8px; padding-bottom: 8px; }
+    .input-layout .field .val { font-size: 30px; min-height: 40px; }
+    .input-layout .pad button { font-size: 20px; padding: 8px 0; }
   }
   /* タブレット縦向き: 上に表、下に入力（入力は 番号・質量 | 前回±・候補 | テンキー の3列） */
   @media (orientation: portrait) and (min-width: 701px) {
@@ -282,7 +293,7 @@
 <div class="sp-sub">読み込み中…</div></div>
 <script>window.SPLASH_T0 = Date.now();</script>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v106（本日生産終了ボタンで採番表）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v107（スマホで入力しやすく）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -1847,6 +1858,11 @@
       frag.appendChild(div);
     }
     g.appendChild(frag);
+    // スマホでは表が枠の中でスクロールするので、今の番号（なければ直前に入れた番号）を枠の真ん中に出す
+    if (window.matchMedia && window.matchMedia('(max-width: 700px)').matches) {
+      const t = g.querySelector('.target') || g.querySelector('.last');
+      if (t) g.scrollTop = Math.max(0, t.offsetTop - g.clientHeight / 2 + t.offsetHeight / 2);
+    }
   }
 
   // ---------- キー入力 ----------

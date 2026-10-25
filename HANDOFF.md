@@ -418,3 +418,6 @@ v52までの並びは ensureFolderLayout_ が1回だけ整理（runMaintenance �
 
 ## v106
 - 採番表の欄に「本日生産終了（今日の採番表を作る）」ボタン（btnDayEnd、2回押し）。makeSaibanPdf({date: 今日}) をその場で実行。22時の nightlyJob はそのまま（後から増えた入力も含めて作り直す）。
+
+## v107
+- スマホ幅（〜700px）: 見出しを詰め（版表示・アカウントを隠す）、入力画面の番号の表は高さ22vhの枠でスクロール。今の番号（.target、なければ .last）を枠の中央に出す。e2e にスマホ幅のはみ出しチェックとスクショ（tools/out/phone_*.png）。
