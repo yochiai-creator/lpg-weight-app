@@ -282,7 +282,7 @@
 <div class="sp-sub">読み込み中…</div></div>
 <script>window.SPLASH_T0 = Date.now();</script>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v105（ローディング画面のボンベを写真に近づけた）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v106（本日生産終了ボタンで採番表）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -351,11 +351,14 @@
 
   <h2>採番表（その日に流れた順番）</h2>
   <div class="panel">
+    <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn big" id="btnDayEnd" type="button">本日生産終了（今日の採番表を作る）</button>
+    </div>
     <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
       <input type="date" id="saibanDate" style="font-size:16px;padding:8px">
       <button class="btn" id="btnSaiban" type="button">採番表を作る</button>
     </div>
-    <div class="msg" id="saibanMsg">毎晩22時台に、その日の分を「LPG容器 採番表」スプレッドシートに書き足し、PDFも保存します（容器記号もまとめて1日1つの通し番号）。今日の途中の分や作り直しはここから。</div>
+    <div class="msg" id="saibanMsg">毎晩22時台に、その日の分を「LPG容器 採番表」スプレッドシートに書き足し、PDFも保存します（容器記号もまとめて1日1つの通し番号）。その日の作業が終わったら「本日生産終了」を押すと、すぐに今日の分を作ります（あとで入力が増えても22時台に作り直します）。日付を選んで作り直すこともできます。</div>
   </div>
 </main>
 
@@ -906,21 +909,29 @@
     const d = new Date(), p2 = function(n) { return ('0' + n).slice(-2); };
     $('saibanDate').value = d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
   })();
-  $('btnSaiban').onclick = function() {
-    const b = this; b.disabled = true;
+  function showSaiban(r) {
+    const m = $('saibanMsg'); m.innerHTML = '';
+    if (!r.count) { m.className = 'msg'; m.textContent = r.date + ' に流れた容器はありません'; return; }
+    m.className = 'msg ok';
+    m.appendChild(document.createTextNode(r.date + ' の採番表（' + r.count + '本）: '));
+    [['PDF', r.pdfUrl], ['スプレッドシート', r.sheetUrl]].forEach(function(x) {
+      if (!x[1]) return;
+      const a = document.createElement('a'); a.href = x[1]; a.target = '_blank'; a.textContent = x[0]; a.style.marginRight = '12px';
+      m.appendChild(a);
+    });
+  }
+  function makeSaiban(date, b) {
+    b.disabled = true;
     $('saibanMsg').className = 'msg'; $('saibanMsg').textContent = '作成中…';
-    call('makeSaibanPdf', { date: $('saibanDate').value }).then(function(r) {
-      b.disabled = false;
-      const m = $('saibanMsg'); m.innerHTML = '';
-      if (!r.count) { m.textContent = r.date + ' に流れた容器はありません'; return; }
-      m.className = 'msg ok';
-      m.appendChild(document.createTextNode(r.date + ' の採番表（' + r.count + '本）: '));
-      [['PDF', r.pdfUrl], ['スプレッドシート', r.sheetUrl]].forEach(function(x) {
-        if (!x[1]) return;
-        const a = document.createElement('a'); a.href = x[1]; a.target = '_blank'; a.textContent = x[0]; a.style.marginRight = '12px';
-        m.appendChild(a);
-      });
-    }).catch(function(e) { b.disabled = false; $('saibanMsg').className = 'msg err'; $('saibanMsg').textContent = errText(e); });
+    return call('makeSaibanPdf', { date: date }).then(function(r) { b.disabled = false; showSaiban(r); })
+      .catch(function(e) { b.disabled = false; $('saibanMsg').className = 'msg err'; $('saibanMsg').textContent = errText(e); });
+  }
+  $('btnSaiban').onclick = function() { makeSaiban($('saibanDate').value, this); };
+  // 本日生産終了: 今日の採番表をその場で作る（押し間違い防止に2回押し）
+  $('btnDayEnd').onclick = function() {
+    if (!armed(this, 'もう一度押すと今日の採番表を作ります')) return;
+    const d = new Date(), p2 = function(n) { return ('0' + n).slice(-2); };
+    makeSaiban(d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()), this);
   };
   // ---------- 検査表をまとめてメール送信 ----------
   var bulkLots = [];   // var: renderHome から先に参照されることがある

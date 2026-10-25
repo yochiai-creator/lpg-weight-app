@@ -358,6 +358,15 @@ function check(name, ok, detail) {
     check('まとめて送信: 送ったロットは一覧から消える', !(await page.$('#bulkList input[value="HEP37001"]')), await page.textContent('#bulkList'));
   }
 
+  // ---- 本日生産終了: 2回押しで今日の採番表を作る
+  {
+    await page.click('#btnDayEnd'); await page.waitForTimeout(100);
+    check('本日生産終了: 1回目の押しでは作らない', (await page.textContent('#btnDayEnd')).includes('もう一度押すと'));
+    await page.click('#btnDayEnd'); await page.waitForTimeout(600);
+    const t = await page.textContent('#saibanMsg');
+    check('本日生産終了: 今日の採番表ができてPDFのリンクが出る', /の採番表（\d+本）/.test(t) && !!(await page.$('#saibanMsg a')), t);
+  }
+
   fs.mkdirSync(path.join(__dirname, 'out'), { recursive: true });
   await page.screenshot({ path: path.join(__dirname, 'out', 'home.png'), fullPage: true });
   // ---- 起動高速化: 2回目の起動は前回の一覧をすぐ出し、裏で最新に更新する

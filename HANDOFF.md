@@ -415,3 +415,6 @@ v52までの並びは ensureFolderLayout_ が1回だけ整理（runMaintenance �
 
 ## v104
 - 開いたときのローディング画面（#splash：ラインを流れるLPGボンベのSVGアニメ。写真に合わせた陰影付きの灰色ボンベ4種（プロテクター付き2・バルブ付き縦長2）、赤い「燃LPガス／充てん期限」、穴あきスカート）。前回の一覧（loadCachedBoot）か最新の一覧が出たら hideSplash（最低1秒、最長15秒）。pointer-events:none。
+
+## v106
+- 採番表の欄に「本日生産終了（今日の採番表を作る）」ボタン（btnDayEnd、2回押し）。makeSaibanPdf({date: 今日}) をその場で実行。22時の nightlyJob はそのまま（後から増えた入力も含めて作り直す）。
