@@ -826,6 +826,15 @@ function check(name, ok, detail) {
     check('二重送信: 成績表に入っていなければ「保存済み」の記録があっても書く', r4.recordId !== 'Rfake' && !r4.duplicateSend && c.getLot(L.lotId).entries['00150'] === 16.7, JSON.stringify(r4));
     const slog = m.ss.getSheetByName('_保存ログ');
     check('保存ログ: 保存のたびに1行（入力と結果）', !!slog && slog.getLastRow() >= 5 && String(slog.getRange(slog.getLastRow(), 4).getValue()).includes('00150/16.7/dX-zzz-9'));
+    // 覚えておいた結果（キャッシュ）が消えていても、同じ時刻の同じ入力が記録にあれば書かない（10/26 HEP81346）
+    const tt = Date.now() - 5 * 60 * 1000, cid = 'dX-' + tt.toString(36) + '-8';
+    const r5 = c.recordEntries([{ lotId: L.lotId, serial: '00160', mass: 16.4, clientId: cid, devId: 'dX' }]).results[0];
+    c.CacheService.getScriptCache().put('SAVED_' + cid, '', 600);
+    const r6 = c.recordEntries([{ lotId: L.lotId, serial: '00160', mass: 16.4, clientId: cid, devId: 'dX' }]).results[0];
+    const n160 = lg.getRange(2, 1, lg.getLastRow() - 1, 18).getValues().filter(r => r[2] === L.lotId && String(r[4]).endsWith('00160')).length;
+    check('二重送信: キャッシュが消えていても記録の時刻で見分けてダブりにしない', n160 === 1 && r6.duplicateSend === true && r6.recordId === r5.recordId && !c.getLot(L.lotId).dups['RS00160'], JSON.stringify([n160, r5, r6]));
+    const r7 = c.recordEntries([{ lotId: L.lotId, serial: '00160', mass: 16.4, clientId: 'dX-' + (tt + 60000).toString(36) + '-9', devId: 'dX' }]).results[0];
+    check('二重送信: 時刻が違えば本当のダブり', r7.kind === 'ダブり', JSON.stringify(r7));
   }
   // ---- 送信の返事が戻らない（スリープ・電波）ときは自動で送り直す。2回届いても1回分だけ
   {

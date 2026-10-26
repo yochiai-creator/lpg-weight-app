@@ -958,6 +958,21 @@ function enteredAt_(clientId) {
   return t > 0 && t <= now && now - t < 3 * 24 * 3600 * 1000 ? new Date(t) : new Date(now);
 }
 
+// 入力記録に、同じ容器を同じ時刻（clientId の時刻）に入れた有効な行があればその記録ID
+function sameEntryInLog_(lot, serial, clientId) {
+  const parts = String(clientId || '').split('-');
+  const t = parts.length === 3 ? parseInt(parts[1], 36) : NaN;
+  if (!(t > 0)) return '';
+  const log = getSpreadsheet_().getSheetByName(SHEET_LOG);
+  if (!log) return '';
+  const rows = logRowsMatching_(log, LC_SERIAL, lot.prefix + serial);
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = log.getRange(rows[i], 1, 1, LC_STATUS + 1).getValues()[0];
+    if (r[LC_STATUS] === '有効' && String(r[LC_LOT]) === lot.lotId && r[LC_TIME] instanceof Date && Math.abs(r[LC_TIME].getTime() - t) < 5) return String(r[LC_ID]);
+  }
+  return '';
+}
+
 function recordOne_(payload) {
   {
     const again = savedResult_(payload.clientId);
@@ -992,6 +1007,12 @@ function recordOne_(payload) {
     const prev = parseMassCells_(grid[pr].slice(pc, pc + 5));
     // 二重送信: 1回目が本当に成績表に入っているときだけ、書かずに1回目の結果を返す（入っていなければふつうに書く）
     if (again && prev !== null && String(again.serial) === serial && again.mass === prev) { again.duplicateSend = true; return again; }
+    // 覚えておいた結果が消えていても（キャッシュは消えることがある）、同じ入力（同じ容器・iPadで入れた時刻が同じ）が
+    // 入力記録にあれば二重送信。理由の指定がない上書きだけ確かめる（10/23 HEP80723・10/26 HEP81346 がダブりになった）
+    if (!again && prev !== null && !payload.overwrite && prev === mass) {
+      const sent = sameEntryInLog_(lot, serial, payload.clientId);
+      if (sent) return { recordId: sent, clientId: payload.clientId, serial: serial, mass: mass, prev: prev, duplicateSend: true };
+    }
     // 底黒: 〇が付いている容器がもう一度流れても二重には記録しない
     if (mass === CIRCLE && prev === CIRCLE) return { recordId: null, clientId: payload.clientId, serial: serial, mass: mass, prev: prev, already: true };
     const cells = massCells_(mass);
