@@ -739,7 +739,7 @@ function check(name, ok, detail) {
       catch (e) { return JSON.stringify({ err: e.message }); }
     });
     await p5.setContent(html); await p5.waitForTimeout(600);
-    check('使用中: ホームのカードに入力中と出て、完了・削除のボタンは出ない', (await p5.textContent('#activeLots')).includes('🔒 佐藤・iPad-2 が入力中') && (await p5.$$('#activeLots .card')).length === 3 && (await p5.$$eval('#activeLots .card', cs => cs.filter(x => x.textContent.includes('🔒')).map(x => x.querySelectorAll('button').length)))[0] === 0);
+    check('使用中: ホームのカードに入力中と出て、完了・削除のボタンは出ない', (await p5.textContent('#activeLots')).includes('🔒 佐藤・iPad-2 が入力中') && (await p5.$$('#activeLots .card')).length === 3 && (await p5.$$eval('#activeLots .card', cs => cs.filter(x => x.textContent.includes('🔒')).map(x => Array.from(x.querySelectorAll('button')).map(b => b.textContent).join(','))))[0] === 'ロックを外す');
     await p5.selectOption('#fWorker', '山田'); await p5.fill('#fDevice', 'iPad-1');
     await p5.click('#btnStart'); await p5.waitForTimeout(200);
     const k5 = async (seq, w = 250) => { for (const ch of seq) await p5.keyboard.press(KEY[ch] || 'Numpad' + ch); await p5.waitForTimeout(w); return p5.textContent('#notice'); };
@@ -748,6 +748,14 @@ function check(name, ok, detail) {
     check('使用中: 表と上のバーに🔒', (await p5.textContent('#gridSub')).includes('🔒') && (await p5.textContent('#tabs')).includes('🔒'));
     const n6 = await k5('305');
     check('使用中: 使われていないロットは入力できる', !n6.includes('見るだけ'), n6);
+    await k5('E'); await p5.keyboard.press('Escape'); await k5('103');
+    await p5.click('#gridSub .unlock'); await p5.waitForTimeout(100);
+    check('ロックを外す: 1回目の押しでは外さない', (await p5.textContent('#gridSub .unlock')).includes('もう一度'));
+    await p5.click('#gridSub .unlock'); await p5.waitForTimeout(400);
+    const n7 = await k5('103');
+    check('ロックを外す: 2回押すと外れて、このiPadで入力できる', !n7.includes('見るだけ') && !(await p5.textContent('#gridSub')).includes('🔒') && c.getClaims(A)[L.lotId].worker === '山田' && !c.getClaims(A)[L.lotId].mine, n7);
+    await p5.keyboard.press('Escape');
+    c.takeOverLot(Object.assign({ lotId: L.lotId }, A));   // 以降のテストのため佐藤のiPadに戻す
     await p5.close();
     // ホームに戻る・完了・10分たつと外れる
     check('ホームに戻ると外れる', c.releaseLots(A) === 1 && c.recordEntry({ lotId: L.lotId, serial: '00103', mass: 16.7, devId: 'devB' }).serial === '00103');

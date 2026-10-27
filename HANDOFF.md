@@ -431,3 +431,6 @@ v52までの並びは ensureFolderLayout_ が1回だけ整理（runMaintenance �
 
 ## v110
 - 底黒でも欠番: 容器番号の段階で「－」（番号の前でも後でも）→ S.missNext。底黒ロットは markSokoMissing で欠番を記録（〇済みなら overwrite:'fix' で欠番に直す）。通常ロットは質量欄に欠番が入った状態で開く。サーバーは payload.missing を底黒より先に見る。
+
+## v111
+- 🔒 の横に「ロックを外す」ボタン（ホームのカード・入力画面の表の上、2回押し）。takeOverLot（Claim.js）で別のiPadの使用中をこのiPadの使用中に置き換える。開きっぱなし・電源切れ・送信待ちの再送で使用中が残ったとき用。

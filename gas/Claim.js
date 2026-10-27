@@ -76,3 +76,13 @@ function releaseLots(who) {
   if (n) writeClaims_(m);
   return n;
 }
+
+// 「ロックを外す」: 別のiPadの使用中を外してこのiPadの使用中にする（入力しないまま画面を開きっぱなし・電源が切れた など）
+function takeOverLot(input) {
+  if (!input || !input.lotId || !input.devId) throw new Error('ロットまたは端末がわかりません');
+  CLAIMS_EXEC_ = null;
+  const m = readClaims_();
+  m[input.lotId] = { devId: String(input.devId), worker: String(input.worker || ''), device: String(input.device || ''), at: Date.now() };
+  writeClaims_(m);
+  return getClaims(input);
+}

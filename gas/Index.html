@@ -37,6 +37,7 @@
   .card h3 { margin: 0 0 4px; font-size: 18px; }
   .card .sub { color: var(--muted); font-size: 13px; }
   .lock-note { color: #b25e00; font-weight: 700; font-size: 14px; }
+  .btn.unlock { padding: 4px 10px; font-size: 13px; margin-left: 8px; }
   .ln-lock { margin-right: 4px; font-size: .8em; }
   .bulk-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; margin-top: 10px; max-height: 420px; overflow-y: auto; }
   .bulk-list label { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: 15px; background: var(--card); }
@@ -293,7 +294,7 @@
 <div class="sp-sub">読み込み中…</div></div>
 <script>window.SPLASH_T0 = Date.now();</script>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v110（底黒でも欠番を入れられる）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v111（ロックを外すボタン）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -548,6 +549,20 @@
     beep(false); render();
     return true;
   }
+  // 🔒 の横の「ロックを外す」（2回押し）: 別のiPadの使用中を外して、このiPadで入力できるようにする
+  function unlockBtn(l) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sec unlock'; b.textContent = 'ロックを外す';
+    b.onclick = function(ev) {
+      ev.stopPropagation();
+      if (!armed(b, 'もう一度押すと外す')) return;
+      b.disabled = true;
+      call('takeOverLot', { lotId: l.lotId, devId: DEV_ID, worker: worker(), device: $('fDevice').value.trim() }).then(function(m) {
+        S.claims = m || {};
+        if ($('entry').classList.contains('hidden')) renderHome(); else { setNotice('ロックを外しました。容器番号を入力', 'ok'); render(); }
+      }).catch(function(e) { b.disabled = false; setNotice(errText(e), 'err'); homeMsg(errText(e), 'err'); });
+    };
+    return b;
+  }
   let claimsTimer = null;
   function pollClaims() {
     clearTimeout(claimsTimer);
@@ -729,7 +744,7 @@
     const lk = !done && lockedBy(l);
     if (lk) {
       const n = document.createElement('div'); n.className = 'lock-note'; n.textContent = '🔒 ' + lockText(lk) + ' が入力中（見るだけ）';
-      row.appendChild(n);
+      row.appendChild(n); row.appendChild(unlockBtn(l));
       return div;
     }
     // 登録間違いの削除（最後に付ける）
@@ -1844,7 +1859,7 @@
     };
     markText(l.dups, 'ダブり', 'var(--ng)'); markText(l.seals, 'シール違い', '#7a5bc4');
     const lk = lockedBy(l);
-    if (lk) { const lb = document.createElement('b'); lb.className = 'lock-note'; lb.textContent = '　🔒 ' + lockText(lk) + ' が入力中（見るだけ）'; $('gridSub').appendChild(lb); }
+    if (lk) { const lb = document.createElement('b'); lb.className = 'lock-note'; lb.textContent = '　🔒 ' + lockText(lk) + ' が入力中（見るだけ）'; $('gridSub').appendChild(lb); $('gridSub').appendChild(unlockBtn(l)); }
     const rep = Object.keys(l.entries).filter(function(k) { return l.entries[k] === REPAIR; }).length;
     if (rep) { const rs = document.createElement('b'); rs.style.color = '#c77700'; rs.textContent = '　修正 ' + rep + '本'; $('gridSub').appendChild(rs); }
     $('gridCount').textContent = (c.filled + c.missing) + ' / ' + c.size;
