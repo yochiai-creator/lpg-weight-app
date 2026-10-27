@@ -25,6 +25,7 @@ function runMaintenance(opts) {
       props.setProperty('RESTORED_HEP59701', '1');
     }
   } catch (e) { console.error('ロットの復元に失敗: ' + e.message); }
+  try { sokoSaibanRedo_(); } catch (e) { console.error('底黒を外した採番表の作り直しに失敗: ' + e.message); }
   try { retime20261021_(); } catch (e) { console.error('10/21の時刻の付け直しに失敗: ' + e.message); }
   try { out.trimmed = trimLogColumns_(); } catch (e) { console.error('列の削除に失敗: ' + e.message); }
   try { Object.assign(out, archiveLogStep_()); } catch (e) { console.error('入力記録の移動に失敗: ' + e.message); }
@@ -218,4 +219,29 @@ function retime20261021_() {
     lock.releaseLock();
   }
   makeSaibanPdf({ date: '2026-10-21' });
+}
+
+// v109: 採番表から底黒を外したので、底黒の入力があった前日までの日を1回だけ作り直す（saibanStep_ が SAIBAN_STALE を作り直す）
+function sokoSaibanRedo_() {
+  const props = sharedProps_();
+  if (props.getProperty('SOKO_SAIBAN_REDO') === '1') return;
+  const log = getSpreadsheet_().getSheetByName(SHEET_LOG);
+  const days = [];
+  if (log && log.getLastRow() >= 2) {
+    const last = log.getLastRow(), from = Math.max(2, last - 30000);
+    const soko = {};
+    readLots_().forEach(function(l) { if (l.spec === SPEC_SOKO) soko[l.lotId] = true; });
+    const today = tokyoDate_(new Date());
+    log.getRange(from, 1, last - from + 1, LOG_HEADERS.length).getValues().forEach(function(r) {
+      const t = r[LC_TIME];
+      if (!(t instanceof Date) || r[LC_STATUS] !== '有効') return;
+      if (r[LC_KIND] !== SPEC_SOKO && !soko[String(r[LC_LOT])]) return;
+      const d = tokyoDate_(t);
+      if (d < today && days.indexOf(d) < 0) days.push(d);
+    });
+  }
+  const list = (props.getProperty('SAIBAN_STALE') || '').split(',').filter(String);
+  days.forEach(function(d) { if (list.indexOf(d) < 0) list.push(d); });
+  if (list.length) props.setProperty('SAIBAN_STALE', list.join(','));
+  props.setProperty('SOKO_SAIBAN_REDO', '1');
 }

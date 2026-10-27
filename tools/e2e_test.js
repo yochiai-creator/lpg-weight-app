@@ -467,9 +467,13 @@ function check(name, ok, detail) {
     let freeN = 74400; while (order.includes(String(freeN))) freeN--;   // まだ流れていない番号を修正にする
     const freeS = String(freeN);
     c.recordEntry({ lotId: c.readLots_().find(l => +l.start <= freeN && freeN <= +l.end).lotId, serial: freeS, mass: null, repair: true, worker: '田中' });
+    // 底黒（再搬入）は採番表に載せない
+    const sk = c.createLot({ prefix: 'HSK', start: '10001', kind: '50kg', spec: '底黒' });
+    c.recordEntry({ lotId: sk.lotId, serial: '10005', worker: '田中' });
     const today = c.tokyoDate_(new Date());
     const r = c.makeSaibanPdf({ date: today });
     const key = Object.keys(global.PDFBLOBS).find(k => k.endsWith('/採番表_' + today + '.pdf'));
+    check('採番表: 底黒は載せない', !c.saibanRows_(today).some(x => x.lotId === sk.lotId) && !(c.saibanDatesForLots_([sk.lotId])[sk.lotId] || []).length);
     const html = key ? global.PDFBLOBS[key].html : '';
     check('採番表: 1日1つにまとめる（訂正・ダブりは数えない）', r.count === 252 && r.groups.join(',') === 'HXF,HEP' && !!r.pdfUrl && !!r.sheetUrl, JSON.stringify(r));
     const pg = html.split('<div class="page">').slice(1);

@@ -21,13 +21,13 @@ function saibanRows_(date) {
     // 有効な記録だけ（取消・削除したロットの記録は載せない）
     return t instanceof Date && tokyoDate_(t) === date && r[LC_STATUS] === '有効' &&
       r[LC_KIND] !== MISSING && r[LC_KIND] !== KIND_FIX && r[LC_KIND] !== KIND_DUP &&
-      r[LC_NOTE] !== NOTE_NO_SAIBAN;
+      r[LC_NOTE] !== NOTE_NO_SAIBAN && !isSokoRow_(r, lots);
   }).sort(function(a, b) { return a[LC_TIME] - b[LC_TIME]; }).map(function(r) {
     const lot = lots[String(r[LC_LOT])];
     const prefix = lot ? lot.prefix : '';
     const full = String(r[LC_SERIAL]);
     return {
-      group: prefix + (lot && lot.spec === SPEC_SOKO ? '（底黒）' : ''),
+      group: prefix,
       prefix: prefix,
       full: full,
       number: full.indexOf(prefix) === 0 ? full.slice(prefix.length) : full,
@@ -39,6 +39,12 @@ function saibanRows_(date) {
       worker: String(r[LC_WORKER] || '')
     };
   });
+}
+
+// 底黒（再搬入）の容器は採番表に載せない（v109）
+function isSokoRow_(r, lots) {
+  const lot = lots[String(r[LC_LOT])];
+  return r[LC_KIND] === SPEC_SOKO || !!(lot && lot.spec === SPEC_SOKO);
 }
 
 function saibanEsc_(s) { return String(s).replace(/[&<>"]/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -238,7 +244,7 @@ function saibanDatesForLots_(lotIds) {
     const t = r[LC_TIME];
     if (!days || !(t instanceof Date) || r[LC_STATUS] !== '有効' ||
       r[LC_KIND] === MISSING || r[LC_KIND] === KIND_FIX || r[LC_KIND] === KIND_DUP ||
-      r[LC_NOTE] === NOTE_NO_SAIBAN) return;
+      r[LC_NOTE] === NOTE_NO_SAIBAN || r[LC_KIND] === SPEC_SOKO) return;
     const d = tokyoDate_(t);
     if (days.indexOf(d) < 0) days.push(d);
   });

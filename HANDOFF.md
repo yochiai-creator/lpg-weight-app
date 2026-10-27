@@ -424,3 +424,7 @@ v52までの並びは ensureFolderLayout_ が1回だけ整理（runMaintenance �
 
 ## v108
 - 二重送信の見分けを強化: キャッシュ（SAVED_clientId）が消えていても、理由なしの上書きで同じ質量なら sameEntryInLog_（容器番号の TextFinder＋入力日時が clientId の時刻と一致する有効行）で二重送信と判定し書かない。10/23 HEP80723 と 10/26 HEP81346 が再送でダブりになっていた（該当2行は取消）。
+
+## v109
+- 採番表に底黒（再搬入）を載せない: saibanRows_ と saibanDatesForLots_ で底黒ロット・区分「底黒」の行を除く（isSokoRow_）。グループ名の「（底黒）」もなくした。
+- sokoSaibanRedo_（runMaintenance から1回だけ、_システム SOKO_SAIBAN_REDO）: 底黒の入力があった前日までの日を SAIBAN_STALE に足し、saibanStep_ が作り直す。
