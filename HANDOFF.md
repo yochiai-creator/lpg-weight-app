@@ -428,3 +428,6 @@ v52までの並びは ensureFolderLayout_ が1回だけ整理（runMaintenance �
 ## v109
 - 採番表に底黒（再搬入）を載せない: saibanRows_ と saibanDatesForLots_ で底黒ロット・区分「底黒」の行を除く（isSokoRow_）。グループ名の「（底黒）」もなくした。
 - sokoSaibanRedo_（runMaintenance から1回だけ、_システム SOKO_SAIBAN_REDO）: 底黒の入力があった前日までの日を SAIBAN_STALE に足し、saibanStep_ が作り直す。
+
+## v110
+- 底黒でも欠番: 容器番号の段階で「－」（番号の前でも後でも）→ S.missNext。底黒ロットは markSokoMissing で欠番を記録（〇済みなら overwrite:'fix' で欠番に直す）。通常ロットは質量欄に欠番が入った状態で開く。サーバーは payload.missing を底黒より先に見る。

@@ -332,6 +332,13 @@ function check(name, ok, detail) {
   check('底黒: もう一度流れても二重に記録しない', (await keys('7023', 400)).includes('〇済み'));
   const sokoRows = ss.getSheetByName('入力記録').getRange(2, 1, ss.getSheetByName('入力記録').getLastRow() - 1, 18).getValues().filter(r => r[2] === 'HEP37001-底黒');
   check('底黒: 入力記録は区分「底黒」で1行', sokoRows.length === 1 && sokoRows[0][8] === '底黒' && sokoRows[0][7] === '');
+  // 底黒でも欠番: 「－」を押してから番号、または番号のあとに「－」（〇の後なら欠番に直す）
+  check('底黒: 「－」→番号で欠番', (await keys('-')).includes('欠番にする容器番号') && (await keys('7024', 400)).includes('欠番: HEP37024（底黒）'));
+  check('底黒: 〇を付けたあとでも欠番に直せる', (await keys('-7023', 400)).includes('欠番: HEP37023（底黒）'));
+  const sokoMiss = sokoSh.getRange(5 + 23 % 20, 2 + Math.floor(23 / 20) * 6, 1, 6).getValues()[0].join('|');
+  const sokoRows2 = ss.getSheetByName('入力記録').getRange(2, 1, ss.getSheetByName('入力記録').getLastRow() - 1, 18).getValues().filter(r => r[2] === 'HEP37001-底黒');
+  check('底黒: 成績表に欠番・記録は欠番と訂正', sokoMiss === '024|false|欠|番||' && sokoRows2.length === 3 && sokoRows2[1][8] === '欠番' && sokoRows2[2][8] === '訂正', sokoMiss + ' ' + JSON.stringify(sokoRows2.map(r => r[8])));
+  check('底黒: 欠番のあとは〇に戻る', (await keys('7025', 400)).includes('〇: HEP37025（底黒）'));
   ctx.reopenLot('HEP37001');
   check('再開すると成績表シートを入力記録から作り直す', !!sh() && slot(22).join('|') === '023|true|3|4|,|8' && slot(30).join('|') === '031|false|欠|番||', slot(22).join('|') + ' / ' + (sh() ? slot(30).join('|') : ''));
   { const before = global.MAILS.length; const r = ctx.resendLot('HEP36001');

@@ -986,10 +986,10 @@ function recordOne_(payload) {
     if (!(index >= 0 && index < lotSize_(lot))) throw new Error('容器番号がロットの範囲外です: ' + serial);
 
     let mass;
-    if (lot.spec === SPEC_SOKO) {
+    if (payload.missing) {
+      mass = MISSING;   // 底黒でも欠番は欠番
+    } else if (lot.spec === SPEC_SOKO) {
       mass = CIRCLE;
-    } else if (payload.missing) {
-      mass = MISSING;
     } else if (payload.repair) {
       mass = REPAIR;
     } else {

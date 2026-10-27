@@ -293,7 +293,7 @@
 <div class="sp-sub">読み込み中…</div></div>
 <script>window.SPLASH_T0 = Date.now();</script>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v109（採番表に底黒を載せない）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v110（底黒でも欠番を入れられる）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -1065,7 +1065,7 @@
   function resetEntry(msg, kind) {
     S.stage = 'num'; S.ng = false; S.bufNum = ''; S.bufActual = ''; S.bufMass = '';
     S.target = null; S.confirmDup = false; S.confirmMassText = null; S.ngFrom = ''; S.fullMass = false;
-    S.overwrite = ''; S.seal = false; S.dateOk = false;
+    S.overwrite = ''; S.seal = false; S.dateOk = false; S.missNext = false;
     setNotice(msg || '容器番号を入力', kind || 'info');
     render();
   }
@@ -1173,6 +1173,12 @@
       else if (k === 'Enter') { if (S.bufNum) { if (S.confirmDup) S.overwrite = 'fix'; return submitNum(); } return; }
       else if (k === '+' && S.confirmDup) { S.overwrite = 'dup'; return submitNum(); }
       else if (k === '/') { S.ng = !S.ng; }
+      // 欠番: 番号を入れてから「－」、または「－」を押してから番号（底黒は質量の欄がないのでここで決める）
+      else if (k === '-') {
+        if (S.bufNum) { S.missNext = true; return submitNum(); }
+        S.missNext = !S.missNext;
+        setNotice(S.missNext ? '欠番: 欠番にする容器番号を入力' : '容器番号を入力', S.missNext ? 'warn' : 'info');
+      }
       render(); return;
     }
     if (S.stage === 'actual') {
@@ -1276,7 +1282,7 @@
       return;
     }
     const prev = hit.lot.entries[hit.serial];
-    if (hit.lot.spec === SOKO) return markCircle(hit, prev);
+    if (hit.lot.spec === SOKO) return S.missNext ? markSokoMissing(hit, prev) : markCircle(hit, prev);
     // 入力済みの容器でも警告は出さずに入力バーを開く（ダブりはバーの「ダブり」、入力ミスは質量を入れ直して訂正）
     S.target = hit; S.confirmDup = false;
     S.stage = 'mass'; S.bufMass = ''; S.confirmMassText = null; S.viewLotId = hit.lot.lotId; S.fullMass = false;
@@ -1285,6 +1291,7 @@
     else if (!S.overwrite) S.overwrite = 'fix';
     // ダブり（2回流れてきた）は同じ容器なのでWも前と同じ。入れ直さずにそのまま記録する
     if (S.overwrite === 'dup' && isMass(prev)) { S.bufMass = prev.toFixed(1); S.confirmMassText = null; return submitMass(); }
+    if (S.missNext) { S.missNext = false; S.bufMass = MISSING; setNotice('欠番として記録します。Enter で保存', 'warn'); render(); return; }
     setNotice(prev === undefined ? '質量を入力' : label(hit.lot, hit.serial) + ' は入力済み（' + fmtMass(prev) + '）。2回流れたなら「ダブり」、直すなら質量を入力', 'info');
     render();
   }
@@ -1302,6 +1309,19 @@
     S.lastKey = hit.lot.lotId + '|' + hit.serial;
     beep(true);
     resetEntry('〇: ' + label(hit.lot, hit.serial) + '（底黒）→ 次の容器番号', 'ok');
+  }
+
+  // 底黒の欠番: 〇の代わりに欠番を記録（〇を付けたあとなら欠番に直す）
+  function markSokoMissing(hit, prev) {
+    S.viewLotId = hit.lot.lotId;
+    if (prev === MISSING) { resetEntry('欠番済み: ' + label(hit.lot, hit.serial) + ' はもう欠番です → 次の容器番号', 'warn'); beep(false); return; }
+    enqueue({ lotId: hit.lot.lotId, serial: hit.serial, mass: null, missing: true, worker: worker(), device: $('fDevice').value.trim(),
+      overwrite: prev === undefined ? '' : 'fix' });
+    hit.lot.entries[hit.serial] = MISSING;
+    S.localOps.push({ lotId: hit.lot.lotId, serial: hit.serial, mass: MISSING, t: Date.now() });
+    S.lastKey = hit.lot.lotId + '|' + hit.serial;
+    beep(true);
+    resetEntry('欠番: ' + label(hit.lot, hit.serial) + '（底黒）→ 次の容器番号', 'ok');
   }
 
   function submitMass() {
