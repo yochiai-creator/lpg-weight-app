@@ -363,6 +363,15 @@ function check(name, ok, detail) {
     check('まとめて送信: 選んだロットのPDFを1通で（採番表も付ける・CSVは付けない）', global.MAILS.length === before + 1 && n === 1 && m && m.att[0] === '成績表_HEP37001-37100.pdf' && m.att.slice(1).every(a => /^採番表_\d{4}-\d\d-\d\d\.pdf$/.test(a)) && m.sub.includes('1ロット分'), JSON.stringify(m));
     check('まとめて送信: 送信後に送信済みと表示', (await page.textContent('#bulkMsg')).includes('送信しました'));
     check('まとめて送信: 送ったロットは一覧から消える', !(await page.$('#bulkList input[value="HEP37001"]')), await page.textContent('#bulkList'));
+    check('まとめて送信: 採番表の日が並び、送った日は送信済', /\d+\/\d+（.）\d+本/.test(await page.textContent('#bulkDays')) && (await page.textContent('#bulkDays')).includes('送信済'), await page.textContent('#bulkDays'));
+    // 採番表だけ送る: ロットを外して日だけ選ぶ
+    await page.$$eval('#bulkList input', xs => xs.forEach(x => { x.checked = false; }));
+    await page.check('#bulkDays input');
+    const b2 = global.MAILS.length;
+    check('採番表だけ: ボタンに日数', (await page.textContent('#btnBulkSend')).includes('採番表 1日分を送信'), await page.textContent('#btnBulkSend'));
+    await page.click('#btnBulkSend'); await page.waitForTimeout(100); await page.click('#btnBulkSend'); await page.waitForTimeout(600);
+    const m2 = global.MAILS[b2];
+    check('採番表だけ: 採番表PDFだけの1通', global.MAILS.length === b2 + 1 && m2.att.length === 1 && /^採番表_/.test(m2.att[0]) && m2.sub.startsWith('【採番表】'), JSON.stringify(m2));
   }
 
   // ---- 本日生産終了: 2回押しで今日の採番表を作る

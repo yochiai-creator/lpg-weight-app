@@ -179,10 +179,14 @@ function sendLotsMail(input) {
   const lotIds = Array.isArray(input) ? input : (input && input.lotIds);
   const withSaiban = !Array.isArray(input) && !!(input && input.saiban);
   const saibanAgain = !Array.isArray(input) && !!(input && input.saibanAgain);   // 送った日の採番表も付け直す
+  // v112: 付ける採番表の日を画面で選ぶ（saibanDays）。ロットなしで採番表だけも送れる
+  const pickDays = !Array.isArray(input) && input && Array.isArray(input.saibanDays) ?
+    input.saibanDays.map(String).filter(function(d, i, a) { return /^\d{4}-\d{2}-\d{2}$/.test(d) && a.indexOf(d) === i; }).sort() : null;
   const today = tokyoDate_(new Date());
   const sentList = saibanSentDays_();
   const ids = (lotIds || []).map(String).filter(function(id, i, a) { return id && a.indexOf(id) === i; });
-  if (!ids.length) throw new Error('送るロットを選んでください');
+  if (!ids.length && pickDays && pickDays.length) return sendSaibanOnly_(st, pickDays, sentList);
+  if (!ids.length) throw new Error('送るロットか採番表の日を選んでください');
   const lots = ids.map(function(id) {
     const lot = findLot_(id);
     if (lot.status !== STATUS_DONE) throw new Error('完了していないロットは送れません: ' + lot.lotId);
@@ -190,7 +194,7 @@ function sendLotsMail(input) {
   });
   // 番号順にそろえる
   lots.sort(function(a, b) { return a.prefix.localeCompare(b.prefix) || Number(a.start) - Number(b.start); });
-  const lotDays = withSaiban ? saibanDatesForLots_(lots.map(function(l) { return l.lotId; })) : {};
+  const lotDays = withSaiban && !pickDays ? saibanDatesForLots_(lots.map(function(l) { return l.lotId; })) : {};
   const saibanBlobs = {};   // 日付 → PDF（分けて送るときに同じ日を作り直さない）
   let mails = 0, saibanCount = 0, saibanSkipped = 0;
   for (let i = 0; i < lots.length; i += BULK_MAIL_MAX_LOTS) {
@@ -205,11 +209,12 @@ function sendLotsMail(input) {
         (v['欠番'] !== '0' ? '　欠番 ' + v['欠番'] : '') + (v['修正'] !== '0' ? '　修正 ' + v['修正'] : ''));
     });
     const days = [];
-    part.forEach(function(lot) { (lotDays[lot.lotId] || []).forEach(function(d) { if (days.indexOf(d) < 0) days.push(d); }); });
+    if (pickDays) { if (i === 0) pickDays.forEach(function(d) { days.push(d); }); }   // 選んだ日は1通目に付ける
+    else part.forEach(function(lot) { (lotDays[lot.lotId] || []).forEach(function(d) { if (days.indexOf(d) < 0) days.push(d); }); });
     days.sort();
     const sentDays = [];
     days.forEach(function(d) {
-      if (!saibanAgain && isSaibanSent_(d, sentList)) { saibanSkipped++; return; }
+      if (!pickDays && !saibanAgain && isSaibanSent_(d, sentList)) { saibanSkipped++; return; }
       if (!(d in saibanBlobs)) saibanBlobs[d] = saibanPdfBlob_(d);
       if (saibanBlobs[d]) { attachments.push(saibanBlobs[d]); sentDays.push(d); }
     });
@@ -227,11 +232,49 @@ function sendLotsMail(input) {
     MailApp.sendEmail(st.to, fillMail_(st.bulkSubject, vars), fillMail_(st.bulkBody, vars), options);
     part.forEach(function(lot) { markSent_(lot, st); });
     // 前の日までの採番表は送り済みにする（今日の分はまだ増えるので、送り済みにしない）
-    sentDays.forEach(function(d) { if (d < today && sentList.indexOf(d) < 0) sentList.push(d); });
+    sentDays.forEach(function(d) { if ((pickDays || d < today) && sentList.indexOf(d) < 0) sentList.push(d); });
     saveSaibanSentDays_(sentList);
     mails++;
   }
   return { sentTo: st.to, lots: lots.length, mails: mails, saiban: saibanCount, saibanSkipped: saibanSkipped };
+}
+
+// 採番表だけを1通で送る（ロットを選ばずに日だけ選んだとき）
+function sendSaibanOnly_(st, days, sentList) {
+  const attachments = [], sent = [];
+  days.forEach(function(d) { const b = saibanPdfBlob_(d); if (b) { attachments.push(b); sent.push(d); } });
+  if (!sent.length) throw new Error('選んだ日に流れた容器がないため、採番表がありません');
+  const label = sent.map(function(d) { return d.slice(5).replace('-', '/'); }).join('・');
+  const options = { name: st.senderName, attachments: attachments };
+  if (st.cc) options.cc = st.cc;
+  MailApp.sendEmail(st.to, '【採番表】' + label,
+    'ご担当者様\n\nいつもお世話になっております。\n採番表をお送りします。\n\n採番表（PDF）：' + label + '\n\nよろしくお願いいたします。', options);
+  sent.forEach(function(d) { if (sentList.indexOf(d) < 0) sentList.push(d); });
+  saveSaibanSentDays_(sentList);
+  return { sentTo: st.to, lots: 0, mails: 1, saiban: sent.length, saibanSkipped: 0 };
+}
+
+// 画面で選ぶ採番表の日: 容器が流れた最近の日（新しい順・14日分）。{ date, count, sent }
+function listSaibanDays() {
+  const log = getSpreadsheet_().getSheetByName(SHEET_LOG);
+  if (!log || log.getLastRow() < 2) return [];
+  const last = log.getLastRow(), from = Math.max(2, last - 20000);
+  const width = Math.min(log.getLastColumn(), LOG_HEADERS.length);
+  const soko = {};
+  readLots_().forEach(function(l) { if (l.spec === SPEC_SOKO) soko[l.lotId] = true; });
+  const count = {};
+  readLogCols_(log, from, last, [LC_TIME, LC_LOT, LC_KIND, LC_STATUS, LC_NOTE], width).forEach(function(r) {
+    if (r[LC_STATUS] !== '有効' || r[LC_KIND] === MISSING || r[LC_KIND] === KIND_FIX || r[LC_KIND] === KIND_DUP ||
+      r[LC_KIND] === SPEC_SOKO || r[LC_NOTE] === NOTE_NO_SAIBAN || soko[String(r[LC_LOT])]) return;
+    const m = String(r[LC_TIME]).match(/(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/);
+    if (!m) return;
+    const d = m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+    count[d] = (count[d] || 0) + 1;
+  });
+  const list = saibanSentDays_();
+  return Object.keys(count).sort().reverse().slice(0, 14).map(function(d) {
+    return { date: d, count: count[d], sent: isSaibanSent_(d, list) };
+  });
 }
 
 // 送り済みの採番表の日（まとめて送信で同じ日を2回送らない）。_システム の SAIBAN_SENT（日付の配列・新しい400日分）

@@ -294,7 +294,7 @@
 <div class="sp-sub">読み込み中…</div></div>
 <script>window.SPLASH_T0 = Date.now();</script>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v111（ロックを外すボタン）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v112（採番表の日を選んで送る）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -354,11 +354,13 @@
     </div>
     <div class="bulk-list" id="bulkList"></div>
     <div class="row" style="margin-top:10px;gap:14px;align-items:center;flex-wrap:wrap">
-      <button class="btn hidden" id="btnBulkSend" type="button">送信</button>
-      <label class="bulk-opt"><input type="checkbox" id="bulkSaiban">採番表も付ける（容器が流れた日の分。前の日までで送った日の分は付けない）</label>
-      <label class="bulk-opt"><input type="checkbox" id="bulkSaibanAgain">送った日の採番表も付け直す</label>
     </div>
-    <div class="msg" id="bulkMsg">チェックした完了ロットの成績表PDFを、1通のメールにまとめて送付先へ送ります（20ロットを超えると20ロットずつ分けて送ります）。採番表を付けると、そのロットの容器が流れた日の採番表PDFも添付します（今日の分はその時点までで作ります）。</div>
+    <div class="bk-kind" style="margin-top:12px">付ける採番表の日（流れた日・新しい順）</div>
+    <div class="bulk-list" id="bulkDays" style="max-height:220px"></div>
+    <div class="row" style="margin-top:10px;gap:14px;align-items:center;flex-wrap:wrap">
+      <button class="btn hidden" id="btnBulkSend" type="button">送信</button>
+    </div>
+    <div class="msg" id="bulkMsg">チェックした完了ロットの成績表PDFと、チェックした日の採番表PDFを1通のメールにまとめて送付先へ送ります（20ロットを超えると20ロットずつ分けて送り、採番表は1通目に付けます）。ロットを選ばずに日だけ選ぶと、採番表だけを送ります。今日の採番表はその時点までの分で作ります。</div>
   </div>
 
   <h2>採番表（その日に流れた順番）</h2>
@@ -964,11 +966,31 @@
   function bulkChecked() {
     return Array.prototype.slice.call($('bulkList').querySelectorAll('input:checked')).map(function(x) { return x.value; });
   }
+  var bulkDays = [];
+  function bulkDaysChecked() {
+    return Array.prototype.slice.call($('bulkDays').querySelectorAll('input:checked')).map(function(x) { return x.value; });
+  }
   function bulkUpdate() {
-    const n = bulkChecked().length, b = $('btnBulkSend');
+    const n = bulkChecked().length, d = bulkDaysChecked().length, b = $('btnBulkSend');
     b._armT = 0;
-    b.textContent = n ? '選んだ ' + n + ' ロットを送信' + (n > 20 ? '（' + Math.ceil(n / 20) + '通）' : '') : 'ロットを選んでください';
-    b.disabled = !n;
+    b.textContent = n || d ? (n ? '選んだ ' + n + ' ロット' + (n > 20 ? '（' + Math.ceil(n / 20) + '通）' : '') : '') + (n && d ? '＋' : '') +
+      (d ? '採番表 ' + d + '日分' : '') + 'を送信' : 'ロットか採番表の日を選んでください';
+    b.disabled = !n && !d;
+  }
+  function renderBulkDays() {
+    const box = $('bulkDays'); box.innerHTML = '';
+    if (!bulkDays.length) { box.innerHTML = '<div class="sub">流れた日がありません</div>'; return; }
+    const wd = '日月火水木金土';
+    bulkDays.forEach(function(x) {
+      const lab = document.createElement('label');
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = x.date; cb.checked = !x.sent; cb.onchange = bulkUpdate;
+      const p = x.date.split('-'), dt = new Date(+p[0], +p[1] - 1, +p[2]);
+      const t = document.createElement('span'); t.textContent = (+p[1]) + '/' + (+p[2]) + '（' + wd[dt.getDay()] + '）' + x.count + '本';
+      const st = document.createElement('span'); st.className = 'bk-sent'; st.textContent = x.sent ? '送信済' : '未送信';
+      if (!x.sent) st.style.color = 'var(--ng)';
+      lab.appendChild(cb); lab.appendChild(t); lab.appendChild(st);
+      box.appendChild(lab);
+    });
   }
   function renderBulk() {
     const list = $('bulkList'); list.innerHTML = '';
@@ -986,19 +1008,20 @@
         list.appendChild(lab);
       });
     });
-    ['btnBulkUnsent', 'btnBulkNone', 'btnBulkSend'].forEach(function(id) { $(id).classList.toggle('hidden', !lots.length); });
+    ['btnBulkUnsent', 'btnBulkNone'].forEach(function(id) { $(id).classList.toggle('hidden', !lots.length); });
+    $('btnBulkSend').classList.remove('hidden');
     bulkUpdate();
   }
   function loadBulk() {
     const b = $('btnBulkLoad'); b.disabled = true;
-    return callRead('listDoneLots').then(function(r) { b.disabled = false; b.textContent = '一覧を更新'; bulkLots = r; renderBulk(); })
+    return Promise.all([callRead('listDoneLots'), callRead('listSaibanDays')]).then(function(r) {
+      b.disabled = false; b.textContent = '一覧を更新'; bulkLots = r[0]; bulkDays = r[1] || []; renderBulkDays(); renderBulk();
+    })
       .catch(function(e) { b.disabled = false; $('bulkMsg').className = 'msg err'; $('bulkMsg').textContent = errText(e) + '（時間をおいて「完了したロットを表示」をもう一度押してください）'; });
   }
   $('btnBulkLoad').onclick = loadBulk;
   $('showSentDone').checked = store.get('lpg.showSentDone') === '1';
   $('showSentDone').onchange = function() { store.set('lpg.showSentDone', this.checked ? '1' : '0'); renderHome(); };
-  $('bulkSaiban').checked = store.get('lpg.bulkSaiban') !== '0';
-  $('bulkSaiban').onchange = function() { store.set('lpg.bulkSaiban', this.checked ? '1' : '0'); };
   $('btnBulkUnsent').onclick = function() {
     Array.prototype.forEach.call($('bulkList').querySelectorAll('input'), function(x) {
       const l = bulkLots.find(function(y) { return y.lotId === x.value; }); x.checked = !!l && !l.sentAt && !l.skipped;
@@ -1010,15 +1033,14 @@
     bulkUpdate();
   };
   $('btnBulkSend').onclick = function() {
-    const ids = bulkChecked(), b = this;
-    if (!ids.length) return;
+    const ids = bulkChecked(), days = bulkDaysChecked(), b = this;
+    if (!ids.length && !days.length) return;
     const m = $('bulkMsg');
-    if (!armed(b, 'もう一度押すと送信')) { m.className = 'msg err'; m.textContent = (S.mail.to || '（送付先未設定）') + ' に ' + ids.length + ' ロット分を送ります。もう一度押すと送信します'; return; }
+    const what = (ids.length ? ids.length + ' ロット分' : '') + (ids.length && days.length ? '＋' : '') + (days.length ? '採番表 ' + days.length + '日分' : '');
+    if (!armed(b, 'もう一度押すと送信')) { m.className = 'msg err'; m.textContent = (S.mail.to || '（送付先未設定）') + ' に ' + what + 'を送ります。もう一度押すと送信します'; return; }
     b.disabled = true; m.className = 'msg'; m.textContent = '送信中…（PDFを集めています。数十秒かかることがあります）';
-    call('sendLotsMail', { lotIds: ids, saiban: $('bulkSaiban').checked, saibanAgain: $('bulkSaibanAgain').checked }).then(function(r) {
-      $('bulkSaibanAgain').checked = false;
-      m.className = 'msg ok'; m.textContent = r.sentTo + ' に ' + r.lots + ' ロット分' + (r.saiban ? '＋採番表 ' + r.saiban + '日分' : '') + 'を送信しました' + (r.mails > 1 ? '（' + r.mails + '通）' : '') +
-        (r.saibanSkipped ? '（送り済みの日の採番表は付けていません）' : '');
+    call('sendLotsMail', { lotIds: ids, saibanDays: days }).then(function(r) {
+      m.className = 'msg ok'; m.textContent = r.sentTo + ' に ' + (r.lots ? r.lots + ' ロット分' : '') + (r.lots && r.saiban ? '＋' : '') + (r.saiban ? '採番表 ' + r.saiban + '日分' : '') + 'を送信しました' + (r.mails > 1 ? '（' + r.mails + '通）' : '');
       return Promise.all([loadBulk(), loadHome()]);
     }).catch(function(e) { b.disabled = false; m.className = 'msg err'; m.textContent = errText(e); });
   };

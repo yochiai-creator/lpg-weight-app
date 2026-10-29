@@ -434,3 +434,6 @@ v52までの並びは ensureFolderLayout_ が1回だけ整理（runMaintenance �
 
 ## v111
 - 🔒 の横に「ロックを外す」ボタン（ホームのカード・入力画面の表の上、2回押し）。takeOverLot（Claim.js）で別のiPadの使用中をこのiPadの使用中に置き換える。開きっぱなし・電源切れ・送信待ちの再送で使用中が残ったとき用。
+
+## v112
+- まとめてメール送信: 採番表は「付ける採番表の日」の一覧（listSaibanDays: 流れた最近14日・本数・送信済）から選ぶ。未送信の日は最初からチェック。sendLotsMail({lotIds, saibanDays}) で選んだ日を1通目に付け、送り済みに記録（今日も）。ロットなし＋日だけなら sendSaibanOnly_ で採番表だけの1通（件名【採番表】MM/DD）。旧 saiban/saibanAgain の指定も残す。
