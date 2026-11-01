@@ -437,3 +437,6 @@ v52までの並びは ensureFolderLayout_ が1回だけ整理（runMaintenance �
 
 ## v112
 - まとめてメール送信: 採番表は「付ける採番表の日」の一覧（listSaibanDays: 流れた最近14日・本数・送信済）から選ぶ。未送信の日は最初からチェック。sendLotsMail({lotIds, saibanDays}) で選んだ日を1通目に付け、送り済みに記録（今日も）。ロットなし＋日だけなら sendSaibanOnly_ で採番表だけの1通（件名【採番表】MM/DD）。旧 saiban/saibanAgain の指定も残す。
+
+## v113
+- まとめて送信の「付ける採番表の日」は送った日を出さない。「送った日も表示」（showSentDays）で送信済の日も出して送り直せる。

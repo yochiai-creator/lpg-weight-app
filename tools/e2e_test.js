@@ -363,7 +363,9 @@ function check(name, ok, detail) {
     check('まとめて送信: 選んだロットのPDFを1通で（採番表も付ける・CSVは付けない）', global.MAILS.length === before + 1 && n === 1 && m && m.att[0] === '成績表_HEP37001-37100.pdf' && m.att.slice(1).every(a => /^採番表_\d{4}-\d\d-\d\d\.pdf$/.test(a)) && m.sub.includes('1ロット分'), JSON.stringify(m));
     check('まとめて送信: 送信後に送信済みと表示', (await page.textContent('#bulkMsg')).includes('送信しました'));
     check('まとめて送信: 送ったロットは一覧から消える', !(await page.$('#bulkList input[value="HEP37001"]')), await page.textContent('#bulkList'));
-    check('まとめて送信: 採番表の日が並び、送った日は送信済', /\d+\/\d+（.）\d+本/.test(await page.textContent('#bulkDays')) && (await page.textContent('#bulkDays')).includes('送信済'), await page.textContent('#bulkDays'));
+    check('まとめて送信: 送った日の採番表は出さない', !(await page.textContent('#bulkDays')).includes('送信済'), await page.textContent('#bulkDays'));
+    await page.check('#showSentDays');
+    check('まとめて送信: 「送った日も表示」で送信済の日が出る', /\d+\/\d+（.）\d+本/.test(await page.textContent('#bulkDays')) && (await page.textContent('#bulkDays')).includes('送信済'), await page.textContent('#bulkDays'));
     // 採番表だけ送る: ロットを外して日だけ選ぶ
     await page.$$eval('#bulkList input', xs => xs.forEach(x => { x.checked = false; }));
     await page.check('#bulkDays input');
