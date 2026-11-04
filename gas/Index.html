@@ -294,7 +294,7 @@
 <div class="sp-sub">読み込み中…</div></div>
 <script>window.SPLASH_T0 = Date.now();</script>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v114（シートのない入力中ロットに書くときは作り直す）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v114（送れない入力をiPadに残して自動で送り直す）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -1403,6 +1403,24 @@
 
   // ---------- 送信キュー（入力を止めずに順番に保存） ----------
   let seq = 0;
+  // 送っていない入力はiPadにも残す（画面を閉じても・読み込み直しても消えない。開き直すと続きを送る。11/4 に10:34から送れずに約700本が消えた）
+  const QUEUE_KEY = 'lpg.queue';
+  function saveQueue() {
+    try { if (S.queue.length) localStorage.setItem(QUEUE_KEY, JSON.stringify(S.queue)); else localStorage.removeItem(QUEUE_KEY); } catch (e) { /* 残せなくても送信は続く */ }
+  }
+  function restoreQueue() {
+    let q = [];
+    try { q = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch (e) { q = []; }
+    if (!Array.isArray(q) || !q.length) return;
+    q.forEach(function(e) {
+      if (!e || !e.lotId || !e.clientId) return;
+      const key = e.lotId + '|' + e.serial;
+      S.pending[key] = (S.pending[key] || 0) + 1;
+      S.queue.push(e);
+    });
+    setNotice('前回送れていない入力 ' + S.queue.length + ' 本を送ります', 'warn');
+    pump();
+  }
   function enqueue(entry) {
     entry.clientId = DEV_ID + '-' + Date.now().toString(36) + '-' + (++seq);   // 端末をまたいでも重ならない（サーバーで二重送信を見分ける）
     entry.devId = DEV_ID;
@@ -1411,6 +1429,7 @@
     S.pending[key] = (S.pending[key] || 0) + 1;
     delete S.errors[key];
     S.queue.push(entry);
+    saveQueue();
     pump();
   }
 
@@ -1451,6 +1470,7 @@
     const done1 = function(e, res) {
       const key = e.lotId + '|' + e.serial;
       S.queue.shift();
+      saveQueue();
       S.pending[key]--; if (!S.pending[key]) delete S.pending[key];
       delete S.errors[key];   // 送り直して保存できたら赤を消す
       if (res.recordId) S.saved.push({ recordId: res.recordId, lotId: e.lotId, serial: e.serial, mass: res.mass });
@@ -1475,7 +1495,11 @@
       clearTimeout(sendTimer); sendTimeouts = 0; autoRetrying = false;
       S.sending = false;
       (out.results || []).forEach(function(res, i) { done1(batch[i], res); });
-      if (out.error) fail(out.error);
+      if (out.error) {
+        fail(out.error);
+        // サーバーが断った入力（完了済み・見るだけ・範囲外など）は人が決める。Googleの一時的なエラー（接続できない・時間切れ）は自動で送り直す（11/4 10:34 に止まったまま5時間たまった）
+        if (!REFUSED_RE.test(out.error)) autoRetryLater();
+      }
       render(); renderQueue();
       if (!out.error) pump();
     }).catch(function(err) {
@@ -1504,6 +1528,7 @@
     beep(true); setTimeout(function() { beep(true); }, 150);
   }
 
+  const REFUSED_RE = /完了済み|見るだけ|範囲外|質量は|見つかりません|削除/;
   function retry() { clearTimeout(autoRetryTimer); autoRetrying = false; S.sendError = null; pump(); }
   // 通信で止まったときは、人が「再送」を押さなくても少し待って送り直す（10/22 昼に1時間止まって190件たまった）
   let autoRetryTimer = null, autoRetrying = false;
@@ -1514,6 +1539,7 @@
   }
   function dropFailed() {
     const e = S.queue.shift();
+    saveQueue();
     const key = e.lotId + '|' + e.serial;
     S.pending[key]--; if (!S.pending[key]) delete S.pending[key];
     delete S.errors[key];
@@ -1956,6 +1982,7 @@
   });
 
   loadCachedBoot();
+  restoreQueue();
   loadHome().then(hideSplash, hideSplash);
   setTimeout(hideSplash, 15000);   // 何があっても15秒で消す
   pollClaims();

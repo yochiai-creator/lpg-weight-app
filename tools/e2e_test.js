@@ -950,6 +950,28 @@ function check(name, ok, detail) {
     check('通信エラー: 赤く出たあと、押さなくても自動で送り直して保存し、赤が消える', red1 > 0 && q1.includes('失敗') && fails === 4 && q2.includes('すべて保存済み') && red2 === 0 && c.getLot(L.lotId).entries['00105'] === 16.7, [red1, q1, fails, q2, red2].join(' / '));
     await p8.close();
   }
+  // ---- サーバー側のGoogleの一時エラー（返事の中の error）でも自動で送り直す（11/4 10:34 に止まったまま5時間）
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const L = c.createLot({ prefix: 'SE', start: '00101', kind: '20kg' });
+    const p9 = await browser.newPage({ viewport: { width: 1180, height: 820 } });
+    p9.on('pageerror', e => check('ページでJSエラーなし(サーバーの一時エラー)', false, e.message));
+    let fails = 0;
+    await p9.exposeFunction('__gas', (fn, arg) => {
+      if (fn === 'recordEntries' && fails < 2) { fails++; return JSON.stringify({ v: { results: [], error: 'ドキュメントにアクセス中に スプレッドシート のサービスに接続できなくなりました。', errorClientId: '' } }); }
+      try { const v = c[fn](JSON.parse(arg)); return JSON.stringify({ v: JSON.parse(JSON.stringify(v === undefined ? null : v)) }); } catch (e) { return JSON.stringify({ err: e.message }); }
+    });
+    await p9.setContent(html.replace('<head>', '<head><script>window.__sendTimeoutMs = 500;</script>')); await p9.waitForTimeout(500);
+    await p9.evaluate(() => { const c = document.getElementById('dateOkMode'); c.checked = false; c.dispatchEvent(new Event('change')); });
+    await p9.selectOption('#fWorker', '山田'); await p9.fill('#fDevice', 'x');
+    await p9.click('#btnStart'); await p9.waitForTimeout(200);
+    for (const ch of '105') await p9.keyboard.press('Numpad' + ch);
+    await p9.waitForTimeout(150);
+    for (const ch of '167') await p9.keyboard.press('Numpad' + ch);
+    await p9.waitForTimeout(3000);
+    check('サーバーの一時エラー: 自動で送り直して保存する', fails === 2 && (await p9.textContent('#queue')).includes('すべて保存済み') && c.getLot(L.lotId).entries['00105'] === 16.7, fails + ' / ' + await p9.textContent('#queue'));
+    await p9.close();
+  }
   // ---- 10kg（50本ごと・内容積24）・30kg把手（内容積71）
   {
     const m = load(), c = m.ctx; c.setup();
