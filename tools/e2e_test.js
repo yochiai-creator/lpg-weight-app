@@ -822,6 +822,18 @@ function check(name, ok, detail) {
     let e1 = ''; try { c.skipLotMail({ lotId: L.lotId }); } catch (e) { e1 = e.message; }
     check('送信済みのロットは送らずに消せない', e1.includes('送信済み'), e1);
   }
+  // ---- スプレッドシートで「入力中」に戻した（シートがない）ロットにも書ける
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const L = c.createLot({ prefix: 'RB', start: '00101', kind: '20kg' });
+    c.recordEntry({ lotId: L.lotId, serial: '00101', mass: 16.7 });
+    c.completeLot({ lotId: L.lotId });
+    const lots = m.ss.getSheetByName('ロット'), row = lots.getRange(1, 1, lots.getLastRow(), 1).getValues().findIndex(r => r[0] === L.lotId) + 1;
+    lots.getRange(row, 7).setValue('入力中');
+    c.recordEntry({ lotId: L.lotId, serial: '00102', mass: 16.6 });
+    const g = c.getLot(L.lotId).entries;
+    check('シートのない入力中ロットに書くと、入力記録から作り直して書く', !!m.ss.getSheetByName(L.sheetName) && g['00101'] === 16.7 && g['00102'] === 16.6, JSON.stringify(g));
+  }
   // ---- 同じ入力が二重に届いても（保存できていたのに再送）、2回目はダブりにしない
   {
     const m = load(), c = m.ctx; c.setup();

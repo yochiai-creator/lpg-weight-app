@@ -997,7 +997,8 @@ function recordOne_(payload) {
       if (!isValidMass_(mass)) throw new Error('質量は' + MASS_MIN + '〜' + MASS_MAX + 'の範囲で入力してください');
     }
 
-    const sh = getSheet_(lot.sheetName);
+    // 完了でシートを消したロットをスプレッドシートで「入力中」に戻した場合も、入力記録から作り直して書ける
+    const sh = getSpreadsheet_().getSheetByName(lot.sheetName) || rebuildReportSheet_(lot);
     const pos = slotPosition_(index);
     // 表全体を書く前に1回だけ読み、上書き前の値と入力済みの本数を出す（書いた後に読み直すと遅い）
     const grid = ENTRY_GRIDS_[lot.sheetName] ||
@@ -1076,7 +1077,7 @@ function undoEntry(recordId) {
       const prevText = values[i][LC_PREV];
       const prev = prevText === '' ? null : (prevText === MISSING || prevText === REPAIR || prevText === CIRCLE ? prevText : Number(prevText));
       const pos = slotPosition_(Number(serial) - Number(lot.start));
-      getSheet_(lot.sheetName).getRange(pos.row, pos.numberCol + 1, 1, 5).setValues([massCells_(prev)]);
+      (getSpreadsheet_().getSheetByName(lot.sheetName) || rebuildReportSheet_(lot)).getRange(pos.row, pos.numberCol + 1, 1, 5).setValues([massCells_(prev)]);
       log.getRange(from + i, LC_STATUS + 1).setValue('取消');
       log.getRange(from + i, LC_UNDO + 1).setValue(new Date());
       return { lotId: lot.lotId, serial: serial, mass: prev };
@@ -1098,7 +1099,7 @@ function clearEntry(input) {
     const idx = Number(serial) - Number(lot.start);
     if (!(idx >= 0 && idx <= Number(lot.end) - Number(lot.start))) throw new Error('このロットの番号ではありません: ' + serial);
     const pos = slotPosition_(idx);
-    getSheet_(lot.sheetName).getRange(pos.row, pos.numberCol + 1, 1, 5).setValues([massCells_(null)]);
+    (getSpreadsheet_().getSheetByName(lot.sheetName) || rebuildReportSheet_(lot)).getRange(pos.row, pos.numberCol + 1, 1, 5).setValues([massCells_(null)]);
     const log = getSheet_(SHEET_LOG);
     moveLogColumns_(log, true);
     const label = lot.prefix + serial;
