@@ -437,6 +437,9 @@ function check(name, ok, detail) {
     check('復旧: 送るとサーバーに入り、知らせが消える', ctx.getLot(target.lotId).entries[free] === 16.5 && !(await p2.isVisible('#recoverBox')), String(ctx.getLot(target.lotId).entries[free]));
     await p2.reload(); await p2.waitForTimeout(800);
     check('復旧: 送ったあとは再び出ない', !(await p2.isVisible('#recoverBox')));
+    const dl = await p2.evaluate(() => JSON.parse(localStorage.getItem('lpg.devlog') || '[]'));
+    await p2.click('#btnDevlog');
+    check('入力の控え: 送った入力がiPadに残り、届いた印が付く', dl.length >= 1 && dl[dl.length - 1].ok === 1 && (await p2.textContent('#devlogMsg')).includes('届いた印がないもの 0 本'), JSON.stringify(dl.slice(-1)) + ' / ' + await p2.textContent('#devlogMsg'));
     await p2.close();
   }
   // ---- v43までの並びの入力記録を、グループNo→容器番号→容器区分の並びに移す
@@ -983,6 +986,31 @@ function check(name, ok, detail) {
     await p9.waitForTimeout(3000);
     check('サーバーの一時エラー: 自動で送り直して保存する', fails === 2 && (await p9.textContent('#queue')).includes('すべて保存済み') && c.getLot(L.lotId).entries['00105'] === 16.7, fails + ' / ' + await p9.textContent('#queue'));
     await p9.close();
+  }
+  // ---- このiPadにまだ送れていない入力があるロットは完了にできない（11/4）
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const L = c.createLot({ prefix: 'UC', start: '00101', kind: '20kg' });
+    const p10 = await browser.newPage({ viewport: { width: 1180, height: 820 } });
+    p10.on('pageerror', e => check('ページでJSエラーなし(送れていないと完了不可)', false, e.message));
+    let block = true;
+    await p10.exposeFunction('__gas', (fn, arg) => {
+      if (fn === 'recordEntries' && block) return JSON.stringify({ v: { results: [], error: 'スプレッドシート のサービスに接続できなくなりました。', errorClientId: '' } });
+      try { const v = c[fn](JSON.parse(arg)); return JSON.stringify({ v: JSON.parse(JSON.stringify(v === undefined ? null : v)) }); } catch (e) { return JSON.stringify({ err: e.message }); }
+    });
+    await p10.setContent(html.replace('<head>', '<head><script>window.__sendTimeoutMs = 60000;</script>')); await p10.waitForTimeout(500);
+    await p10.evaluate(() => { const c = document.getElementById('dateOkMode'); c.checked = false; c.dispatchEvent(new Event('change')); });
+    await p10.selectOption('#fWorker', '山田'); await p10.fill('#fDevice', 'x');
+    await p10.click('#btnStart'); await p10.waitForTimeout(200);
+    for (const ch of '105') await p10.keyboard.press('Numpad' + ch);
+    await p10.waitForTimeout(150);
+    for (const ch of '167') await p10.keyboard.press('Numpad' + ch);
+    await p10.waitForTimeout(400);
+    await p10.click('#btnHome'); await p10.waitForTimeout(100); await p10.click('#btnHome'); await p10.waitForTimeout(400);
+    await p10.locator('#activeLots .card', { hasText: 'UC00101' }).locator('button:has-text("完了にする")').click();
+    await p10.click('#dSave'); await p10.waitForTimeout(300);
+    check('送れていない入力があると完了にできない', (await p10.textContent('#dlgMsg')).includes('まだ送れていない入力が 1 本') && c.findLot_(L.lotId).status === '入力中', await p10.textContent('#dlgMsg'));
+    await p10.close();
   }
   // ---- 10kg（50本ごと・内容積24）・30kg把手（内容積71）
   {
