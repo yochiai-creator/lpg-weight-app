@@ -2,6 +2,7 @@
 // ホームに戻る・完了する・10分入力がないと使用中は外れる。記録は CacheService（全員で共通、すぐ読める）
 const CLAIM_KEY = 'LOT_CLAIMS';
 const CLAIM_IDLE_MS = 10 * 60 * 1000;
+const CLAIM_ALL = '*';   // 入力中のiPad（全部のロット）。ロットIDと重ならない
 
 function claimCache_() {
   try { return CacheService.getScriptCache(); } catch (e) { return null; }
@@ -44,10 +45,14 @@ function checkClaim_(lotId, who, take) {
   const m = take ? (CLAIMS_EXEC_ || (CLAIMS_EXEC_ = readClaims_())) : readClaims_();
   const cl = m[lotId];
   if (cl && !sameDevice_(cl, who)) throw new Error(claimText_(cl) + ' が入力中のため、このロットは見るだけです（' + lotId + '）');
+  // v122: 入力は1台だけ。別のiPadが入力中なら、どのロットにも質量を入れられない
+  const all = m[CLAIM_ALL];
+  if (take && all && !sameDevice_(all, who)) throw new Error(claimText_(all) + ' が入力中のため、ほかのiPadからは入力できません（見るだけ）');
   if (take) {
     const now = Date.now();
-    if (cl && cl.devId === String(who.devId) && now - cl.at < CLAIM_REFRESH_MS) return;
-    m[lotId] = { devId: String(who.devId), worker: String(who.worker || ''), device: String(who.device || ''), at: now };
+    if (cl && cl.devId === String(who.devId) && now - cl.at < CLAIM_REFRESH_MS && all && all.devId === String(who.devId) && now - all.at < CLAIM_REFRESH_MS) return;
+    const me = { devId: String(who.devId), worker: String(who.worker || ''), device: String(who.device || ''), at: now };
+    m[lotId] = me; m[CLAIM_ALL] = me;
     writeClaims_(m);
   }
 }
@@ -80,4 +85,21 @@ function releaseLots(who) {
 // 「ロックを外す」はなくした（v118: 外すと元のiPadの送れていない入力が断られて残る）。古い画面から呼ばれても外さない
 function takeOverLot() {
   throw new Error('ロックは外せません。入力中のiPadでホームに戻るか、10分入力がなければ外れます');
+}
+
+// 入力を始めるとき（入力開始ボタン）: 別のiPadが入力中なら断る。空いていればこのiPadを入力中にする
+function claimInput(who) {
+  if (!who || !who.devId) return getClaims(who);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    CLAIMS_EXEC_ = null;
+    const m = readClaims_(), all = m[CLAIM_ALL];
+    if (all && !sameDevice_(all, who)) throw new Error(claimText_(all) + ' が入力中です。そのiPadでホームに戻るか、10分入力がなければ入力できるようになります');
+    m[CLAIM_ALL] = { devId: String(who.devId), worker: String(who.worker || ''), device: String(who.device || ''), at: Date.now() };
+    writeClaims_(m);
+    return getClaims(who);
+  } finally {
+    lock.releaseLock();
+  }
 }

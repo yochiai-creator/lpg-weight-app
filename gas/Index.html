@@ -293,7 +293,7 @@
 <div class="sp-sub">読み込み中…</div></div>
 <script>window.SPLASH_T0 = Date.now();</script>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v121（紙から復元を裏で最後まで続ける）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v122（入力できるのは1台だけ）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -556,7 +556,11 @@
     return id;
   })();
   // 別のiPadが使用中なら { worker, device }
-  function lockedBy(l) { const c = l && S.claims[l.lotId]; return c && !c.mine ? c : null; }
+  function lockedBy(l) {
+    const a = S.claims['*'];
+    if (l && a && !a.mine) return a;   // 別のiPadが入力中なら全部のロットが見るだけ
+    const c = l && S.claims[l.lotId]; return c && !c.mine ? c : null;
+  }
   function lockText(c) { return [c.worker, c.device].filter(function(x) { return x; }).join('・') || '別のiPad'; }
   function refuseLocked(l) {
     const c = lockedBy(l);
@@ -987,7 +991,18 @@
     }).then(function() { btn.disabled = false; });
   };
 
-  $('btnStart').onclick = function() { showEntry(); };
+  // 入力は1台だけ: 入力開始でこのiPadを入力中にする（別のiPadが入力中なら入れない）
+  $('btnStart').onclick = function() {
+    const b = this; b.disabled = true;
+    call('claimInput', { devId: DEV_ID, worker: worker(), device: $('fDevice').value.trim() }).then(function(m) {
+      b.disabled = false; S.claims = m || {}; showEntry();
+    }).catch(function(e) {
+      b.disabled = false;
+      // 通信できないときは入力画面には入れる（保存はサーバーで見分ける）
+      if (/入力中です/.test(errText(e))) { homeMsg('🔒 ' + errText(e), 'err'); pollClaims(); return; }
+      showEntry();
+    });
+  };
   (function() {
     const d = new Date(), p2 = function(n) { return ('0' + n).slice(-2); };
     $('saibanDate').value = d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
@@ -1547,6 +1562,7 @@
     entry.clientId = DEV_ID + '-' + Date.now().toString(36) + '-' + (++seq);   // 端末をまたいでも重ならない（サーバーで二重送信を見分ける）
     entry.devId = DEV_ID;
     S.claims[entry.lotId] = { worker: entry.worker || '', device: entry.device || '', mine: true };
+    S.claims['*'] = { worker: entry.worker || '', device: entry.device || '', mine: true };
     const key = entry.lotId + '|' + entry.serial;
     S.pending[key] = (S.pending[key] || 0) + 1;
     delete S.errors[key];
