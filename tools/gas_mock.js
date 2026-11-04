@@ -69,6 +69,7 @@ function load(){
  vm.runInContext(fs.readFileSync(GAS+'/Archive.js','utf8'),ctx);
  vm.runInContext(fs.readFileSync(GAS+'/Saiban.js','utf8'),ctx);
  vm.runInContext(fs.readFileSync(GAS+'/Claim.js','utf8'),ctx);
+ vm.runInContext(fs.readFileSync(GAS+'/Restore.js','utf8'),ctx);
  ensure=vm.runInContext('ensureSheet_',ctx); ensure(ss,'ロット',vm.runInContext('LOT_HEADERS',ctx)); ensure(ss,'入力記録',vm.runInContext('LOG_HEADERS',ctx));
  const st=ensure(ss,'設定',['項目','値','説明']); vm.runInContext('SETTING_ROWS',ctx).forEach((r,i)=>{st.set(i+2,1,r[0]);st.set(i+2,2,r[1]);});
  st.set(2,2,'nouhin@example.com');
