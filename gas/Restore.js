@@ -49,3 +49,12 @@ function paperRestore20261104_() {
     lock.releaseLock();
   }
 }
+
+// 開き直さなくても最後まで入るよう、残りがあれば1分後に自分で続きをする（終わったら止まる）
+function paperRestoreJob() {
+  ScriptApp.getProjectTriggers().forEach(function(t) { if (t.getHandlerFunction() === 'paperRestoreJob') ScriptApp.deleteTrigger(t); });
+  const t0 = Date.now();
+  let left = 1;
+  while (left !== 0 && Date.now() - t0 < 4 * 60 * 1000) left = paperRestore20261104_();
+  if (left !== 0) ScriptApp.newTrigger('paperRestoreJob').timeBased().after(60 * 1000).create();
+}
