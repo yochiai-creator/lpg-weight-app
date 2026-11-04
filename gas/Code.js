@@ -558,6 +558,7 @@ function getBootstrapLite() {
 }
 
 function getHomeExtra() {
+  try { const t0 = Date.now(); while (paperRestore20261104_() > 0 && Date.now() - t0 < 90000) { /* 続ける */ } } catch (e) { console.error('紙から復元に失敗: ' + e.message); }
   const all = readLots_();
   const active = {};
   all.forEach(function(l) { if (l.status === STATUS_ACTIVE) active[l.lotId] = true; });
