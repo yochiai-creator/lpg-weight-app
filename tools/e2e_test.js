@@ -954,6 +954,8 @@ function check(name, ok, detail) {
     const q2 = await p8.textContent('#queue'), red2 = await p8.locator('.cell.error').count();
     const ng = await p8.evaluate(() => window.__ng);
     check('通信エラー: 自動の送り直しが続けて失敗しても、ブザーは最初の1回だけ', ng === 1, 'ng=' + ng);
+    const el = await p8.evaluate(() => window.__lpgErrlog());
+    check('送信エラーの記録: 届かなかったエラーもiPadに残る（時刻・内容・ロット）', el.length === 4 && el[0].msg.includes('NetworkError') && el[0].lot === L.lotId && el[0].serial === '00105', JSON.stringify(el.slice(0, 1)));
     check('通信エラー: 赤く出たあと、押さなくても自動で送り直して保存し、赤が消える', red1 > 0 && q1.includes('失敗') && fails === 4 && q2.includes('すべて保存済み') && red2 === 0 && c.getLot(L.lotId).entries['00105'] === 16.7, [red1, q1, fails, q2, red2].join(' / '));
     await p8.close();
   }

@@ -293,7 +293,7 @@
 <div class="sp-sub">読み込み中…</div></div>
 <script>window.SPLASH_T0 = Date.now();</script>
 <header>
-  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v122（入力できるのは1台だけ）</span></h1>
+  <h1>LPG容器 質量入力 <span style="font-size:12px;font-weight:400;opacity:.7">v123（送信エラーもiPadに記録）</span></h1>
   <span class="user" id="workerBadge"></span>
   <span class="user" id="user"></span>
   <button id="btnHome" class="hidden" tabindex="-1">ロット一覧へ</button>
@@ -346,6 +346,7 @@
       <div class="row" style="gap:8px;flex-wrap:wrap">
         <button class="btn" id="btnDevlogResend" type="button">届いていない分を送り直す</button>
         <button class="btn sec" id="btnDevlogCsv" type="button">CSVで保存</button>
+        <button class="btn sec" id="btnErrlogCsv" type="button">送信エラーの記録（CSV）</button>
       </div>
     </div>
     <div class="hidden" id="recoverBox" style="margin-top:10px;padding:12px;border:2px solid var(--ng);border-radius:10px;background:#fff4f2">
@@ -1099,7 +1100,7 @@
   }
   $('btnDevlog').onclick = function() {
     const un = devlogUnsent().length;
-    $('devlogMsg').textContent = '控え ' + devlog.length + ' 本（新しい1500本まで）・サーバーに届いた印がないもの ' + un + ' 本';
+    $('devlogMsg').textContent = '控え ' + devlog.length + ' 本（新しい1500本まで）・サーバーに届いた印がないもの ' + un + ' 本・送信エラーの記録 ' + errlogList().length + ' 件';
     $('devlogBox').classList.toggle('hidden');
   };
   $('btnDevlogResend').onclick = function() {
@@ -1128,6 +1129,25 @@
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
     const n = new Date(); a.download = '入力の控え_' + n.getFullYear() + p2(n.getMonth() + 1) + p2(n.getDate()) + '_' + p2(n.getHours()) + p2(n.getMinutes()) + '.csv';
     document.body.appendChild(a); a.click(); a.remove();
+  };
+  function saveCsv(rows, name) {
+    const csv = '\ufeff' + rows.map(function(r) { return r.map(function(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    const p2 = function(n) { return ('0' + n).slice(-2); }, n = new Date();
+    a.download = name + '_' + n.getFullYear() + p2(n.getMonth() + 1) + p2(n.getDate()) + '_' + p2(n.getHours()) + p2(n.getMinutes()) + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  $('btnErrlogCsv').onclick = function() {
+    const p2 = function(n) { return ('0' + n).slice(-2); };
+    const rows = [['日時', 'エラーの内容', '止まっていた入力（ロット）', '容器番号', '送信待ちの本数', '入力者', '端末', '電波（iPadの判定）']];
+    errlogList().forEach(function(x) {
+      const d = new Date(x.t);
+      rows.push([d.getFullYear() + '/' + p2(d.getMonth() + 1) + '/' + p2(d.getDate()) + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds()),
+        x.msg, x.lot, x.serial, x.waiting, x.worker, x.device, x.online ? 'あり' : 'なし']);
+    });
+    if (rows.length === 1) { $('devlogMsg').textContent = '送信エラーの記録はありません'; return; }
+    saveCsv(rows, '送信エラー');
   };
   $('btnRecoverSend').onclick = function() { if (!armed(this, 'もう一度押すと送る')) return; sendRecover(); };
   $('btnRecoverDrop').onclick = function() {
@@ -1558,6 +1578,24 @@
     for (let i = devlog.length - 1; i >= 0 && i >= devlog.length - 300; i--) if (devlog[i].e.clientId === clientId) { devlog[i].ok = 1; break; }
     saveDevlog();
   }
+  // 送信エラーの記録（このiPadの中・新しい500件）。電波切れなどサーバーに届かなかったエラーも残る
+  const ERRLOG_KEY = 'lpg.errlog', ERRLOG_MAX = 500;
+  let errlogMem = [];   // 保存できない（プライベートブラウズなど）ときはこの画面の間だけ持つ
+  function errlogAdd(msg) {
+    try {
+      const list = errlogList();
+      const e = S.queue[0];
+      list.push({ t: Date.now(), msg: String(msg || ''), lot: e ? e.lotId : '', serial: e ? e.serial : '', waiting: S.queue.length,
+        worker: worker(), device: $('fDevice').value.trim(), online: navigator.onLine ? 1 : 0 });
+      if (list.length > ERRLOG_MAX) list.splice(0, list.length - ERRLOG_MAX);
+      errlogMem = list;
+      try { localStorage.setItem(ERRLOG_KEY, JSON.stringify(list)); } catch (e) { /* 画面の間は errlogMem に残る */ }
+    } catch (e) { /* 残せなくても入力は続く */ }
+  }
+  function errlogList() {
+    try { const l = JSON.parse(localStorage.getItem(ERRLOG_KEY) || '[]'); return Array.isArray(l) ? l : errlogMem.slice(); } catch (e) { return errlogMem.slice(); }
+  }
+  window.__lpgErrlog = function() { return errlogList(); };
   function enqueue(entry) {
     entry.clientId = DEV_ID + '-' + Date.now().toString(36) + '-' + (++seq);   // 端末をまたいでも重ならない（サーバーで二重送信を見分ける）
     entry.devId = DEV_ID;
@@ -1580,6 +1618,7 @@
     if (tok !== sendSeq || !S.sending) return;
     sendSeq++; S.sending = false; clearTimeout(sendTimer);
     sendTimeouts++;
+    errlogAdd('返事なし（' + Math.round((Date.now() - sendStarted) / 1000) + '秒）' + (sendTimeouts < 3 ? '・送り直し' : ''));
     if (sendTimeouts < 3) { renderQueue(); pump(); return; }
     sendTimeouts = 0;
     const e = S.queue[0];
@@ -1625,6 +1664,7 @@
       if (res.full) onLotFull(e.lotId, res);
     };
     const fail = function(msg) {
+      errlogAdd(msg);
       const e = S.queue[0];
       S.sendError = msg;
       if (e) S.errors[e.lotId + '|' + e.serial] = true;
