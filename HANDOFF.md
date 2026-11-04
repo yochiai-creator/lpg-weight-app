@@ -446,3 +446,6 @@ v52までの並びは ensureFolderLayout_ が1回だけ整理（runMaintenance �
 - 11/4 10:34 にサーバーが返した一時エラー（スプレッドシートのサービスに接続できない）は out.error で返るため、自動の送り直し（通信エラーだけ）が効かず、そのあと約700本がiPadのメモリにたまったまま届かなかった。
   - out.error でも REFUSED_RE（完了済み・見るだけ・範囲外・質量は・見つかりません・削除）以外は autoRetryLater。
   - 送信待ちの入力を localStorage（lpg.queue）にも残し、開き直したら restoreQueue で続きを送る（clientId でサーバーが二重を見分ける）。
+
+## v115
+- 復旧: 起動時に前回の一覧（localStorage lpg.boot。この画面で入れたまま送れなかった分も localOps で重ねて保存されている）を控え（lpg.recover）、最新の一覧と比べて「サーバーにない入力」があればホームに赤枠で知らせる。「残っていた入力を送る」（2回押し）で enqueue。入力者は今選んでいる人、日時は送った時刻。完了・削除したロットは対象外。

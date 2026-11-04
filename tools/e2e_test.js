@@ -425,6 +425,18 @@ function check(name, ok, detail) {
     await p2.waitForTimeout(1600);
     const late = await doneN();
     check('起動: 入力者と入力中のロットが先に出て、最近完了したロットはあとから読む', early.lots === n1 && early.workers > 1 && early.done === 0 && late > 0, JSON.stringify([early, late]));
+    // 復旧: 前回の一覧（iPadの中）にあってサーバーにない入力を見つけて送れる（11/4 送れないまま画面を閉じた）
+    slowX = 0;
+    const target = ctx.readLots_().filter(l => l.status === '入力中')[0];
+    const free = (() => { const e = ctx.getLot(target.lotId).entries; for (let i = 0; i < 100; i++) { const sNo = String(Number(target.start) + i).padStart(target.start.length, '0'); if (!(sNo in e)) return sNo; } })();
+    await p2.evaluate(([id, sNo]) => { const b = JSON.parse(localStorage.getItem('lpg.boot')); b.lots.find(l => l.lotId === id).entries[sNo] = 16.5; localStorage.setItem('lpg.boot', JSON.stringify(b)); }, [target.lotId, free]);
+    await p2.reload(); await p2.waitForTimeout(800);
+    check('復旧: iPadに残っていてサーバーにない入力を知らせる', await p2.isVisible('#recoverBox') && (await p2.textContent('#recoverMsg')).includes('1 本'), await p2.textContent('#recoverMsg'));
+    await p2.selectOption('#fWorker', '山田');
+    await p2.click('#btnRecoverSend'); await p2.click('#btnRecoverSend'); await p2.waitForTimeout(800);
+    check('復旧: 送るとサーバーに入り、知らせが消える', ctx.getLot(target.lotId).entries[free] === 16.5 && !(await p2.isVisible('#recoverBox')), String(ctx.getLot(target.lotId).entries[free]));
+    await p2.reload(); await p2.waitForTimeout(800);
+    check('復旧: 送ったあとは再び出ない', !(await p2.isVisible('#recoverBox')));
     await p2.close();
   }
   // ---- v43までの並びの入力記録を、グループNo→容器番号→容器区分の並びに移す
