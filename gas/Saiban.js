@@ -20,8 +20,7 @@ function saibanRows_(date) {
     const t = r[LC_TIME];
     // 有効な記録だけ（取消・削除したロットの記録は載せない）
     return t instanceof Date && tokyoDate_(t) === date && r[LC_STATUS] === '有効' &&
-      r[LC_KIND] !== MISSING && r[LC_KIND] !== KIND_FIX && r[LC_KIND] !== KIND_DUP &&
-      r[LC_NOTE] !== NOTE_NO_SAIBAN && !isSokoRow_(r, lots);
+      saibanKindOk_(r) && r[LC_NOTE] !== NOTE_NO_SAIBAN && !isSokoRow_(r, lots);
   }).sort(function(a, b) { return a[LC_TIME] - b[LC_TIME]; }).map(function(r) {
     const lot = lots[String(r[LC_LOT])];
     const prefix = lot ? lot.prefix : '';
@@ -39,6 +38,14 @@ function saibanRows_(date) {
       worker: String(r[LC_WORKER] || '')
     };
   });
+}
+
+// 採番表に載せる区分: 通常（と底黒以外の旧区分）。欠番・訂正・ダブリ・修正（品質不良）は載せない（v124）
+// ただし修正だった容器を直して流し直し、質量を入れた訂正（上書き前が「修正」）は、その時刻に流れた1本として載せる
+function saibanKindOk_(r) {
+  const k = r[LC_KIND];
+  if (k === KIND_FIX) return String(r[LC_PREV]) === REPAIR;
+  return k !== MISSING && k !== KIND_DUP && k !== REPAIR;
 }
 
 // 底黒（再搬入）の容器は採番表に載せない（v109）
@@ -243,8 +250,7 @@ function saibanDatesForLots_(lotIds) {
     const days = out[String(r[LC_LOT])];
     const t = r[LC_TIME];
     if (!days || !(t instanceof Date) || r[LC_STATUS] !== '有効' ||
-      r[LC_KIND] === MISSING || r[LC_KIND] === KIND_FIX || r[LC_KIND] === KIND_DUP ||
-      r[LC_NOTE] === NOTE_NO_SAIBAN || r[LC_KIND] === SPEC_SOKO) return;
+      !saibanKindOk_(r) || r[LC_NOTE] === NOTE_NO_SAIBAN || r[LC_KIND] === SPEC_SOKO) return;
     const d = tokyoDate_(t);
     if (days.indexOf(d) < 0) days.push(d);
   });

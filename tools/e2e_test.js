@@ -499,7 +499,12 @@ function check(name, ok, detail) {
     c.recordEntry({ lotId: o.lotId, serial: '59723', mass: 34.8, worker: '田中' });
     let freeN = 74400; while (order.includes(String(freeN))) freeN--;   // まだ流れていない番号を修正にする
     const freeS = String(freeN);
-    c.recordEntry({ lotId: c.readLots_().find(l => +l.start <= freeN && freeN <= +l.end).lotId, serial: freeS, mass: null, repair: true, worker: '田中' });
+    const freeLot = c.readLots_().find(l => +l.start <= freeN && freeN <= +l.end).lotId;
+    c.recordEntry({ lotId: freeLot, serial: freeS, mass: null, repair: true, worker: '田中' });   // 修正（品質不良）は載せない
+    let fixN = freeN - 1; while (order.includes(String(fixN))) fixN--;
+    const fixS = String(fixN);
+    c.recordEntry({ lotId: freeLot, serial: fixS, mass: null, repair: true, worker: '田中' });
+    c.recordEntry({ lotId: freeLot, serial: fixS, mass: 16.7, overwrite: 'fix', worker: '田中' });   // 直して流し直した → 載せる
     // 底黒（再搬入）は採番表に載せない
     const sk = c.createLot({ prefix: 'HSK', start: '10001', kind: '50kg', spec: '底黒' });
     c.recordEntry({ lotId: sk.lotId, serial: '10005', worker: '田中' });
@@ -508,12 +513,12 @@ function check(name, ok, detail) {
     const key = Object.keys(global.PDFBLOBS).find(k => k.endsWith('/採番表_' + today + '.pdf'));
     check('採番表: 底黒は載せない', !c.saibanRows_(today).some(x => x.lotId === sk.lotId) && !(c.saibanDatesForLots_([sk.lotId])[sk.lotId] || []).length);
     const html = key ? global.PDFBLOBS[key].html : '';
-    check('採番表: 1日1つにまとめる（訂正・ダブりは数えない）', r.count === 252 && r.groups.join(',') === 'HXF,HEP' && !!r.pdfUrl && !!r.sheetUrl, JSON.stringify(r));
+    check('採番表: 1日1つにまとめる（訂正・ダブり・修正は数えない。修正を直して流し直した分は数える）', r.count === 252 && r.groups.join(',') === 'HXF,HEP' && !!r.pdfUrl && !!r.sheetUrl, JSON.stringify(r));
     const pg = html.split('<div class="page">').slice(1);
     const sec = k => pg.filter(x => x.includes('>' + k + '容器　採番表<'));
     const numsOf = ps => ps.flatMap(x => [...x.matchAll(/<td class="no">(\d+)<\/td><td class="num[^"]*">(\d+)/g)].map(m => [Number(m[1]), m[2]])).sort((a, b) => a[0] - b[0]);
     const n20 = numsOf(sec('20kg')), n50 = numsOf(sec('50kg'));
-    check('採番表PDF: 機種ごとに流れた順番を1から（入力した順）', n20.length === 251 && n20.every((x, i) => x[0] === i + 1) && n20.slice(0, 250).map(x => x[1]).join(',') === order.join(',') && n20[250][1] === freeS && n50.length === 1 && n50[0][0] === 1 && n50[0][1] === '59723', n20.slice(248).join(' ') + ' / ' + n50.join(' '));
+    check('採番表PDF: 機種ごとに流れた順番を1から（入力した順）', n20.length === 251 && n20.every((x, i) => x[0] === i + 1) && n20.slice(0, 250).map(x => x[1]).join(',') === order.join(',') && n20[250][1] === fixS && n50.length === 1 && n50[0][0] === 1 && n50[0][1] === '59723', n20.slice(248).join(' ') + ' / ' + n50.join(' '));
     check('採番表PDF: 機種ごとにページを分け、見出しに機種・記号・作業者', pg.length === 3 && sec('20kg').length === 2 && sec('50kg').length === 1 &&
       sec('20kg')[0].includes('容器記号：<b>HXF</b>') && sec('20kg')[0].includes('作業者：<b>山崎・田中</b>') && sec('50kg')[0].includes('容器記号：<b>HEP</b>') && sec('50kg')[0].includes('作業者：<b>田中</b>') && sec('50kg')[0].includes('50kg　1 / 1　（全 1 本）'));
     { const hh = c.Utilities.formatDate(new Date(), 'Asia/Tokyo', 'HH:mm').slice(0, 2);
@@ -527,12 +532,12 @@ function check(name, ok, detail) {
       const r2 = c.makeSaibanPdf({ date: today });
       const h2 = global.PDFBLOBS[Object.keys(global.PDFBLOBS).find(k => k.endsWith('/採番表_' + today + '.pdf'))].html;
       check('採番表: 削除したロット・取り消した入力は載せず、その人は作業者に出さない', r2.count === 252 && !h2.includes('DEL00101') && !h2.includes('石井') && h2.includes('作業者：<b>山崎・田中</b>'), r2.count); }
-    check('採番表PDF: 修正に印・ダブりは載せない', html.includes('>' + freeS + '<span class="mk">修正</span>') && !html.includes('>W<'));
+    check('採番表PDF: 修正（品質不良）とダブりは載せない', !html.includes('>' + freeS + '<') && !html.includes('修正</span>') && !html.includes('>W<'));
     const d = today.split('-');
     check('採番表PDF: 保存先は 採番表/年/月', !!key && key.startsWith('/LPG容器 質量入力/採番表/' + d[0] + '年/' + d[1] + '月/'), key);
     const sss = global.ARCHIVES.find(x => x.name === 'LPG容器 採番表_' + d[0] + '-' + d[1]), ssh = sss && sss.getSheets()[0];
     const srows = ssh ? ssh.getRange(2, 1, ssh.getLastRow() - 1, 10).getValues() : [];
-    check('採番表シート: 月ごとのスプレッドシート（採番表/年/）に1行1本で書き足す', ssh && ssh.getName() === '採番表' && srows.length === 252 && srows[0][0] === today && srows[0][1] === 1 && srows[0][2] === 'HXF' && srows[0][3] === order[0] && srows[250][1] === 251 && srows[250][8] === '修正' && srows[251][2] === 'HEP' && srows[251][4] === '50kg' && srows[251][1] === 1 && srows[251][5] === 598, JSON.stringify(srows[0]) + JSON.stringify(srows[250]));
+    check('採番表シート: 月ごとのスプレッドシート（採番表/年/）に1行1本で書き足す', ssh && ssh.getName() === '採番表' && srows.length === 252 && srows[0][0] === today && srows[0][1] === 1 && srows[0][2] === 'HXF' && srows[0][3] === order[0] && srows[250][1] === 251 && srows[250][3] === fixS && srows[250][8] === '' && srows[251][2] === 'HEP' && srows[251][4] === '50kg' && srows[251][1] === 1 && srows[251][5] === 598, JSON.stringify(srows[0]) + JSON.stringify(srows[250]));
     check('採番表シート: 置き場所は 採番表/年 フォルダ', sss && sss.fo && sss.fo.parent.name === d[0] + '年' && sss.fo.parent.parent.name === '採番表');
     c.makeSaibanPdf({ date: today });
     check('採番表: 作り直すと同じ日の行・PDFは置き換える', ssh.getLastRow() - 1 === 252 && global.PDFS.filter(p => p.endsWith('/採番表_' + today + '.pdf')).length === 1);
