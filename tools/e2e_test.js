@@ -846,6 +846,19 @@ function check(name, ok, detail) {
     const g = c.getLot(L.lotId).entries;
     check('シートのない入力中ロットに書くと、入力記録から作り直して書く', !!m.ss.getSheetByName(L.sheetName) && g['00101'] === 16.7 && g['00102'] === 16.6, JSON.stringify(g));
   }
+  // ---- 完了を2回押してもPDFは1つ。再開して完了し直すと前のPDFはゴミ箱へ（11/5 HXR06101）
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const L = c.createLot({ prefix: 'DP', start: '00101', kind: '20kg' });
+    c.recordEntry({ lotId: L.lotId, serial: '00101', mass: 16.7 });
+    const n0 = global.PDFS.filter(p => p.endsWith('/' + L.sheetName + '.pdf')).length;
+    c.completeLot({ lotId: L.lotId }); const r2 = c.completeLot({ lotId: L.lotId });
+    const n1 = global.PDFS.filter(p => p.endsWith('/' + L.sheetName + '.pdf')).length;
+    check('完了を2回押してもPDFは1つ', n1 - n0 === 1 && r2.already === true, [n0, n1, JSON.stringify(r2)].join(' '));
+    c.reopenLot(L.lotId); c.completeLot({ lotId: L.lotId });
+    const live = c.DriveApp.getFilesByName(L.sheetName + '.pdf'); let k = 0; while (live.hasNext()) { live.next(); k++; }
+    check('再開して完了し直すと、前のPDFはゴミ箱へ（残るのは新しい1つ）', k === 1, k);
+  }
   // ---- 同じ入力が二重に届いても（保存できていたのに再送）、2回目はダブりにしない
   {
     const m = load(), c = m.ctx; c.setup();

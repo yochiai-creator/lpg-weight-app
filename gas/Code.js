@@ -1199,6 +1199,8 @@ function completeLot(input) {
   lock.waitLock(20000);
   try {
     const lot = findLot_(input.lotId);
+    // 2回押した・2台で押した・返事が遅れて押し直したときに、PDFを2つ作らない（11/5 HXR06101 が19秒差で2つできた）
+    if (lot.status === STATUS_DONE) return { lotId: lot.lotId, pdfUrl: lot.pdf || '', sentTo: '', mailError: '', sheetRemoved: false, already: true };
     checkClaim_(lot.lotId, input, false);
     return finishLot_(lot, false);   // 完了ではメールを送らない（まとめて送信で送る）
   } finally {
@@ -1466,7 +1468,22 @@ function exportLotPdf_(lot, sh) {
     '&r1=0&c1=0&r2=30&c2=31';
   const res = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } });
   const blob = res.getBlob().setName(lot.sheetName + '.pdf');
-  const file = pdfKindFolder_(getPdfMonthFolder_(new Date()), lot.kind).createFile(blob);
+  const folder = pdfKindFolder_(getPdfMonthFolder_(new Date()), lot.kind);
+  const pdfName = lot.sheetName + '.pdf';
+  // 作り直したとき（再開して完了し直した）は、前のPDFと同じフォルダの同じ名前のPDFをゴミ箱へ（古い内容が残らないように）
+  try {
+    const m = String(lot.pdf || '').match(/\/d\/([\w-]{10,})/);
+    if (m) { const old = DriveApp.getFileById(m[1]); if (old.getName() === pdfName) old.setTrashed(true); }
+  } catch (e) { /* 前のPDFが見つからなくても作る */ }
+  try { const same = folder.getFilesByName(pdfName); while (same.hasNext()) same.next().setTrashed(true); } catch (e) { /* 消せなくても作る */ }
+  const file = folder.createFile(blob);
+  // 保存先フォルダに入っていなければ移す（11/4・11/5 にマイドライブ直下にできたものがあった）
+  try {
+    const ps = file.getParents();
+    let inFolder = false;
+    while (ps.hasNext()) if (ps.next().getId() === folder.getId()) inFolder = true;
+    if (!inFolder) file.moveTo(folder);
+  } catch (e) { /* 移せなくてもURLは使える */ }
   if (lot.row) getSheet_(SHEET_LOTS).getRange(lot.row, 14).setValue(file.getUrl());
   return { url: file.getUrl(), blob: blob };
 }
