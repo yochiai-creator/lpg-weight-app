@@ -864,6 +864,8 @@ function check(name, ok, detail) {
     c.recordEntry({ lotId: L.lotId, serial: '00102', mass: 34.6, overwrite: 'fix' });
     const rows = c.saibanRows_(c.tokyoDate_(new Date())).filter(x => x.lotId === L.lotId);
     check('採番表: 流れたあと修正になり流し直した容器は1本', rows.length === 2 && rows.filter(x => x.number === '00102').length === 1, JSON.stringify(rows.map(x => x.number)));
+    const dd = c.listSaibanDays().find(x => x.date === c.tokyoDate_(new Date()));
+    check('採番表の日の一覧も同じ本数', dd && dd.count === c.saibanRows_(c.tokyoDate_(new Date())).length, JSON.stringify(dd));
   }
   // ---- 取引先用の質量データ: まとめて送信したら容器区分ごとのシートに「番号＋質量3桁」、欠番は「番号欠番」、修正は入れない
   {

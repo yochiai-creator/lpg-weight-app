@@ -489,3 +489,6 @@ v52までの並びは ensureFolderLayout_ が1回だけ整理（runMaintenance �
 
 ## v129
 - 取引先用データに、これまでに送ったロット（完了・送信日時あり・送らずに消したものを除く）を1回だけ書き足す（customerBackfillJob、getHomeExtra で時間指定の処理を予約。_システム CUSTOMER_BACKFILL=1 で済み）。
+
+## v130
+- まとめて送信の「付ける採番表の日」の本数（listSaibanDays）も採番表と同じ数え方（同じ日に修正になった容器は修正前の分を数えない）。11/6 が948→947。

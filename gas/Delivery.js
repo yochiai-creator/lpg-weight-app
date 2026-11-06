@@ -264,12 +264,21 @@ function listSaibanDays() {
   const soko = {};
   readLots_().forEach(function(l) { if (l.spec === SPEC_SOKO) soko[l.lotId] = true; });
   const count = {};
-  readLogCols_(log, from, last, [LC_TIME, LC_LOT, LC_KIND, LC_PREV, LC_STATUS, LC_NOTE], width).forEach(function(r) {
+  const rows = readLogCols_(log, from, last, [LC_TIME, LC_LOT, LC_SERIAL, LC_KIND, LC_PREV, LC_STATUS, LC_NOTE], width);
+  const dayOf = function(r) {
+    const m = String(r[LC_TIME]).match(/(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/);
+    return m ? m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2) : '';
+  };
+  // 採番表と同じ数え方: 同じ日に修正になった容器は、修正より前の分を数えない
+  const repairedAt = {};
+  rows.forEach(function(r, i) { if (r[LC_STATUS] === '有効' && r[LC_KIND] === REPAIR) repairedAt[dayOf(r) + '|' + r[LC_LOT] + '|' + r[LC_SERIAL]] = i; });
+  rows.forEach(function(r, i) {
     if (r[LC_STATUS] !== '有効' || !saibanKindOk_(r) ||
       r[LC_KIND] === SPEC_SOKO || r[LC_NOTE] === NOTE_NO_SAIBAN || soko[String(r[LC_LOT])]) return;
-    const m = String(r[LC_TIME]).match(/(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/);
-    if (!m) return;
-    const d = m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+    const d = dayOf(r);
+    if (!d) return;
+    const rep = repairedAt[d + '|' + r[LC_LOT] + '|' + r[LC_SERIAL]];
+    if (rep !== undefined && i < rep) return;
     count[d] = (count[d] || 0) + 1;
   });
   const list = saibanSentDays_();
