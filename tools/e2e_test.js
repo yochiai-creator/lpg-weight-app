@@ -854,6 +854,17 @@ function check(name, ok, detail) {
     const r = c.recordEntry({ lotId: L.lotId, serial: '00190', mass: null, missing: true, overwrite: 'fix' });
     check('修正を欠番で上書き: 区分は欠番、入力記録から作り直しても欠番', r.kind === '欠番' && c.progressFromLog_(L, true)['00190'] === '欠番' && c.getLot(L.lotId).entries['00190'] === '欠番', JSON.stringify([r.kind, c.progressFromLog_(L, true)['00190']]));
   }
+  // ---- 流れたあと修正になり、直して流し直した容器は採番表で1本（11/6 HEP83831）
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const L = c.createLot({ prefix: 'RP', start: '00101', kind: '50kg' });
+    c.recordEntry({ lotId: L.lotId, serial: '00101', mass: 34.5 });
+    c.recordEntry({ lotId: L.lotId, serial: '00102', mass: 34.5 });
+    c.recordEntry({ lotId: L.lotId, serial: '00102', mass: null, repair: true, overwrite: 'fix' });
+    c.recordEntry({ lotId: L.lotId, serial: '00102', mass: 34.6, overwrite: 'fix' });
+    const rows = c.saibanRows_(c.tokyoDate_(new Date())).filter(x => x.lotId === L.lotId);
+    check('採番表: 流れたあと修正になり流し直した容器は1本', rows.length === 2 && rows.filter(x => x.number === '00102').length === 1, JSON.stringify(rows.map(x => x.number)));
+  }
   // ---- 完了を2回押してもPDFは1つ。再開して完了し直すと前のPDFはゴミ箱へ（11/5 HXR06101）
   {
     const m = load(), c = m.ctx; c.setup();
