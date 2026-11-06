@@ -865,6 +865,25 @@ function check(name, ok, detail) {
     const rows = c.saibanRows_(c.tokyoDate_(new Date())).filter(x => x.lotId === L.lotId);
     check('採番表: 流れたあと修正になり流し直した容器は1本', rows.length === 2 && rows.filter(x => x.number === '00102').length === 1, JSON.stringify(rows.map(x => x.number)));
   }
+  // ---- 取引先用の質量データ: まとめて送信したら容器区分ごとのシートに「番号＋質量3桁」、欠番は「番号欠番」、修正は入れない
+  {
+    const m = load(), c = m.ctx; c.setup();
+    c.setSetting_ ? 0 : 0;
+    const L = c.createLot({ prefix: 'HEP', start: '80001', kind: '50kg' });
+    c.recordEntry({ lotId: L.lotId, serial: '80001', mass: 34.7 });
+    c.recordEntry({ lotId: L.lotId, serial: '80002', mass: null, missing: true });
+    c.recordEntry({ lotId: L.lotId, serial: '80003', mass: null, repair: true });
+    c.recordEntry({ lotId: L.lotId, serial: '80004', mass: 34.6 });
+    c.completeLot({ lotId: L.lotId });
+    const st = m.ss.getSheetByName('設定'); const sr = st.getRange(1, 1, st.getLastRow(), 2).getValues().findIndex(r => r[0] === '送付先'); if (sr >= 0) st.getRange(sr + 1, 2).setValue('a@b.c');
+    c.sendLotsMail({ lotIds: [L.lotId] });
+    const cs = c.customerSpreadsheet_(), sh = cs.getSheetByName('50kg');
+    const v = sh ? sh.getRange(1, 1, sh.getLastRow(), 1).getValues().map(r => String(r[0])) : [];
+    check('取引先用データ: 番号＋質量3桁・欠番・修正なし', v.join(',') === '80001347,80002欠番,80004346', v.join(','));
+    c.reopenLot(L.lotId); c.recordEntry({ lotId: L.lotId, serial: '80005', mass: 34.8 }); c.completeLot({ lotId: L.lotId }); c.sendLotsMail({ lotIds: [L.lotId] });
+    const v2 = sh.getRange(1, 1, sh.getLastRow(), 1).getValues().map(r => String(r[0]));
+    check('取引先用データ: 送り直すと前の分を置き換える', v2.join(',') === '80001347,80002欠番,80004346,80005348', v2.join(','));
+  }
   // ---- 完了を2回押してもPDFは1つ。再開して完了し直すと前のPDFはゴミ箱へ（11/5 HXR06101）
   {
     const m = load(), c = m.ctx; c.setup();

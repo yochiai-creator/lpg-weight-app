@@ -231,6 +231,7 @@ function sendLotsMail(input) {
     if (st.cc) options.cc = st.cc;
     MailApp.sendEmail(st.to, fillMail_(st.bulkSubject, vars), fillMail_(st.bulkBody, vars), options);
     part.forEach(function(lot) { markSent_(lot, st); });
+    try { writeCustomerData_(part); } catch (e) { console.error('取引先用データの書き込みに失敗: ' + e.message); }
     // 前の日までの採番表は送り済みにする（今日の分はまだ増えるので、送り済みにしない）
     sentDays.forEach(function(d) { if ((pickDays || d < today) && sentList.indexOf(d) < 0) sentList.push(d); });
     saveSaibanSentDays_(sentList);
@@ -324,4 +325,64 @@ function buildLotCsv_(lot, logRows) {
     return r.map(function(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }).join(',');
   }).join('\r\n');
   return Utilities.newBlob('﻿' + csv, 'text/csv', lot.sheetName + '.csv');
+}
+
+// ---------- 取引先用の質量データ（v128） ----------
+// まとめて送信したロットの容器を「容器番号＋質量（点なし3桁）」1つの値で、容器区分ごとのシートに書き足す（例 80001347）
+// 欠番は「80002欠番」、修正（品質不良）・底黒・未入力は入れない。同じロットを送り直したら前の分を消して書き直す
+const CUSTOMER_SS_NAME = 'LPG容器 取引先用 質量データ';
+function customerSpreadsheet_() {
+  const props = sharedProps_();
+  const id = props.getProperty('CUSTOMER_SS_ID');
+  if (id) { try { return SpreadsheetApp.openById(id); } catch (e) { /* 消されていたら作り直す */ } }
+  const folder = getPdfFolder_();
+  const found = findSpreadsheetIn_(folder, CUSTOMER_SS_NAME);
+  const ss = found || SpreadsheetApp.create(CUSTOMER_SS_NAME);
+  if (!found) { try { DriveApp.getFileById(ss.getId()).moveTo(folder); } catch (e) { /* マイドライブに残る */ } }
+  props.setProperty('CUSTOMER_SS_ID', ss.getId());
+  return ss;
+}
+
+function customerValues_(lot) {
+  const entries = progressFromLog_(lot);
+  const out = [];
+  for (let i = 0; i < lotSize_(lot); i++) {
+    const serial = padSerial_(Number(lot.start) + i, lot.start.length);
+    const m = entries[serial];
+    if (m === MISSING) out.push(serial + '欠番');
+    else if (typeof m === 'number') out.push(serial + ('00' + Math.round(m * 10)).slice(-3));
+  }
+  return out;
+}
+
+function writeCustomerData_(lots) {
+  if (!lots.length) return;
+  const ss = customerSpreadsheet_();
+  const props = sharedProps_();
+  let written = [];
+  try { written = JSON.parse(props.getProperty('CUSTOMER_LOTS') || '[]'); } catch (e) { written = []; }
+  const byKind = {};
+  lots.forEach(function(lot) { if (lot.spec !== SPEC_SOKO) (byKind[lot.kind || 'その他'] = byKind[lot.kind || 'その他'] || []).push(lot); });
+  Object.keys(byKind).forEach(function(kind) {
+    let sh = ss.getSheetByName(kind);
+    if (!sh) {
+      const first = ss.getSheets()[0];
+      // 作ったばかりの空の「シート1」は使い回す
+      if (ss.getSheets().length === 1 && first.getLastRow() === 0 && !/^(5kg|8kg|10kg|20kg|30kg|50kg)/.test(first.getName())) sh = first.setName(kind);
+      else sh = ss.insertSheet(kind);
+      sh.getRange(1, 1, sh.getMaxRows(), 1).setNumberFormat('@');
+    }
+    const last = sh.getLastRow();
+    let vals = last ? sh.getRange(1, 1, last, 1).getValues().map(function(r) { return String(r[0]); }) : [];
+    byKind[kind].forEach(function(lot) {
+      const w = lot.start.length, st = Number(lot.start), en = Number(lot.end);
+      // 前に書いたロットだけ消して書き直す（記号は値に入らないので、別の記号の同じ番号を消さないように）
+      if (written.indexOf(lot.lotId) >= 0) vals = vals.filter(function(v) { const n = Number(v.slice(0, w)); return !(v.length > w && n >= st && n <= en); });
+      vals = vals.concat(customerValues_(lot));
+      if (written.indexOf(lot.lotId) < 0) written.push(lot.lotId);
+    });
+    if (last) sh.getRange(1, 1, last, 1).clearContent();
+    if (vals.length) sh.getRange(1, 1, vals.length, 1).setNumberFormat('@').setValues(vals.map(function(v) { return [v]; }));
+  });
+  props.setProperty('CUSTOMER_LOTS', JSON.stringify(written.slice(-3000)));
 }

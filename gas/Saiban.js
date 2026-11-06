@@ -18,21 +18,21 @@ function saibanRows_(date) {
   readLots_().forEach(function(l) { lots[l.lotId] = l; });
   const all = log.getRange(from, 1, last - from + 1, LOG_HEADERS.length).getValues();
   // 流れたあと同じ日に修正（品質不良）になった容器は、その前の分を数えない（直して流し直した分で1本。11/6 HEP83831）
+  // 入力記録の並び（書いた順）で前後を見る（同じ時刻のこともあるので時刻では比べない）
   const repairedAt = {};
-  all.forEach(function(r) {
+  all.forEach(function(r, i) {
     const t = r[LC_TIME];
     if (t instanceof Date && tokyoDate_(t) === date && r[LC_STATUS] === '有効' && r[LC_KIND] === REPAIR) {
-      const k = String(r[LC_LOT]) + '|' + String(r[LC_SERIAL]);
-      if (!repairedAt[k] || t > repairedAt[k]) repairedAt[k] = t;
+      repairedAt[String(r[LC_LOT]) + '|' + String(r[LC_SERIAL])] = i;
     }
   });
-  return all.filter(function(r) {
+  return all.filter(function(r, i) {
     const t = r[LC_TIME];
     // 有効な記録だけ（取消・削除したロットの記録は載せない）
     if (!(t instanceof Date && tokyoDate_(t) === date && r[LC_STATUS] === '有効' &&
       saibanKindOk_(r) && r[LC_NOTE] !== NOTE_NO_SAIBAN && !isSokoRow_(r, lots))) return false;
     const rep = repairedAt[String(r[LC_LOT]) + '|' + String(r[LC_SERIAL])];
-    return !(rep && t < rep);
+    return !(rep !== undefined && i < rep);
   }).sort(function(a, b) { return a[LC_TIME] - b[LC_TIME]; }).map(function(r) {
     const lot = lots[String(r[LC_LOT])];
     const prefix = lot ? lot.prefix : '';
