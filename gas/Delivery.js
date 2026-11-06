@@ -340,16 +340,34 @@ function buildLotCsv_(lot, logRows) {
 // まとめて送信したロットの容器を「容器番号＋質量（点なし3桁）」1つの値で、容器区分ごとのシートに書き足す（例 80001347）
 // 欠番は「80002欠番」、修正（品質不良）・底黒・未入力は入れない。同じロットを送り直したら前の分を消して書き直す
 const CUSTOMER_SS_NAME = 'LPG容器 取引先用 質量データ';
-function customerSpreadsheet_() {
+// 年ごとのファイル（LPG容器 取引先用 質量データ_2026）。1ファイル1,000万マスまでなので、年で分けて1列だけにする（v131）
+function customerSpreadsheet_(year) {
+  year = String(year || Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy'));
   const props = sharedProps_();
-  const id = props.getProperty('CUSTOMER_SS_ID');
-  if (id) { try { return SpreadsheetApp.openById(id); } catch (e) { /* 消されていたら作り直す */ } }
+  let ids = {};
+  try { ids = JSON.parse(props.getProperty('CUSTOMER_SS_IDS') || '{}'); } catch (e) { ids = {}; }
+  // v128〜v130 の1つのファイルは2026年のファイルにする
+  const old = props.getProperty('CUSTOMER_SS_ID');
+  if (old && !ids['2026']) {
+    ids['2026'] = old;
+    try { DriveApp.getFileById(old).setName(CUSTOMER_SS_NAME + '_2026'); } catch (e) { /* 名前は変えられなくても使える */ }
+    try { SpreadsheetApp.openById(old).getSheets().forEach(trimCustomerSheet_); } catch (e) { /* 次に書くときに消す */ }
+    props.setProperty('CUSTOMER_SS_IDS', JSON.stringify(ids));
+  }
+  if (ids[year]) { try { return SpreadsheetApp.openById(ids[year]); } catch (e) { /* 消されていたら作り直す */ } }
   const folder = getPdfFolder_();
-  const found = findSpreadsheetIn_(folder, CUSTOMER_SS_NAME);
-  const ss = found || SpreadsheetApp.create(CUSTOMER_SS_NAME);
+  const name = CUSTOMER_SS_NAME + '_' + year;
+  const found = findSpreadsheetIn_(folder, name);
+  const ss = found || SpreadsheetApp.create(name);
   if (!found) { try { DriveApp.getFileById(ss.getId()).moveTo(folder); } catch (e) { /* マイドライブに残る */ } }
-  props.setProperty('CUSTOMER_SS_ID', ss.getId());
+  ids[year] = ss.getId();
+  props.setProperty('CUSTOMER_SS_IDS', JSON.stringify(ids));
   return ss;
+}
+
+// 使わない列を消してA列だけにする（列も1,000万マスに数えられる）
+function trimCustomerSheet_(sh) {
+  try { if (sh.getMaxColumns() > 1) sh.deleteColumns(2, sh.getMaxColumns() - 1); } catch (e) { /* 消せなくても書ける */ }
 }
 
 function customerValues_(lot) {
@@ -381,7 +399,15 @@ function writeCustomerData_(lots) {
       else sh = ss.insertSheet(kind);
       sh.getRange(1, 1, sh.getMaxRows(), 1).setNumberFormat('@');
     }
+    trimCustomerSheet_(sh);
     const last = sh.getLastRow();
+    // 送り直しのロットがなければ、読まずに後ろへ書き足すだけ（行が増えても遅くならない）
+    if (!byKind[kind].some(function(lot) { return written.indexOf(lot.lotId) >= 0; })) {
+      let add = [];
+      byKind[kind].forEach(function(lot) { add = add.concat(customerValues_(lot)); written.push(lot.lotId); });
+      if (add.length) sh.getRange(last + 1, 1, add.length, 1).setNumberFormat('@').setValues(add.map(function(v) { return [v]; }));
+      return;
+    }
     let vals = last ? sh.getRange(1, 1, last, 1).getValues().map(function(r) { return String(r[0]); }) : [];
     byKind[kind].forEach(function(lot) {
       const w = lot.start.length, st = Number(lot.start), en = Number(lot.end);
@@ -414,6 +440,7 @@ function customerBackfillJob() {
   }
 }
 function scheduleCustomerBackfill_() {
+  try { if (sharedProps_().getProperty('CUSTOMER_SS_ID') && !sharedProps_().getProperty('CUSTOMER_SS_IDS')) customerSpreadsheet_('2026'); } catch (e) { console.error('取引先用データの整理に失敗: ' + e.message); }
   if (isOldProject_() || sharedProps_().getProperty('CUSTOMER_BACKFILL') === '1') return;
   if (ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === 'customerBackfillJob'; })) return;
   ScriptApp.newTrigger('customerBackfillJob').timeBased().after(10 * 1000).create();

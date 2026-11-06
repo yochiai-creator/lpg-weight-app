@@ -882,6 +882,7 @@ function check(name, ok, detail) {
     const cs = c.customerSpreadsheet_(), sh = cs.getSheetByName('50kg');
     const v = sh ? sh.getRange(1, 1, sh.getLastRow(), 1).getValues().map(r => String(r[0])) : [];
     check('取引先用データ: 番号＋質量3桁・欠番・修正なし', v.join(',') === '80001347,80002欠番,80004346', v.join(','));
+    check('取引先用データ: 年ごとのファイル・A列だけ', JSON.parse(c.sharedProps_().getProperty('CUSTOMER_SS_IDS'))[String(new Date().getFullYear())] === cs.getId() && sh.getMaxColumns() === 1, sh.getMaxColumns());
     c.reopenLot(L.lotId); c.recordEntry({ lotId: L.lotId, serial: '80005', mass: 34.8 }); c.completeLot({ lotId: L.lotId }); c.sendLotsMail({ lotIds: [L.lotId] });
     const v2 = sh.getRange(1, 1, sh.getLastRow(), 1).getValues().map(r => String(r[0]));
     check('取引先用データ: 送り直すと前の分を置き換える', v2.join(',') === '80001347,80002欠番,80004346,80005348', v2.join(','));
