@@ -337,7 +337,7 @@ function check(name, ok, detail) {
   check('底黒: 〇を付けたあとでも欠番に直せる', (await keys('-7023', 400)).includes('欠番: HEP37023（底黒）'));
   const sokoMiss = sokoSh.getRange(5 + 23 % 20, 2 + Math.floor(23 / 20) * 6, 1, 6).getValues()[0].join('|');
   const sokoRows2 = ss.getSheetByName('入力記録').getRange(2, 1, ss.getSheetByName('入力記録').getLastRow() - 1, 18).getValues().filter(r => r[2] === 'HEP37001-底黒');
-  check('底黒: 成績表に欠番・記録は欠番と訂正', sokoMiss === '024|false|欠|番||' && sokoRows2.length === 3 && sokoRows2[1][8] === '欠番' && sokoRows2[2][8] === '訂正', sokoMiss + ' ' + JSON.stringify(sokoRows2.map(r => r[8])));
+  check('底黒: 成績表に欠番・記録は欠番（〇を欠番に直した分も欠番、上書き前は〇）', sokoMiss === '024|false|欠|番||' && sokoRows2.length === 3 && sokoRows2[1][8] === '欠番' && sokoRows2[2][8] === '欠番' && sokoRows2[2][11] === '〇', sokoMiss + ' ' + JSON.stringify(sokoRows2.map(r => r[8])));
   check('底黒: 欠番のあとは〇に戻る', (await keys('7025', 400)).includes('〇: HEP37025（底黒）'));
   ctx.reopenLot('HEP37001');
   check('再開すると成績表シートを入力記録から作り直す', !!sh() && slot(22).join('|') === '023|true|3|4|,|8' && slot(30).join('|') === '031|false|欠|番||', slot(22).join('|') + ' / ' + (sh() ? slot(30).join('|') : ''));
@@ -845,6 +845,14 @@ function check(name, ok, detail) {
     c.recordEntry({ lotId: L.lotId, serial: '00102', mass: 16.6 });
     const g = c.getLot(L.lotId).entries;
     check('シートのない入力中ロットに書くと、入力記録から作り直して書く', !!m.ss.getSheetByName(L.sheetName) && g['00101'] === 16.7 && g['00102'] === 16.6, JSON.stringify(g));
+  }
+  // ---- 修正を欠番で上書きしても、入力記録に欠番として残る（作り直しても欠番）
+  {
+    const m = load(), c = m.ctx; c.setup();
+    const L = c.createLot({ prefix: 'MR', start: '00101', kind: '50kg' });
+    c.recordEntry({ lotId: L.lotId, serial: '00190', mass: null, repair: true });
+    const r = c.recordEntry({ lotId: L.lotId, serial: '00190', mass: null, missing: true, overwrite: 'fix' });
+    check('修正を欠番で上書き: 区分は欠番、入力記録から作り直しても欠番', r.kind === '欠番' && c.progressFromLog_(L, true)['00190'] === '欠番' && c.getLot(L.lotId).entries['00190'] === '欠番', JSON.stringify([r.kind, c.progressFromLog_(L, true)['00190']]));
   }
   // ---- 完了を2回押してもPDFは1つ。再開して完了し直すと前のPDFはゴミ箱へ（11/5 HXR06101）
   {

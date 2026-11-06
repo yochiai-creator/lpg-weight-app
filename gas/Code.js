@@ -1032,9 +1032,10 @@ function recordOne_(payload) {
     // 区分: 新規=通常 / 欠番 / 入力済みの上書き=修正（入力ミスを直した）かダブり（2回流れた）
     // 別の端末が先に同じ容器を入れていた場合など、理由の指定がない上書きはダブりとする
     let kind = '通常';
-    if (prev !== null) kind = payload.overwrite === 'fix' ? KIND_FIX : KIND_DUP;
-    else if (mass === MISSING) kind = MISSING;
+    // 欠番・修正は上書きでもその区分で残す（訂正にすると質量の欄が空で、入力記録から作り直したとき欠番が消える。11/6 HEP83290）
+    if (mass === MISSING) kind = MISSING;
     else if (mass === REPAIR) kind = REPAIR;
+    else if (prev !== null) kind = payload.overwrite === 'fix' ? KIND_FIX : KIND_DUP;
     if (mass === CIRCLE) kind = SPEC_SOKO;
     const note = payload.seal ? NOTE_SEAL : '';
     const logSh = getSheet_(SHEET_LOG);
