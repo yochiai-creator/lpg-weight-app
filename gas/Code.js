@@ -558,6 +558,7 @@ function getBootstrapLite() {
 }
 
 function getHomeExtra() {
+  try { scheduleCustomerBackfill_(); } catch (e) { console.error('取引先用データの予約に失敗: ' + e.message); }
   try {
     if (Number(sharedProps_().getProperty('PAPER_RESTORE_20261104') || 0) < PAPER_RESTORE_20261104.split(',').length &&
       !ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === 'paperRestoreJob'; }) && !isOldProject_()) {

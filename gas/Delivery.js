@@ -386,3 +386,26 @@ function writeCustomerData_(lots) {
   });
   props.setProperty('CUSTOMER_LOTS', JSON.stringify(written.slice(-3000)));
 }
+
+// これまでに送ったロットの分を1回だけ書き足す（v129）。開いたときに時間指定の処理を予約し、裏で入れる
+function customerBackfillJob() {
+  ScriptApp.getProjectTriggers().forEach(function(t) { if (t.getHandlerFunction() === 'customerBackfillJob') ScriptApp.deleteTrigger(t); });
+  const props = sharedProps_();
+  if (props.getProperty('CUSTOMER_BACKFILL') === '1') return;
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) { ScriptApp.newTrigger('customerBackfillJob').timeBased().after(60 * 1000).create(); return; }
+  try {
+    LOG_TAIL_CACHE_ = null;
+    const lots = readLots_().filter(function(l) { return l.status === STATUS_DONE && l.sentAt && !isSkipped_(l); });
+    lots.sort(function(a, b) { return String(a.sentAt).localeCompare(String(b.sentAt)) || a.prefix.localeCompare(b.prefix) || Number(a.start) - Number(b.start); });
+    writeCustomerData_(lots);
+    props.setProperty('CUSTOMER_BACKFILL', '1');
+  } finally {
+    lock.releaseLock();
+  }
+}
+function scheduleCustomerBackfill_() {
+  if (isOldProject_() || sharedProps_().getProperty('CUSTOMER_BACKFILL') === '1') return;
+  if (ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === 'customerBackfillJob'; })) return;
+  ScriptApp.newTrigger('customerBackfillJob').timeBased().after(10 * 1000).create();
+}
