@@ -501,3 +501,6 @@ v52までの並びは ensureFolderLayout_ が1回だけ整理（runMaintenance �
 
 ## v133
 - 神鋼機器用データのシートを 5kg→8kg→10kg→20kg→20kg三部制→30kg→30kg把手→50kg→50kg S付 の順に並べる（sortCustomerSheets_、書いたあと毎回・開いたとき1回 CUSTOMER_SORTED）。
+
+## v134
+- 成績表に5本ごとの太線（9・14・19行目の下、B〜AE列）。createReportSheet_ で毎回、今ある成績表シートと書式シートには ensureFiveRowLines_ で1回だけ（_システム FIVE_ROW_LINES）。

@@ -558,6 +558,7 @@ function getBootstrapLite() {
 }
 
 function getHomeExtra() {
+  try { ensureFiveRowLines_(); } catch (e) { console.error('5本ごとの線に失敗: ' + e.message); }
   try { scheduleCustomerBackfill_(); } catch (e) { console.error('取引先用データの予約に失敗: ' + e.message); }
   try {
     if (Number(sharedProps_().getProperty('PAPER_RESTORE_20261104') || 0) < PAPER_RESTORE_20261104.split(',').length &&
@@ -781,6 +782,23 @@ function createLot(input) {
   }
 }
 
+// 5本ごとの太線（005・025…の下、010の下、015の下）。紙の成績表と同じ（v134）
+function fiveRowLines_(sh) {
+  for (let r = GRID_FIRST_ROW + 4; r < GRID_FIRST_ROW + GRID_ROWS - 1; r += 5) {
+    sh.getRange(r, GRID_FIRST_COL, 1, BLOCK_WIDTH * BLOCKS)
+      .setBorder(null, null, true, null, null, null, '#000000', SpreadsheetApp.BorderStyle.SOLID_THICK);
+  }
+}
+// 今ある成績表シート（入力中）にも1回だけ引く
+function ensureFiveRowLines_() {
+  const props = sharedProps_();
+  if (props.getProperty('FIVE_ROW_LINES') === '1') return;
+  getSpreadsheet_().getSheets().forEach(function(sh) {
+    if (sh.getName().indexOf(REPORT_PREFIX) === 0 || sh.getName() === SHEET_TEMPLATE) fiveRowLines_(sh);
+  });
+  props.setProperty('FIVE_ROW_LINES', '1');
+}
+
 function createReportSheet_(lot) {
   const ss = getSpreadsheet_();
   const template = ss.getSheetByName(SHEET_TEMPLATE);
@@ -796,6 +814,7 @@ function createReportSheet_(lot) {
   sh.getRange('V2').setValue(lot.prefix + lot.start + ' ～ ' + endLabel + (lot.spec ? '（' + lot.spec + '）' : ''));
   sh.getRange('H3').setValue(lot.prefix);
   setVolume_(sh, lot.kind);
+  fiveRowLines_(sh);
 
   const size = lotSize_(lot);
   const grid = [];
