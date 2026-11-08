@@ -896,6 +896,8 @@ function check(name, ok, detail) {
     c.sharedProps_().setProperty('CUSTOMER_FMT', 'old'); c.migrateCustomerFormat_(); c.customerBackfillJob();
     const v4 = sh.getRange(1, 1, sh.getLastRow(), 1).getValues().map(r => String(r[0])).filter(String);
     check('神鋼機器用データ: 形を変えたら全部書き直す（記号付き・二重なし）', v4.length === v3.length && v4.every(x => x.startsWith('HEP')) && new Set(v4).size === v4.length, v4.join(','));
+    ['30kg把手', '5kg', '20kg', '8kg'].forEach(n => cs.insertSheet(n)); c.sortCustomerSheets_(cs);
+    check('神鋼機器用データ: シートは5kg→8kg→…→50kgの順', cs.getSheets().map(x => x.getName()).join(',') === '5kg,8kg,20kg,30kg把手,50kg', cs.getSheets().map(x => x.getName()).join(','));
   }
   // ---- 完了を2回押してもPDFは1つ。再開して完了し直すと前のPDFはゴミ箱へ（11/5 HXR06101）
   {

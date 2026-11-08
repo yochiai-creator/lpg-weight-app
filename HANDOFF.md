@@ -498,3 +498,6 @@ v52までの並びは ensureFolderLayout_ が1回だけ整理（runMaintenance �
 
 ## v132
 - 取引先用データ → 「LPG容器 神鋼機器用 質量データ_YYYY」。値に記号を付ける（HEP80001347、HEP80002欠番）。migrateCustomerFormat_（_システム CUSTOMER_FMT=v132、1回だけ）でファイル名を変え、書いた分を消して CUSTOMER_LOTS/CUSTOMER_BACKFILL を戻し、これまでの送信分を書き直す。
+
+## v133
+- 神鋼機器用データのシートを 5kg→8kg→10kg→20kg→20kg三部制→30kg→30kg把手→50kg→50kg S付 の順に並べる（sortCustomerSheets_、書いたあと毎回・開いたとき1回 CUSTOMER_SORTED）。

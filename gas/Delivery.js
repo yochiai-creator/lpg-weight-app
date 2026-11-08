@@ -424,6 +424,20 @@ function writeCustomerData_(lots) {
     if (vals.length) sh.getRange(1, 1, vals.length, 1).setNumberFormat('@').setValues(vals.map(function(v) { return [v]; }));
   });
   props.setProperty('CUSTOMER_LOTS', JSON.stringify(written.slice(-3000)));
+  sortCustomerSheets_(ss);
+}
+
+// シートを 5kg→8kg→10kg→20kg→20kg三部制→30kg→30kg把手→50kg→50kg S付 の順に並べる（ほかの名前は後ろ）
+function sortCustomerSheets_(ss) {
+  try {
+    const rank = function(sh) { return saibanKindRank_(sh.getName()); };
+    const sorted = ss.getSheets().slice().sort(function(a, b) { return rank(a) - rank(b); });
+    sorted.forEach(function(sh, i) {
+      if (ss.getSheets()[i] === sh) return;
+      ss.setActiveSheet(sh);
+      ss.moveActiveSheet(i + 1);
+    });
+  } catch (e) { console.error('シートの並べ替えに失敗: ' + e.message); }
 }
 
 // これまでに送ったロットの分を1回だけ書き足す（v129）。開いたときに時間指定の処理を予約し、裏で入れる
@@ -466,6 +480,12 @@ function migrateCustomerFormat_() {
 }
 function scheduleCustomerBackfill_() {
   try { migrateCustomerFormat_(); } catch (e) { console.error('神鋼機器用データの書き直しの準備に失敗: ' + e.message); }
+  try {
+    if (sharedProps_().getProperty('CUSTOMER_SORTED') !== '1' && sharedProps_().getProperty('CUSTOMER_SS_IDS')) {
+      sortCustomerSheets_(customerSpreadsheet_());
+      sharedProps_().setProperty('CUSTOMER_SORTED', '1');
+    }
+  } catch (e) { console.error('シートの並べ替えに失敗: ' + e.message); }
   if (isOldProject_() || sharedProps_().getProperty('CUSTOMER_BACKFILL') === '1') return;
   if (ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === 'customerBackfillJob'; })) return;
   ScriptApp.newTrigger('customerBackfillJob').timeBased().after(10 * 1000).create();
