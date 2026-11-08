@@ -337,9 +337,9 @@ function buildLotCsv_(lot, logRows) {
 }
 
 // ---------- 取引先用の質量データ（v128） ----------
-// まとめて送信したロットの容器を「容器番号＋質量（点なし3桁）」1つの値で、容器区分ごとのシートに書き足す（例 80001347）
-// 欠番は「80002欠番」、修正（品質不良）・底黒・未入力は入れない。同じロットを送り直したら前の分を消して書き直す
-const CUSTOMER_SS_NAME = 'LPG容器 取引先用 質量データ';
+// まとめて送信したロットの容器を「記号＋容器番号＋質量（点なし3桁）」1つの値で、容器区分ごとのシートに書き足す（例 HEP80001347）
+// 欠番は「HEP80002欠番」、修正（品質不良）・底黒・未入力は入れない。同じロットを送り直したら前の分を消して書き直す
+const CUSTOMER_SS_NAME = 'LPG容器 神鋼機器用 質量データ';   // v132: 取引先用 → 神鋼機器用
 // 年ごとのファイル（LPG容器 取引先用 質量データ_2026）。1ファイル1,000万マスまでなので、年で分けて1列だけにする（v131）
 function customerSpreadsheet_(year) {
   year = String(year || Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy'));
@@ -376,8 +376,8 @@ function customerValues_(lot) {
   for (let i = 0; i < lotSize_(lot); i++) {
     const serial = padSerial_(Number(lot.start) + i, lot.start.length);
     const m = entries[serial];
-    if (m === MISSING) out.push(serial + '欠番');
-    else if (typeof m === 'number') out.push(serial + ('00' + Math.round(m * 10)).slice(-3));
+    if (m === MISSING) out.push(lot.prefix + serial + '欠番');
+    else if (typeof m === 'number') out.push(lot.prefix + serial + ('00' + Math.round(m * 10)).slice(-3));
   }
   return out;
 }
@@ -410,9 +410,13 @@ function writeCustomerData_(lots) {
     }
     let vals = last ? sh.getRange(1, 1, last, 1).getValues().map(function(r) { return String(r[0]); }) : [];
     byKind[kind].forEach(function(lot) {
-      const w = lot.start.length, st = Number(lot.start), en = Number(lot.end);
-      // 前に書いたロットだけ消して書き直す（記号は値に入らないので、別の記号の同じ番号を消さないように）
-      if (written.indexOf(lot.lotId) >= 0) vals = vals.filter(function(v) { const n = Number(v.slice(0, w)); return !(v.length > w && n >= st && n <= en); });
+      const p = lot.prefix, w = lot.start.length, st = Number(lot.start), en = Number(lot.end);
+      // 前に書いたロットの分（同じ記号で番号がロットの範囲）を消して書き直す
+      if (written.indexOf(lot.lotId) >= 0) vals = vals.filter(function(v) {
+        if (v.indexOf(p) !== 0) return true;
+        const n = Number(v.slice(p.length, p.length + w));
+        return !(v.length > p.length + w && n >= st && n <= en);
+      });
       vals = vals.concat(customerValues_(lot));
       if (written.indexOf(lot.lotId) < 0) written.push(lot.lotId);
     });
@@ -439,8 +443,29 @@ function customerBackfillJob() {
     lock.releaseLock();
   }
 }
+// v132: ファイル名を「神鋼機器用」にし、値に記号（HEPなど）を付けたので、書いた分を消して全部書き直す（1回だけ）
+const CUSTOMER_FMT = 'v132';
+function migrateCustomerFormat_() {
+  const props = sharedProps_();
+  if (props.getProperty('CUSTOMER_FMT') === CUSTOMER_FMT) return;
+  if (props.getProperty('CUSTOMER_SS_ID') && !props.getProperty('CUSTOMER_SS_IDS')) customerSpreadsheet_('2026');
+  let ids = {};
+  try { ids = JSON.parse(props.getProperty('CUSTOMER_SS_IDS') || '{}'); } catch (e) { ids = {}; }
+  Object.keys(ids).forEach(function(year) {
+    try { DriveApp.getFileById(ids[year]).setName(CUSTOMER_SS_NAME + '_' + year); } catch (e) { /* 名前は変えられなくても使える */ }
+    try {
+      SpreadsheetApp.openById(ids[year]).getSheets().forEach(function(sh) {
+        trimCustomerSheet_(sh);
+        if (sh.getLastRow()) sh.getRange(1, 1, sh.getLastRow(), 1).clearContent();
+      });
+    } catch (e) { /* 開けなければ作り直す */ }
+  });
+  props.setProperty('CUSTOMER_LOTS', '[]');
+  props.setProperty('CUSTOMER_BACKFILL', '0');
+  props.setProperty('CUSTOMER_FMT', CUSTOMER_FMT);
+}
 function scheduleCustomerBackfill_() {
-  try { if (sharedProps_().getProperty('CUSTOMER_SS_ID') && !sharedProps_().getProperty('CUSTOMER_SS_IDS')) customerSpreadsheet_('2026'); } catch (e) { console.error('取引先用データの整理に失敗: ' + e.message); }
+  try { migrateCustomerFormat_(); } catch (e) { console.error('神鋼機器用データの書き直しの準備に失敗: ' + e.message); }
   if (isOldProject_() || sharedProps_().getProperty('CUSTOMER_BACKFILL') === '1') return;
   if (ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === 'customerBackfillJob'; })) return;
   ScriptApp.newTrigger('customerBackfillJob').timeBased().after(10 * 1000).create();

@@ -495,3 +495,6 @@ v52までの並びは ensureFolderLayout_ が1回だけ整理（runMaintenance �
 
 ## v131
 - 取引先用データを年ごとのファイルに（LPG容器 取引先用 質量データ_YYYY、_システム CUSTOMER_SS_IDS）。前のファイル（CUSTOMER_SS_ID）は _2026 に名前を変えて使う。シートは使わない列を消してA列だけ。送り直しがなければ読まずに後ろへ書き足す。
+
+## v132
+- 取引先用データ → 「LPG容器 神鋼機器用 質量データ_YYYY」。値に記号を付ける（HEP80001347、HEP80002欠番）。migrateCustomerFormat_（_システム CUSTOMER_FMT=v132、1回だけ）でファイル名を変え、書いた分を消して CUSTOMER_LOTS/CUSTOMER_BACKFILL を戻し、これまでの送信分を書き直す。

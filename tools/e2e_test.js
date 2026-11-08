@@ -881,18 +881,21 @@ function check(name, ok, detail) {
     c.sendLotsMail({ lotIds: [L.lotId] });
     const cs = c.customerSpreadsheet_(), sh = cs.getSheetByName('50kg');
     const v = sh ? sh.getRange(1, 1, sh.getLastRow(), 1).getValues().map(r => String(r[0])) : [];
-    check('取引先用データ: 番号＋質量3桁・欠番・修正なし', v.join(',') === '80001347,80002欠番,80004346', v.join(','));
+    check('取引先用データ: 番号＋質量3桁・欠番・修正なし', v.join(',') === 'HEP80001347,HEP80002欠番,HEP80004346', v.join(','));
     check('取引先用データ: 年ごとのファイル・A列だけ', JSON.parse(c.sharedProps_().getProperty('CUSTOMER_SS_IDS'))[String(new Date().getFullYear())] === cs.getId() && sh.getMaxColumns() === 1, sh.getMaxColumns());
     c.reopenLot(L.lotId); c.recordEntry({ lotId: L.lotId, serial: '80005', mass: 34.8 }); c.completeLot({ lotId: L.lotId }); c.sendLotsMail({ lotIds: [L.lotId] });
     const v2 = sh.getRange(1, 1, sh.getLastRow(), 1).getValues().map(r => String(r[0]));
-    check('取引先用データ: 送り直すと前の分を置き換える', v2.join(',') === '80001347,80002欠番,80004346,80005348', v2.join(','));
+    check('取引先用データ: 送り直すと前の分を置き換える', v2.join(',') === 'HEP80001347,HEP80002欠番,HEP80004346,HEP80005348', v2.join(','));
     const L2 = c.createLot({ prefix: 'HEP', start: '80101', kind: '50kg' });
     c.recordEntry({ lotId: L2.lotId, serial: '80101', mass: 34.5 }); c.completeLot({ lotId: L2.lotId });
     const lr = m.ss.getSheetByName('ロット'), ri = lr.getRange(1, 1, lr.getLastRow(), 1).getValues().findIndex(r => r[0] === L2.lotId) + 1;
     lr.getRange(ri, 16).setValue(new Date());   // 前に送ったロット（取引先用データには入っていない）
     c.customerBackfillJob();
     const v3 = sh.getRange(1, 1, sh.getLastRow(), 1).getValues().map(r => String(r[0]));
-    check('取引先用データ: これまでに送ったロットも1回だけ入れる（二重にしない）', v3.filter(x => x === '80001347').length === 1 && v3.includes('80101345') && c.sharedProps_().getProperty('CUSTOMER_BACKFILL') === '1', v3.join(','));
+    check('取引先用データ: これまでに送ったロットも1回だけ入れる（二重にしない）', v3.filter(x => x === 'HEP80001347').length === 1 && v3.includes('HEP80101345') && c.sharedProps_().getProperty('CUSTOMER_BACKFILL') === '1', v3.join(','));
+    c.sharedProps_().setProperty('CUSTOMER_FMT', 'old'); c.migrateCustomerFormat_(); c.customerBackfillJob();
+    const v4 = sh.getRange(1, 1, sh.getLastRow(), 1).getValues().map(r => String(r[0])).filter(String);
+    check('神鋼機器用データ: 形を変えたら全部書き直す（記号付き・二重なし）', v4.length === v3.length && v4.every(x => x.startsWith('HEP')) && new Set(v4).size === v4.length, v4.join(','));
   }
   // ---- 完了を2回押してもPDFは1つ。再開して完了し直すと前のPDFはゴミ箱へ（11/5 HXR06101）
   {
