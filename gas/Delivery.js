@@ -87,7 +87,7 @@ function lotMailVars_(lot) {
   Object.keys(progress).forEach(function(k) { if (progress[k] === MISSING) missing++; if (progress[k] === REPAIR) repair++; });
   return {
     '組容器番号': lot.prefix + lot.start + '～' + lot.prefix + lot.end,
-    '容器区分': lot.kind || '',
+    '容器区分': (lot.kind || '') + (lot.spec === SPEC_SOKO ? '・底黒' : ''),   // v135: 底黒はメールでわかるように
     '本数': String(Object.keys(progress).length - missing - repair) + '本',
     '欠番': String(missing),
     '修正': String(repair),
@@ -192,8 +192,8 @@ function sendLotsMail(input) {
     if (lot.status !== STATUS_DONE) throw new Error('完了していないロットは送れません: ' + lot.lotId);
     return lot;
   });
-  // 番号順にそろえる
-  lots.sort(function(a, b) { return a.prefix.localeCompare(b.prefix) || Number(a.start) - Number(b.start); });
+  // 番号順にそろえる。底黒は通常のあとにまとめる（v135）
+  lots.sort(function(a, b) { return (a.spec === SPEC_SOKO) - (b.spec === SPEC_SOKO) || a.prefix.localeCompare(b.prefix) || Number(a.start) - Number(b.start); });
   const lotDays = withSaiban && !pickDays ? saibanDatesForLots_(lots.map(function(l) { return l.lotId; })) : {};
   const saibanBlobs = {};   // 日付 → PDF（分けて送るときに同じ日を作り直さない）
   let mails = 0, saibanCount = 0, saibanSkipped = 0;
@@ -201,9 +201,10 @@ function sendLotsMail(input) {
     const part = lots.slice(i, i + BULK_MAIL_MAX_LOTS);
     const attachments = [], lines = [];
     let total = 0;
-    part.forEach(function(lot) {
+    part.forEach(function(lot, j) {
       attachments.push(lotPdf_(lot).blob);
       const v = lotMailVars_(lot);
+      if (lot.spec === SPEC_SOKO && (j === 0 || part[j - 1].spec !== SPEC_SOKO)) lines.push((lines.length ? '\n' : '') + '【底黒（再搬入）】');
       total += parseInt(v['本数'], 10) || 0;
       lines.push('・' + v['組容器番号'] + '（' + v['容器区分'] + '）' + v['本数'] +
         (v['欠番'] !== '0' ? '　欠番 ' + v['欠番'] : '') + (v['修正'] !== '0' ? '　修正 ' + v['修正'] : ''));

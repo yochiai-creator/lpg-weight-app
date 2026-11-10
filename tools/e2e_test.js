@@ -834,6 +834,19 @@ function check(name, ok, detail) {
     let e1 = ''; try { c.skipLotMail({ lotId: L.lotId }); } catch (e) { e1 = e.message; }
     check('送信済みのロットは送らずに消せない', e1.includes('送信済み'), e1);
   }
+  // ---- v135: まとめて送信のメールで底黒がわかる（通常のあとに【底黒（再搬入）】の見出し、容器区分に「・底黒」）
+  {
+    const m = load(), c = m.ctx; c.setup();
+    m.ss.getSheetByName('設定').getRange(2, 2).setValue('to@example.com');
+    const sk = c.createLot({ prefix: 'BK', start: '00101', kind: '20kg', spec: '底黒' });
+    const nm = c.createLot({ prefix: 'BK', start: '00201', kind: '20kg' });
+    c.completeLot({ lotId: sk.lotId }); c.completeLot({ lotId: nm.lotId });
+    const before = global.MAILS.length;
+    c.sendLotsMail([sk.lotId, nm.lotId]);
+    const mail = global.MAILS[before] || { body: '', att: [] };
+    const iN = mail.body.indexOf('BK00201～BK00300（20kg）'), iH = mail.body.indexOf('【底黒（再搬入）】'), iS = mail.body.indexOf('BK00101～BK00200（20kg・底黒）');
+    check('まとめて送信: 底黒は見出しの下にまとめ、容器区分に「・底黒」', iN >= 0 && iN < iH && iH < iS && /_底黒\.pdf$/.test(mail.att[1] || ''), mail.body + ' / ' + JSON.stringify(mail.att));
+  }
   // ---- スプレッドシートで「入力中」に戻した（シートがない）ロットにも書ける
   {
     const m = load(), c = m.ctx; c.setup();
